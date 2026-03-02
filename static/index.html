@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Red Sea Crisis Intelligence Dashboard</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
+
+    <!-- Leaflet.js -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Leaflet Heat -->
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
+    <!-- Leaflet MarkerCluster -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+    <!-- noUiSlider (time slider) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/nouislider@15.8.1/dist/nouislider.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/nouislider@15.8.1/dist/nouislider.min.js"></script>
+
+    <!-- Dashboard CSS -->
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+
+    <!-- ═══ HEADER ═══ -->
+    <header class="header">
+        <div class="header-content">
+            <div class="header-left">
+                <h1>Red Sea Crisis Intelligence Dashboard</h1>
+                <p class="header-subtitle">Houthi Maritime Attacks & Brent Crude Oil Volatility Analysis</p>
+                <p class="header-meta">Myles Hamm &middot; Mercyhurst University &middot; Master's Thesis 2025</p>
+            </div>
+            <div class="header-right">
+                <div class="status-indicator" id="statusIndicator">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Loading...</span>
+                </div>
+                <div class="last-updated" id="lastUpdated"></div>
+            </div>
+        </div>
+
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="overview">Executive Overview</button>
+            <button class="tab-btn" data-tab="geospatial">Geospatial Intelligence</button>
+            <button class="tab-btn" data-tab="econometric">Econometric Analysis</button>
+            <button class="tab-btn" data-tab="controls">Control Variables</button>
+            <button class="tab-btn" data-tab="data">Data Explorer</button>
+        </nav>
+    </header>
+
+    <!-- ═══ TAB 1: EXECUTIVE OVERVIEW ═══ -->
+    <section class="tab-content active" id="tab-overview">
+        <div class="container">
+            <!-- KPI Row -->
+            <div class="kpi-row">
+                <div class="kpi-card" data-accent="#3D6B99">
+                    <div class="kpi-label">Brent Crude Price</div>
+                    <div class="kpi-value" id="kpi-brent">--</div>
+                    <div class="kpi-change" id="kpi-brent-change"></div>
+                    <div class="kpi-sub">USD / barrel</div>
+                </div>
+                <div class="kpi-card" data-accent="#C43D3D">
+                    <div class="kpi-label">Total ACLED Events</div>
+                    <div class="kpi-value" id="kpi-events">--</div>
+                    <div class="kpi-sub">Yemen conflict events</div>
+                </div>
+                <div class="kpi-card" data-accent="#D4A843">
+                    <div class="kpi-label">Peak Daily Volatility</div>
+                    <div class="kpi-value" id="kpi-volatility">--</div>
+                    <div class="kpi-sub">Maximum observed</div>
+                </div>
+                <div class="kpi-card" data-accent="#C43D3D">
+                    <div class="kpi-label">Max Weekly Attacks</div>
+                    <div class="kpi-value" id="kpi-attacks">--</div>
+                    <div class="kpi-sub">Single week peak</div>
+                </div>
+                <div class="kpi-card" data-accent="#7B68AE">
+                    <div class="kpi-label">US Dollar Index (DXY)</div>
+                    <div class="kpi-value" id="kpi-dxy">--</div>
+                    <div class="kpi-sub">Latest reading</div>
+                </div>
+                <div class="kpi-card" data-accent="#E07B4C">
+                    <div class="kpi-label">Oil Volatility (OVX)</div>
+                    <div class="kpi-value" id="kpi-ovx">--</div>
+                    <div class="kpi-sub">CBOE Crude Oil VIX</div>
+                </div>
+            </div>
+
+            <!-- Chart Row 1: Price vs Attacks -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Brent Crude Price vs Weekly Attack Frequency</h3>
+                        <span class="chart-badge">Dual Axis</span>
+                    </div>
+                    <div class="chart-wrapper" style="height:400px">
+                        <canvas id="priceAttackChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart Row 2: Volatility + Monthly Events -->
+            <div class="chart-row two-col">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Daily Volatility Over Time</h3>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="volatilityChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Event Type Distribution</h3>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="eventTypesChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ TAB 2: GEOSPATIAL INTELLIGENCE ═══ -->
+    <section class="tab-content" id="tab-geospatial">
+        <div class="container">
+            <div class="map-layout">
+                <!-- Map -->
+                <div class="map-container">
+                    <div id="map"></div>
+                    <!-- Time Slider -->
+                    <div class="time-slider-container">
+                        <div class="slider-label">
+                            <span id="sliderStartDate">Oct 2023</span>
+                            <span class="slider-title">Attack Timeline</span>
+                            <span id="sliderEndDate">Oct 2025</span>
+                        </div>
+                        <div id="timeSlider"></div>
+                    </div>
+                </div>
+                <!-- Side Panel -->
+                <div class="map-sidebar">
+                    <h3>Map Controls</h3>
+                    <div class="map-control-group">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="toggleHeatmap" checked>
+                            <span>Heatmap Layer</span>
+                        </label>
+                        <label class="toggle-label">
+                            <input type="checkbox" id="toggleMarkers" checked>
+                            <span>Attack Markers</span>
+                        </label>
+                        <label class="toggle-label">
+                            <input type="checkbox" id="toggleChokepoint" checked>
+                            <span>Chokepoint Zone</span>
+                        </label>
+                        <label class="toggle-label">
+                            <input type="checkbox" id="filterTankers">
+                            <span>Tanker Targets Only</span>
+                        </label>
+                    </div>
+
+                    <h3>Attack Statistics</h3>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-total">--</div>
+                            <div class="stat-label">Total Events</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-tanker">--</div>
+                            <div class="stat-label">Tanker Attacks</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-chokepoint">--</div>
+                            <div class="stat-label">Chokepoint Zone</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-fatalities">--</div>
+                            <div class="stat-label">Fatalities</div>
+                        </div>
+                    </div>
+
+                    <h3>Legend</h3>
+                    <div class="map-legend">
+                        <div class="legend-item">
+                            <span class="legend-dot" style="background:#C43D3D"></span>
+                            Tanker / Energy Target
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-dot" style="background:#3D6B99"></span>
+                            General Commercial
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-rect" style="background:rgba(212,168,67,0.2); border:1px solid #D4A843"></span>
+                            Bab el-Mandeb Zone
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ TAB 3: ECONOMETRIC ANALYSIS ═══ -->
+    <section class="tab-content" id="tab-econometric">
+        <div class="container">
+            <!-- Hypothesis Cards -->
+            <div class="hypothesis-row" id="hypothesisCards"></div>
+
+            <!-- GARCH Summary -->
+            <div class="chart-row two-col">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Model Comparison (R² Values)</h3>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="modelComparisonChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Average Brent Price Around Attack Events</h3>
+                        <span class="chart-badge">Event Study</span>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="priceWindowChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scatter + GARCH -->
+            <div class="chart-row two-col">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Weekly Attacks vs Volatility</h3>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="scatterChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card garch-card" id="garchSummary">
+                    <div class="chart-header">
+                        <h3>GARCH Model Summary</h3>
+                        <span class="chart-badge">GJR-GARCH(1,1,1)</span>
+                    </div>
+                    <div class="garch-details"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ TAB 4: CONTROL VARIABLES ═══ -->
+    <section class="tab-content" id="tab-controls">
+        <div class="container">
+            <!-- DXY + OVX -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>DXY (US Dollar Index) & OVX (Oil Volatility Index)</h3>
+                        <span class="chart-badge">Dual Axis</span>
+                    </div>
+                    <div class="chart-wrapper" style="height:350px">
+                        <canvas id="dxyOvxChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Control variable charts -->
+            <div class="chart-row two-col">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>OPEC Decisions & Geopolitical Events</h3>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="geopoliticalChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>SPR Release Volume</h3>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="sprChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Correlation Heatmap -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Correlation Matrix — All Variables</h3>
+                    </div>
+                    <div class="chart-wrapper" style="height:500px">
+                        <canvas id="correlationChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ TAB 5: DATA EXPLORER ═══ -->
+    <section class="tab-content" id="tab-data">
+        <div class="container">
+            <div class="data-controls">
+                <div class="filter-group">
+                    <label>Search Notes:</label>
+                    <input type="text" id="searchInput" placeholder="e.g. tanker, drone, missile...">
+                </div>
+                <div class="filter-group">
+                    <label>Event Type:</label>
+                    <select id="eventTypeFilter">
+                        <option value="">All Types</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Date Range:</label>
+                    <input type="date" id="dataStartDate" value="2023-10-01">
+                    <input type="date" id="dataEndDate" value="2025-12-31">
+                </div>
+                <button class="btn-primary" id="applyFilters">Apply</button>
+                <button class="btn-secondary" id="resetFilters">Reset</button>
+                <button class="btn-secondary" id="exportCsv">Export CSV</button>
+            </div>
+
+            <div class="table-container">
+                <table id="dataTable">
+                    <thead>
+                        <tr>
+                            <th data-sort="event_date">Date <span class="sort-arrow">↕</span></th>
+                            <th data-sort="event_type">Event Type <span class="sort-arrow">↕</span></th>
+                            <th data-sort="sub_event_type">Sub-Event <span class="sort-arrow">↕</span></th>
+                            <th data-sort="actor1">Actor <span class="sort-arrow">↕</span></th>
+                            <th data-sort="location">Location <span class="sort-arrow">↕</span></th>
+                            <th data-sort="fatalities">Fatalities <span class="sort-arrow">↕</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+                <div class="pagination" id="pagination"></div>
+                <div class="table-info" id="tableInfo"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ FOOTER ═══ -->
+    <footer class="footer">
+        <p>Data Sources: ACLED &middot; U.S. Energy Information Administration &middot; Federal Reserve (FRED) &middot; Yahoo Finance</p>
+        <p>Myles Hamm — Masters Thesis — Mercyhurst University — 2025</p>
+    </footer>
+
+    <!-- Dashboard JS -->
+    <script src="/static/js/charts.js"></script>
+    <script src="/static/js/map.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

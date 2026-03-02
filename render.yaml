@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: red-sea-dashboard
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: EIA_API_KEY
+        sync: false
+      - key: FRED_API_KEY
+        sync: false
+      - key: ACLED_USERNAME
+        sync: false
+      - key: ACLED_PASSWORD
+        sync: false

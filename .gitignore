@@ -1,0 +1,12 @@
+# Environment & secrets
+.env
+.cache/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
