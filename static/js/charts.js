@@ -188,6 +188,7 @@ function createEventTypesChart(events) {
         },
         options: {
             ...CHART_DEFAULTS,
+            scales: {},
             plugins: {
                 ...CHART_DEFAULTS.plugins,
                 legend: { ...CHART_DEFAULTS.plugins.legend, position: 'right' },
