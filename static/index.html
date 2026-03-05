@@ -105,12 +105,22 @@
                 </div>
             </div>
 
+            <!-- Global Crossfilter Bar -->
+            <div class="crossfilter-bar" id="crossfilterBar" style="display:none">
+                <span class="crossfilter-label">Active Filter:</span>
+                <span class="crossfilter-value" id="crossfilterValue"></span>
+                <button class="crossfilter-clear" id="crossfilterClear">Clear Filter</button>
+            </div>
+
             <!-- Chart Row 1: Price vs Attacks -->
             <div class="chart-row">
                 <div class="chart-card full-width">
                     <div class="chart-header">
                         <h3>Brent Crude Price vs Weekly Attack Frequency</h3>
-                        <span class="chart-badge">Dual Axis</span>
+                        <div class="chart-header-right">
+                            <span class="chart-badge">Dual Axis</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Overlays Brent crude spot price (left axis) with weekly Houthi attack frequency (right axis) to visualize the relationship between conflict intensity and oil prices. Click the doughnut chart to crossfilter by event type.</span></div>
+                        </div>
                     </div>
                     <div class="chart-wrapper" style="height:400px">
                         <canvas id="priceAttackChart"></canvas>
@@ -123,6 +133,7 @@
                 <div class="chart-card">
                     <div class="chart-header">
                         <h3>Daily Volatility Over Time</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Absolute daily percentage change in Brent crude closing price. Spikes indicate days of heightened market uncertainty, often coinciding with major attack events or geopolitical escalations.</span></div>
                     </div>
                     <div class="chart-wrapper">
                         <canvas id="volatilityChart"></canvas>
@@ -131,6 +142,7 @@
                 <div class="chart-card">
                     <div class="chart-header">
                         <h3>Event Type Distribution</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Breakdown of ACLED conflict events in Yemen by category. Click any segment to crossfilter — the price and volatility charts will highlight periods matching that event type.</span></div>
                     </div>
                     <div class="chart-wrapper">
                         <canvas id="eventTypesChart"></canvas>
@@ -230,6 +242,7 @@
                 <div class="chart-card">
                     <div class="chart-header">
                         <h3>Model Comparison (R² Values)</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">R² measures the proportion of variance in Brent price explained by each hypothesis model. Higher R² indicates stronger explanatory power. H1 (attack frequency) shows the strongest fit.</span></div>
                     </div>
                     <div class="chart-wrapper">
                         <canvas id="modelComparisonChart"></canvas>
@@ -238,7 +251,10 @@
                 <div class="chart-card">
                     <div class="chart-header">
                         <h3>Average Brent Price Around Attack Events</h3>
-                        <span class="chart-badge">Event Study</span>
+                        <div class="chart-header-right">
+                            <span class="chart-badge">Event Study</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Event study window showing average Brent price from 2 days before (T-2) to 5 days after (T+5) major attack events. The red bar marks the event day (T0). Reveals how oil prices respond in the days surrounding Houthi attacks.</span></div>
+                        </div>
                     </div>
                     <div class="chart-wrapper">
                         <canvas id="priceWindowChart"></canvas>
@@ -251,6 +267,7 @@
                 <div class="chart-card">
                     <div class="chart-header">
                         <h3>Weekly Attacks vs Volatility</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Scatter plot of weekly attack frequency against daily price volatility. Each point represents a week with at least one attack. An upward trend would indicate that more frequent attacks are associated with higher price volatility.</span></div>
                     </div>
                     <div class="chart-wrapper">
                         <canvas id="scatterChart"></canvas>
@@ -259,7 +276,10 @@
                 <div class="chart-card garch-card" id="garchSummary">
                     <div class="chart-header">
                         <h3>GARCH Model Summary</h3>
-                        <span class="chart-badge">GJR-GARCH(1,1,1)</span>
+                        <div class="chart-header-right">
+                            <span class="chart-badge">GJR-GARCH(1,1,1)</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Generalized Autoregressive Conditional Heteroskedasticity model with asymmetric leverage effects. Captures how oil price volatility clusters over time and responds differently to positive vs. negative shocks.</span></div>
+                        </div>
                     </div>
                     <div class="garch-details"></div>
                 </div>
@@ -275,7 +295,10 @@
                 <div class="chart-card full-width">
                     <div class="chart-header">
                         <h3>DXY (US Dollar Index) & OVX (Oil Volatility Index)</h3>
-                        <span class="chart-badge">Dual Axis</span>
+                        <div class="chart-header-right">
+                            <span class="chart-badge">Dual Axis</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">DXY measures the US dollar's value against major currencies — a stronger dollar typically lowers oil prices. OVX measures implied 30-day crude oil volatility from options markets. Both serve as control variables in the regression model.</span></div>
+                        </div>
                     </div>
                     <div class="chart-wrapper" style="height:350px">
                         <canvas id="dxyOvxChart"></canvas>
@@ -288,6 +311,7 @@
                 <div class="chart-card">
                     <div class="chart-header">
                         <h3>OPEC Decisions & Geopolitical Events</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Brent crude price with overlay markers for OPEC production decisions (gold), Russia-Ukraine escalations (purple), and Iran-Israel tensions (orange). These binary dummy variables control for non-Houthi geopolitical shocks in the regression model.</span></div>
                     </div>
                     <div class="chart-wrapper">
                         <canvas id="geopoliticalChart"></canvas>
@@ -296,6 +320,7 @@
                 <div class="chart-card">
                     <div class="chart-header">
                         <h3>SPR Release Volume</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Changes in the U.S. Strategic Petroleum Reserve — negative values indicate government oil releases to stabilize prices. SPR releases act as a supply-side control variable, dampening price spikes independent of Houthi activity.</span></div>
                     </div>
                     <div class="chart-wrapper">
                         <canvas id="sprChart"></canvas>
@@ -308,6 +333,7 @@
                 <div class="chart-card full-width">
                     <div class="chart-header">
                         <h3>Correlation Matrix — All Variables</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Pairwise Pearson correlation coefficients between all model variables. Navy = strong positive correlation, crimson = strong negative correlation, white = no correlation. Helps identify multicollinearity and validate variable independence in the regression model.</span></div>
                     </div>
                     <div class="chart-wrapper" style="height:500px">
                         <canvas id="correlationChart"></canvas>
