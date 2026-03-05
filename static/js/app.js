@@ -111,7 +111,43 @@ function renderOverview() {
         card.style.borderTopColor = card.dataset.accent;
     });
 
+    // Build event-date lookup for crossfiltering
+    if (eventsData) {
+        const eventDates = {};
+        eventsData.forEach(e => {
+            const type = e.event_type || 'Unknown';
+            const date = (e.event_date || '').substring(0, 10);
+            if (!eventDates[type]) eventDates[type] = [];
+            eventDates[type].push(date);
+        });
+        // Convert arrays to Sets for O(1) lookup, attach to timeseries
+        Object.keys(eventDates).forEach(k => eventDates[k] = eventDates[k]);
+        timeseries._eventDates = eventDates;
+    }
+
     // Charts
+    createPriceAttackChart(timeseries);
+    createVolatilityChart(timeseries);
+    if (eventsData) createEventTypesChart(eventsData);
+}
+
+// Re-render overview charts when crossfilter changes
+function renderOverviewFiltered() {
+    if (!masterData) return;
+    const { timeseries } = masterData;
+
+    // Rebuild event date lookup
+    if (eventsData) {
+        const eventDates = {};
+        eventsData.forEach(e => {
+            const type = e.event_type || 'Unknown';
+            const date = (e.event_date || '').substring(0, 10);
+            if (!eventDates[type]) eventDates[type] = [];
+            eventDates[type].push(date);
+        });
+        timeseries._eventDates = eventDates;
+    }
+
     createPriceAttackChart(timeseries);
     createVolatilityChart(timeseries);
     if (eventsData) createEventTypesChart(eventsData);
@@ -124,6 +160,11 @@ function renderEconometric() {
     const container = document.getElementById('hypothesisCards');
     if (container) {
         container.innerHTML = '';
+        const metricTooltips = {
+            'Coefficient': 'The estimated effect size — how much the dependent variable changes per one-unit increase in the independent variable, holding all controls constant.',
+            'P-Value': 'Statistical significance level. Values below 0.05 indicate the result is unlikely due to chance. Lower values = stronger evidence against the null hypothesis.',
+            'R²': 'Coefficient of determination — the proportion of variance in the dependent variable explained by this model. Ranges from 0 (no fit) to 1 (perfect fit).'
+        };
         ['h1', 'h2', 'h3'].forEach(key => {
             const h = hypothesisData[key];
             container.innerHTML += `
@@ -135,15 +176,15 @@ function renderEconometric() {
                     <div class="hypothesis-body">
                         <div class="hypothesis-metrics">
                             <div class="metric">
-                                <div class="metric-label">Coefficient</div>
+                                <div class="metric-label">Coefficient <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">${metricTooltips['Coefficient']}</span></div></div>
                                 <div class="metric-value">${h.coefficient.toFixed(4)}</div>
                             </div>
                             <div class="metric">
-                                <div class="metric-label">P-Value</div>
+                                <div class="metric-label">P-Value <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">${metricTooltips['P-Value']}</span></div></div>
                                 <div class="metric-value">${h.p_value.toFixed(4)}</div>
                             </div>
                             <div class="metric">
-                                <div class="metric-label">R²</div>
+                                <div class="metric-label">R² <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">${metricTooltips['R²']}</span></div></div>
                                 <div class="metric-value">${h.r_squared.toFixed(4)}</div>
                             </div>
                         </div>

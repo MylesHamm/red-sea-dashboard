@@ -58,6 +58,85 @@ const CHART_DEFAULTS = {
 // Store chart instances for cleanup
 const chartInstances = {};
 
+// ─── Crosshair Sync Plugin ──────────────────────────────────────────────────
+// When hovering on one chart, shows matching crosshair on linked charts
+
+const crosshairPlugin = {
+    id: 'crosshairSync',
+    afterEvent(chart, args) {
+        const event = args.event;
+        if (event.type === 'mousemove' && chart.options._syncGroup) {
+            const group = chart.options._syncGroup;
+            const xScale = chart.scales.x;
+            if (!xScale) return;
+            const idx = xScale.getValueForPixel(event.x);
+            Object.entries(chartInstances).forEach(([id, c]) => {
+                if (c !== chart && c.options._syncGroup === group && c.scales.x) {
+                    c._syncIndex = Math.round(idx);
+                    c.draw();
+                }
+            });
+        }
+        if (event.type === 'mouseout' && chart.options._syncGroup) {
+            Object.entries(chartInstances).forEach(([id, c]) => {
+                if (c !== chart && c.options._syncGroup === chart.options._syncGroup) {
+                    c._syncIndex = null;
+                    c.draw();
+                }
+            });
+        }
+    },
+    afterDraw(chart) {
+        if (chart._syncIndex != null && chart.scales.x) {
+            const ctx = chart.ctx;
+            const xScale = chart.scales.x;
+            const yScale = chart.scales.y;
+            const x = xScale.getPixelForValue(chart._syncIndex);
+            if (x >= xScale.left && x <= xScale.right) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.setLineDash([4, 4]);
+                ctx.strokeStyle = 'rgba(201, 169, 110, 0.6)';
+                ctx.lineWidth = 1;
+                ctx.moveTo(x, yScale.top);
+                ctx.lineTo(x, yScale.bottom);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+    }
+};
+
+Chart.register(crosshairPlugin);
+
+// ─── Crossfilter State ──────────────────────────────────────────────────────
+
+let activeFilter = null;  // { type: 'eventType', value: 'Battles' }
+
+function setCrossfilter(type, value) {
+    activeFilter = { type, value };
+    const bar = document.getElementById('crossfilterBar');
+    const val = document.getElementById('crossfilterValue');
+    if (bar && val) {
+        val.textContent = value;
+        bar.style.display = 'flex';
+    }
+    // Trigger re-render of overview charts with filter
+    if (typeof renderOverviewFiltered === 'function') renderOverviewFiltered();
+}
+
+function clearCrossfilter() {
+    activeFilter = null;
+    const bar = document.getElementById('crossfilterBar');
+    if (bar) bar.style.display = 'none';
+    if (typeof renderOverviewFiltered === 'function') renderOverviewFiltered();
+}
+
+// Wire up clear button
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('crossfilterClear')?.addEventListener('click', clearCrossfilter);
+});
+
 function destroyChart(id) {
     if (chartInstances[id]) {
         chartInstances[id].destroy();
@@ -75,6 +154,15 @@ function createPriceAttackChart(timeseries) {
     const dates = timeseries.map(d => d.date);
     const prices = timeseries.map(d => d.brent_price);
     const attacks = timeseries.map(d => d.weekly_attacks);
+
+    // If crossfilter active, highlight matching periods
+    let attackColors = attacks.map(() => COLORS.attacksBg);
+    let attackBorders = attacks.map(() => COLORS.attacks);
+    if (activeFilter && activeFilter.type === 'eventType' && timeseries._eventDates) {
+        const matchDates = new Set(timeseries._eventDates[activeFilter.value] || []);
+        attackColors = dates.map(d => matchDates.has(d) ? 'rgba(196, 61, 61, 0.7)' : 'rgba(196, 61, 61, 0.08)');
+        attackBorders = dates.map(d => matchDates.has(d) ? COLORS.attacks : 'rgba(196, 61, 61, 0.15)');
+    }
 
     chartInstances['priceAttackChart'] = new Chart(ctx, {
         data: {
@@ -98,8 +186,8 @@ function createPriceAttackChart(timeseries) {
                     type: 'bar',
                     label: 'Weekly Attack Frequency',
                     data: attacks,
-                    backgroundColor: COLORS.attacksBg,
-                    borderColor: COLORS.attacks,
+                    backgroundColor: attackColors,
+                    borderColor: attackBorders,
                     borderWidth: 1,
                     yAxisID: 'y1',
                     order: 2,
@@ -108,6 +196,7 @@ function createPriceAttackChart(timeseries) {
         },
         options: {
             ...CHART_DEFAULTS,
+            _syncGroup: 'overview',
             interaction: { mode: 'index', intersect: false },
             scales: {
                 x: { ...CHART_DEFAULTS.scales.x },
@@ -150,6 +239,7 @@ function createVolatilityChart(timeseries) {
         },
         options: {
             ...CHART_DEFAULTS,
+            _syncGroup: 'overview',
             scales: {
                 x: { ...CHART_DEFAULTS.scales.x },
                 y: {
@@ -175,13 +265,21 @@ function createEventTypesChart(events) {
     const sorted = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
     const palette = [COLORS.brent, COLORS.attacks, COLORS.volatility, COLORS.dxy, COLORS.ovx, COLORS.positive, COLORS.gold];
 
+    // Dim non-selected segments when crossfilter is active
+    const bgColors = palette.slice(0, sorted.length).map((c, i) => {
+        if (activeFilter && activeFilter.type === 'eventType' && sorted[i][0] !== activeFilter.value) {
+            return c + '33'; // add transparency
+        }
+        return c;
+    });
+
     chartInstances['eventTypesChart'] = new Chart(ctx, {
         type: 'doughnut',
         data: {
             labels: sorted.map(s => s[0]),
             datasets: [{
                 data: sorted.map(s => s[1]),
-                backgroundColor: palette.slice(0, sorted.length),
+                backgroundColor: bgColors,
                 borderColor: '#fff',
                 borderWidth: 2,
             }]
@@ -189,6 +287,17 @@ function createEventTypesChart(events) {
         options: {
             ...CHART_DEFAULTS,
             scales: {},
+            onClick(e, elements) {
+                if (elements.length > 0) {
+                    const idx = elements[0].index;
+                    const clickedType = sorted[idx][0];
+                    if (activeFilter && activeFilter.value === clickedType) {
+                        clearCrossfilter();
+                    } else {
+                        setCrossfilter('eventType', clickedType);
+                    }
+                }
+            },
             plugins: {
                 ...CHART_DEFAULTS.plugins,
                 legend: { ...CHART_DEFAULTS.plugins.legend, position: 'right' },

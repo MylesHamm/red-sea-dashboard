@@ -286,6 +286,135 @@ body {
     opacity: 1;
 }
 
+/* ─── CHART INFO TOOLTIPS ──────────────────────────────────────────────── */
+
+.chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.chart-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.chart-info {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    margin-left: 8px;
+}
+
+.chart-info-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--border);
+    color: var(--text-light);
+    font-size: 11px;
+    font-style: italic;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.chart-info-icon:hover {
+    background: var(--navy);
+    color: #fff;
+}
+
+.chart-info-tooltip {
+    visibility: hidden;
+    opacity: 0;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    right: 0;
+    width: 280px;
+    background: var(--navy);
+    color: #fff;
+    font-size: 12px;
+    font-style: normal;
+    font-weight: 400;
+    line-height: 1.5;
+    padding: 12px 14px;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    z-index: 100;
+    pointer-events: none;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.chart-info-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    right: 14px;
+    border: 6px solid transparent;
+    border-top-color: var(--navy);
+}
+
+.chart-info:hover .chart-info-tooltip {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* ─── CROSSFILTER BAR ──────────────────────────────────────────────────── */
+
+.crossfilter-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+    background: linear-gradient(135deg, var(--navy), #2a3f6b);
+    border-radius: var(--radius);
+    color: #fff;
+    font-size: 13px;
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.crossfilter-label {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.6px;
+    opacity: 0.8;
+}
+
+.crossfilter-value {
+    font-weight: 600;
+    color: var(--gold);
+}
+
+.crossfilter-clear {
+    margin-left: auto;
+    padding: 4px 14px;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: #fff;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.crossfilter-clear:hover {
+    background: rgba(255,255,255,0.3);
+}
+
 /* ─── CHART CARDS ───────────────────────────────────────────────────────── */
 
 .chart-row {
