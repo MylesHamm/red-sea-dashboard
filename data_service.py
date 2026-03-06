@@ -58,9 +58,11 @@ def _get_acled_token() -> str:
     if _acled_token and time.time() < _acled_token_expires:
         return _acled_token
 
+    if not config.ACLED_USERNAME or not config.ACLED_PASSWORD:
+        raise ValueError("ACLED credentials not configured (set ACLED_USERNAME and ACLED_PASSWORD env vars)")
+
     resp = requests.post(
         config.ACLED_TOKEN_URL,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
         data={
             "username": config.ACLED_USERNAME,
             "password": config.ACLED_PASSWORD,
