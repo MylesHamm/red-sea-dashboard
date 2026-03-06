@@ -50,6 +50,7 @@ def _write_cache(key: str, payload):
 
 _acled_token = None
 _acled_token_expires = 0
+_iran_fetch_error = None  # Store last error for debugging
 
 
 def _get_acled_token() -> str:
@@ -460,9 +461,11 @@ def load_master_dataset() -> dict:
 
 def fetch_iran_events() -> List[dict]:
     """Fetch Iran-related events from ACLED API with cache."""
+    global _iran_fetch_error
     cached = _read_cache("iran_events", 3600)  # 1-hour cache
     if cached:
         logger.info("Iran events: serving from cache")
+        _iran_fetch_error = None
         return cached
 
     try:
@@ -530,15 +533,24 @@ def fetch_iran_events() -> List[dict]:
                     seen_ids.add(e.get("event_id_cnty"))
             logger.info(f"Iran bilateral ({actor_pair['actor1']}→{actor_pair['actor2']}): {len(bilateral)} events")
 
+        _iran_fetch_error = None
         if all_events:
             _write_cache("iran_events", all_events)
             logger.info(f"Iran events: total {len(all_events)} events fetched and cached")
             return all_events
+        else:
+            _iran_fetch_error = "ACLED returned 0 events for all Iran queries"
+            logger.warning(_iran_fetch_error)
 
     except Exception as e:
-        logger.warning(f"Iran events API failed: {e}")
+        _iran_fetch_error = f"{type(e).__name__}: {e}"
+        logger.warning(f"Iran events API failed: {_iran_fetch_error}")
 
     return []
+
+
+def get_iran_fetch_error() -> Optional[str]:
+    return _iran_fetch_error
 
 
 def get_curated_iran_events() -> List[dict]:
