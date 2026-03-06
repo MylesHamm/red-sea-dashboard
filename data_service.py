@@ -666,7 +666,9 @@ def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
     all_changes_3d = []
     max_vol_spike = 0
     current_month = datetime.now().strftime("%Y-%m")
-    events_this_month = sum(1 for e in iran_events if (e.get("event_date") or "").startswith(current_month))
+    acled_this_month = sum(1 for e in iran_events if (e.get("event_date") or "").startswith(current_month))
+    curated_this_month = sum(1 for e in curated if e["date"].startswith(current_month))
+    events_this_month = acled_this_month + curated_this_month
 
     for d in acled_dates:
         pb = get_price_at_offset(d, -1)
