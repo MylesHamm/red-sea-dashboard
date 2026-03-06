@@ -551,7 +551,10 @@ def fetch_iran_events() -> List[dict]:
         logger.warning(f"Iran events API failed: {_iran_fetch_error}")
 
     # Fallback: load from pre-fetched JSON file
-    return _load_iran_json_fallback()
+    fallback = _load_iran_json_fallback()
+    if fallback:
+        _iran_fetch_error = None  # Clear error since fallback succeeded
+    return fallback
 
 
 def _load_iran_json_fallback() -> List[dict]:
