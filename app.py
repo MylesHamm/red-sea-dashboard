@@ -72,6 +72,22 @@ def get_hypothesis():
     return data_service.get_hypothesis_results()
 
 
+@app.get("/api/iran-events")
+def get_iran_events():
+    """Iran-related ACLED events + curated major events."""
+    acled_events = data_service.fetch_iran_events()
+    curated = data_service.get_curated_iran_events()
+    return {"count": len(acled_events), "data": acled_events, "curated": curated}
+
+
+@app.get("/api/iran-impact")
+def get_iran_impact():
+    """Oil price impact analysis around Iran events."""
+    iran_events = data_service.fetch_iran_events()
+    brent_prices = data_service.fetch_brent_prices()
+    return data_service.compute_iran_impact(iran_events, brent_prices)
+
+
 # ─── Frontend Entry Point ────────────────────────────────────────────────────
 
 @app.get("/")

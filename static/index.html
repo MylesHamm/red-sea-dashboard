@@ -58,6 +58,7 @@
             <button class="tab-btn" data-tab="econometric">Econometric Analysis</button>
             <button class="tab-btn" data-tab="controls">Control Variables</button>
             <button class="tab-btn" data-tab="data">Data Explorer</button>
+            <button class="tab-btn" data-tab="currentevents">US-Iran Tensions</button>
         </nav>
     </header>
 
@@ -383,6 +384,111 @@
                 </table>
                 <div class="pagination" id="pagination"></div>
                 <div class="table-info" id="tableInfo"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ TAB 6: CURRENT EVENTS ═══ -->
+    <section class="tab-content" id="tab-currentevents">
+        <div class="container">
+            <!-- KPI Row -->
+            <div class="kpi-row iran-kpi-row">
+                <div class="kpi-card" data-accent="#C43D3D">
+                    <div class="kpi-label">Total Iran Events</div>
+                    <div class="kpi-value" id="kpi-iran-total">--</div>
+                    <div class="kpi-sub">ACLED events since 2025</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Total conflict and political events in Iran recorded by ACLED from January 2025 to present, including protests, violence, and strategic developments.</span></div>
+                </div>
+                <div class="kpi-card" data-accent="#D4A843">
+                    <div class="kpi-label">Avg Price Move (3-Day)</div>
+                    <div class="kpi-value" id="kpi-iran-price-move">--</div>
+                    <div class="kpi-sub">USD absolute change</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Average absolute change in Brent crude price within 3 trading days following an Iran-related event. Measures the typical market reaction magnitude.</span></div>
+                </div>
+                <div class="kpi-card" data-accent="#E07B4C">
+                    <div class="kpi-label">Peak Volatility Spike</div>
+                    <div class="kpi-value" id="kpi-iran-vol-spike">--</div>
+                    <div class="kpi-sub">Largest 3-day move (USD)</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">The single largest absolute Brent price change within 3 trading days of any Iran event. Indicates the most impactful event for oil markets.</span></div>
+                </div>
+                <div class="kpi-card" data-accent="#7B68AE">
+                    <div class="kpi-label">Events This Month</div>
+                    <div class="kpi-value" id="kpi-iran-month">--</div>
+                    <div class="kpi-sub">Current month activity</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Number of Iran-related conflict events recorded by ACLED in the current calendar month. Tracks the pace of recent activity.</span></div>
+                </div>
+            </div>
+
+            <!-- Timeline: Brent Price vs Iran Events -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Brent Crude Price vs US-Iran Events Timeline</h3>
+                        <div class="chart-header-right">
+                            <span class="chart-badge">Event Overlay</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Brent crude price since January 2025 overlaid with major US-Iran events. Vertical markers indicate curated geopolitical milestones color-coded by type: Military (red), Diplomatic (blue), Sanctions (orange), Nuclear (purple), Proxy (gold). Hover for event details.</span></div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper" style="height:420px">
+                        <canvas id="iranPriceTimelineChart"></canvas>
+                    </div>
+                    <!-- Event type legend -->
+                    <div class="iran-event-legend">
+                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#C43D3D"></span>Military</span>
+                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#3D6B99"></span>Diplomatic</span>
+                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#E07B4C"></span>Sanctions</span>
+                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#7B68AE"></span>Nuclear</span>
+                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#C9A96E"></span>Proxy</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Row 2: Event Type Breakdown + Impact Analysis -->
+            <div class="chart-row two-col">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Iran Event Type Breakdown</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Distribution of ACLED-recorded events in Iran by category. Shows the mix of protests, armed clashes, explosions, and strategic developments driving the current crisis.</span></div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="iranEventTypeChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Avg Brent Price Impact by Event Type</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Average percentage change in Brent crude price at T+1, T+3, T+5, and T+7 trading days after curated US-Iran events, grouped by event type. Positive = price increase, negative = price decrease.</span></div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="iranImpactChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Event Impact Table -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Major US-Iran Events — Oil Price Impact</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Curated timeline of major US-Iran geopolitical events with Brent crude price before and 3 days after each event. Change % shows the directional market response to each event.</span></div>
+                    </div>
+                    <div class="table-container iran-table">
+                        <table id="iranEventTable">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Event</th>
+                                    <th>Type</th>
+                                    <th>Severity</th>
+                                    <th>Brent Before</th>
+                                    <th>Brent After (T+3)</th>
+                                    <th>Change %</th>
+                                </tr>
+                            </thead>
+                            <tbody id="iranTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </section>

@@ -928,8 +928,107 @@ tbody tr:hover { background: rgba(201, 169, 110, 0.04); }
 
 /* ─── RESPONSIVE ────────────────────────────────────────────────────────── */
 
+/* ─── CURRENT EVENTS TAB ──────────────────────────────────────────────── */
+
+.iran-kpi-row {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.iran-event-legend {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    padding: 12px 0 0;
+    flex-wrap: wrap;
+}
+
+.iran-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-light);
+    font-weight: 500;
+}
+
+.iran-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.iran-table table {
+    font-size: 13px;
+}
+
+.iran-table thead th {
+    background: var(--navy);
+    color: white;
+    font-weight: 600;
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.iran-table tbody td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+}
+
+.iran-table tbody tr:hover {
+    background: rgba(201, 169, 110, 0.04);
+}
+
+.iran-table .change-positive {
+    color: var(--positive);
+    font-weight: 600;
+}
+
+.iran-table .change-negative {
+    color: var(--negative);
+    font-weight: 600;
+}
+
+.severity-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 22px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: white;
+}
+
+.severity-1 { background: #90b5a0; }
+.severity-2 { background: #6ba57a; }
+.severity-3 { background: #d4a843; }
+.severity-4 { background: #e07b4c; }
+.severity-5 { background: #c43d3d; }
+
+.event-type-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.type-military { background: rgba(196, 61, 61, 0.12); color: #C43D3D; }
+.type-diplomatic { background: rgba(61, 107, 153, 0.12); color: #3D6B99; }
+.type-sanctions { background: rgba(224, 123, 76, 0.12); color: #E07B4C; }
+.type-nuclear { background: rgba(123, 104, 174, 0.12); color: #7B68AE; }
+.type-proxy { background: rgba(201, 169, 110, 0.12); color: #C9A96E; }
+
 @media (max-width: 1200px) {
     .kpi-row { grid-template-columns: repeat(3, 1fr); }
+    .iran-kpi-row { grid-template-columns: repeat(2, 1fr); }
     .chart-row.two-col { grid-template-columns: 1fr; }
     .hypothesis-row { grid-template-columns: 1fr; }
     .map-layout { grid-template-columns: 1fr; height: auto; }

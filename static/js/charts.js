@@ -583,6 +583,188 @@ function createSprChart(timeseries) {
     });
 }
 
+/* ─── Tab 6: Current Events (US-Iran) ───────────────────────────────────── */
+
+const IRAN_TYPE_COLORS = {
+    military: '#C43D3D',
+    diplomatic: '#3D6B99',
+    sanctions: '#E07B4C',
+    nuclear: '#7B68AE',
+    proxy: '#C9A96E',
+};
+
+function createIranPriceTimelineChart(brentPrices, curatedEvents) {
+    destroyChart('iranPriceTimelineChart');
+    const ctx = document.getElementById('iranPriceTimelineChart');
+    if (!ctx || !brentPrices || !brentPrices.length) return;
+
+    // Filter brent prices to 2025+
+    const filtered = brentPrices.filter(d => d.date >= '2025-01-01');
+    const dates = filtered.map(d => d.date);
+    const prices = filtered.map(d => d.price);
+
+    // Build event scatter points from curated events
+    const eventPoints = (curatedEvents || []).map(ev => {
+        // Find closest price date
+        let closestIdx = 0;
+        let minDist = Infinity;
+        dates.forEach((d, i) => {
+            const dist = Math.abs(new Date(d) - new Date(ev.date));
+            if (dist < minDist) { minDist = dist; closestIdx = i; }
+        });
+        return {
+            x: ev.date,
+            y: prices[closestIdx] || null,
+            title: ev.title,
+            type: ev.type,
+            severity: ev.severity,
+        };
+    }).filter(p => p.y != null);
+
+    // Color events by type
+    const eventColors = eventPoints.map(p => IRAN_TYPE_COLORS[p.type] || COLORS.gold);
+
+    chartInstances['iranPriceTimelineChart'] = new Chart(ctx, {
+        data: {
+            labels: dates,
+            datasets: [
+                {
+                    type: 'line',
+                    label: 'Brent Price (USD/bbl)',
+                    data: prices,
+                    borderColor: COLORS.brent,
+                    backgroundColor: COLORS.brentBg,
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    fill: true,
+                    tension: 0.3,
+                    yAxisID: 'y',
+                    order: 2,
+                },
+                {
+                    type: 'scatter',
+                    label: 'Major Events',
+                    data: eventPoints.map(p => ({ x: p.x, y: p.y })),
+                    backgroundColor: eventColors,
+                    borderColor: eventColors.map(c => c),
+                    borderWidth: 2,
+                    pointRadius: eventPoints.map(p => 4 + p.severity * 2),
+                    pointHoverRadius: 12,
+                    pointStyle: 'triangle',
+                    yAxisID: 'y',
+                    order: 1,
+                }
+            ]
+        },
+        options: {
+            ...CHART_DEFAULTS,
+            interaction: { mode: 'nearest', intersect: true },
+            scales: {
+                x: {
+                    ...CHART_DEFAULTS.scales.x,
+                    type: 'category',
+                },
+                y: {
+                    ...CHART_DEFAULTS.scales.y,
+                    title: { display: true, text: 'Brent Price (USD/barrel)', font: { family: 'Inter', size: 11 } }
+                }
+            },
+            plugins: {
+                ...CHART_DEFAULTS.plugins,
+                tooltip: {
+                    ...CHART_DEFAULTS.plugins.tooltip,
+                    callbacks: {
+                        title(items) {
+                            return items[0]?.raw?.x || items[0]?.label || '';
+                        },
+                        label(context) {
+                            if (context.datasetIndex === 1) {
+                                const idx = context.dataIndex;
+                                const ev = eventPoints[idx];
+                                return ev ? [ev.title, `Severity: ${ev.severity}/5`] : [];
+                            }
+                            return `Brent: $${context.parsed.y?.toFixed(2)}`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function createIranEventTypeChart(iranEvents) {
+    destroyChart('iranEventTypeChart');
+    const ctx = document.getElementById('iranEventTypeChart');
+    if (!ctx || !iranEvents || !iranEvents.length) return;
+
+    const typeCounts = {};
+    iranEvents.forEach(e => {
+        const t = e.event_type || 'Unknown';
+        typeCounts[t] = (typeCounts[t] || 0) + 1;
+    });
+    const sorted = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
+    const palette = [COLORS.attacks, COLORS.brent, COLORS.volatility, COLORS.dxy, COLORS.ovx, COLORS.positive, COLORS.gold];
+
+    chartInstances['iranEventTypeChart'] = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: sorted.map(s => s[0]),
+            datasets: [{
+                data: sorted.map(s => s[1]),
+                backgroundColor: palette.slice(0, sorted.length),
+                borderColor: '#fff',
+                borderWidth: 2,
+            }]
+        },
+        options: {
+            ...CHART_DEFAULTS,
+            scales: {},
+            plugins: {
+                ...CHART_DEFAULTS.plugins,
+                legend: { ...CHART_DEFAULTS.plugins.legend, position: 'right' },
+            }
+        }
+    });
+}
+
+function createIranImpactChart(impactByType) {
+    destroyChart('iranImpactChart');
+    const ctx = document.getElementById('iranImpactChart');
+    if (!ctx || !impactByType) return;
+
+    const types = Object.keys(impactByType);
+    if (!types.length) return;
+
+    const horizons = ['T+1', 'T+3', 'T+5', 'T+7'];
+    const horizonColors = ['rgba(61,107,153,0.7)', 'rgba(196,61,61,0.7)', 'rgba(212,168,67,0.7)', 'rgba(123,104,174,0.7)'];
+
+    const datasets = horizons.map((h, i) => ({
+        label: h,
+        data: types.map(t => impactByType[t][h] || 0),
+        backgroundColor: horizonColors[i],
+        borderRadius: 3,
+    }));
+
+    chartInstances['iranImpactChart'] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: types.map(t => t.charAt(0).toUpperCase() + t.slice(1)),
+            datasets: datasets,
+        },
+        options: {
+            ...CHART_DEFAULTS,
+            scales: {
+                x: { ...CHART_DEFAULTS.scales.x },
+                y: {
+                    ...CHART_DEFAULTS.scales.y,
+                    title: { display: true, text: 'Avg Price Change (%)', font: { family: 'Inter', size: 11 } }
+                }
+            }
+        }
+    });
+}
+
 function createCorrelationChart(correlation) {
     destroyChart('correlationChart');
     const ctx = document.getElementById('correlationChart');

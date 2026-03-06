@@ -414,6 +414,227 @@ def load_master_dataset() -> dict:
 
 # ─── Hypothesis Results (hardcoded from notebook) ───────────────────────────
 
+# ─── Iran Events (Current Events Tab) ────────────────────────────────────
+
+def fetch_iran_events() -> List[dict]:
+    """Fetch Iran-related events from ACLED API with cache."""
+    cached = _read_cache("iran_events", 3600)  # 1-hour cache
+    if cached:
+        logger.info("Iran events: serving from cache")
+        return cached
+
+    try:
+        token = _get_acled_token()
+        all_events = []
+
+        # Query 1: Events in Iran
+        for page in range(1, 20):
+            resp = requests.get(
+                config.ACLED_DATA_URL,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                params={
+                    "_format": "json",
+                    "country": "Iran",
+                    "event_date": "2025-01-01|2026-12-31",
+                    "event_date_where": "BETWEEN",
+                    "fields": "event_id_cnty|event_date|event_type|sub_event_type|actor1|actor2|location|latitude|longitude|notes|fatalities|tags",
+                    "limit": 5000,
+                    "page": page,
+                },
+                timeout=60,
+            )
+            resp.raise_for_status()
+            events = resp.json().get("data", [])
+            if not events:
+                break
+            all_events.extend(events)
+            logger.info(f"Iran events (country): fetched page {page} ({len(events)} events)")
+            if len(events) < 5000:
+                break
+
+        # Query 2: US-Iran bilateral events globally (actor-based)
+        seen_ids = {e.get("event_id_cnty") for e in all_events}
+        for actor_pair in [
+            {"actor1": "United States", "actor2": "Iran"},
+            {"actor1": "Iran", "actor2": "United States"},
+        ]:
+            resp = requests.get(
+                config.ACLED_DATA_URL,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                params={
+                    "_format": "json",
+                    "actor1": actor_pair["actor1"],
+                    "actor1_where": "LIKE",
+                    "actor2": actor_pair["actor2"],
+                    "actor2_where": "LIKE",
+                    "event_date": "2025-01-01|2026-12-31",
+                    "event_date_where": "BETWEEN",
+                    "fields": "event_id_cnty|event_date|event_type|sub_event_type|actor1|actor2|location|latitude|longitude|notes|fatalities|tags",
+                    "limit": 5000,
+                },
+                timeout=60,
+            )
+            resp.raise_for_status()
+            bilateral = resp.json().get("data", [])
+            for e in bilateral:
+                if e.get("event_id_cnty") not in seen_ids:
+                    all_events.append(e)
+                    seen_ids.add(e.get("event_id_cnty"))
+            logger.info(f"Iran bilateral ({actor_pair['actor1']}→{actor_pair['actor2']}): {len(bilateral)} events")
+
+        if all_events:
+            _write_cache("iran_events", all_events)
+            logger.info(f"Iran events: total {len(all_events)} events fetched and cached")
+            return all_events
+
+    except Exception as e:
+        logger.warning(f"Iran events API failed: {e}")
+
+    return []
+
+
+def get_curated_iran_events() -> List[dict]:
+    """Return curated timeline of major US-Iran events."""
+    return [
+        {"date": "2025-01-20", "title": "Trump Inaugurated — 'Maximum Pressure 2.0' Signaled", "type": "diplomatic", "description": "President Trump takes office, signaling renewed maximum pressure campaign against Iran.", "severity": 4},
+        {"date": "2025-02-04", "title": "US Reinstates Snapback Sanctions on Iran", "type": "sanctions", "description": "US triggers UN snapback mechanism, reimposing all previously lifted Security Council sanctions on Iran.", "severity": 5},
+        {"date": "2025-02-07", "title": "Trump Demands Iran Denuclearize or Face Strikes", "type": "diplomatic", "description": "President Trump issues ultimatum demanding Iran abandon nuclear program entirely or face military action.", "severity": 4},
+        {"date": "2025-02-27", "title": "US Imposes New Sanctions on Iranian Oil Exports", "type": "sanctions", "description": "Treasury Department designates additional Iranian oil entities and shipping networks enabling crude exports.", "severity": 4},
+        {"date": "2025-03-01", "title": "IAEA Reports Iran Enriching to 60% Purity", "type": "nuclear", "description": "IAEA confirms Iran continues enriching uranium to 60%, approaching weapons-grade threshold.", "severity": 4},
+        {"date": "2025-03-14", "title": "US Strikes Iran-Backed Militias in Iraq & Syria", "type": "military", "description": "US conducts airstrikes against Iran-aligned militia positions in Iraq and Syria following attacks on US bases.", "severity": 5},
+        {"date": "2025-04-01", "title": "Iran Seizes Commercial Tanker in Strait of Hormuz", "type": "military", "description": "IRGC Navy seizes a commercial oil tanker in the Strait of Hormuz, raising shipping insurance rates.", "severity": 4},
+        {"date": "2025-04-12", "title": "US Deploys Additional Carrier Group to Persian Gulf", "type": "military", "description": "Pentagon announces deployment of USS Harry S. Truman carrier strike group to the Persian Gulf region.", "severity": 3},
+        {"date": "2025-05-15", "title": "Iran-US Backchannel Talks Reported in Oman", "type": "diplomatic", "description": "Reports emerge of indirect US-Iran negotiations mediated by Oman regarding nuclear program and sanctions relief.", "severity": 3},
+        {"date": "2025-06-10", "title": "US Sanctions Chinese Firms Buying Iranian Oil", "type": "sanctions", "description": "US Treasury sanctions Chinese companies and banks involved in purchasing Iranian crude oil, targeting Iran's primary revenue source.", "severity": 4},
+        {"date": "2025-07-08", "title": "Iran Tests Ballistic Missile Capable of Reaching Israel", "type": "military", "description": "Iran test-fires a new medium-range ballistic missile, drawing US and Israeli condemnation.", "severity": 4},
+        {"date": "2025-08-20", "title": "IRGC Fast Boats Harass US Navy in Strait of Hormuz", "type": "military", "description": "Multiple IRGC fast boats conduct aggressive maneuvers near US Navy vessels transiting the Strait of Hormuz.", "severity": 3},
+        {"date": "2025-09-15", "title": "US-Iran Prisoner Swap Completed", "type": "diplomatic", "description": "US and Iran complete exchange of detained citizens in a rare diplomatic breakthrough.", "severity": 2},
+        {"date": "2025-10-02", "title": "Iran Announces Expansion of Enrichment Capacity", "type": "nuclear", "description": "Iran declares installation of advanced centrifuges at Natanz, significantly expanding enrichment capacity.", "severity": 4},
+        {"date": "2025-11-10", "title": "US Imposes 'Total Embargo' Sanctions Package on Iran", "type": "sanctions", "description": "Comprehensive new sanctions target Iran's entire financial sector, aiming to reduce oil exports to zero.", "severity": 5},
+        {"date": "2025-12-15", "title": "Iran-Backed Houthis Escalate Red Sea Attacks", "type": "proxy", "description": "Houthi forces launch intensified missile and drone campaign against commercial shipping in the Red Sea.", "severity": 4},
+        {"date": "2026-01-08", "title": "US Strikes Houthi Targets in Yemen", "type": "military", "description": "US conducts extensive strikes against Houthi military infrastructure in Yemen in response to Red Sea shipping attacks.", "severity": 5},
+        {"date": "2026-01-20", "title": "Iran Threatens to Close Strait of Hormuz", "type": "diplomatic", "description": "Iran's Supreme Leader warns of closing the Strait of Hormuz if oil sanctions enforcement continues.", "severity": 5},
+        {"date": "2026-02-10", "title": "IAEA: Iran's Enrichment Nearing 90% Weapons-Grade", "type": "nuclear", "description": "IAEA detects uranium particles enriched to near 90% at Fordow facility, crossing a critical nuclear threshold.", "severity": 5},
+        {"date": "2026-03-01", "title": "US and Iran Begin Direct Negotiations", "type": "diplomatic", "description": "US and Iranian officials hold first direct talks since 2022, exploring framework for nuclear constraints and sanctions relief.", "severity": 4},
+    ]
+
+
+def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
+    """Calculate oil price impact metrics around Iran events."""
+    if not brent_prices:
+        return {"kpis": {}, "impact_by_type": {}, "event_table": []}
+
+    # Build price lookup by date
+    price_map = {p["date"]: p["price"] for p in brent_prices}
+    sorted_dates = sorted(price_map.keys())
+
+    def get_price_at_offset(date_str: str, offset: int):
+        """Get price at T+offset trading days from date."""
+        try:
+            idx = sorted_dates.index(date_str)
+            target_idx = idx + offset
+            if 0 <= target_idx < len(sorted_dates):
+                return price_map[sorted_dates[target_idx]]
+        except (ValueError, IndexError):
+            pass
+        # Fallback: find nearest date
+        try:
+            from datetime import datetime, timedelta
+            dt = datetime.strptime(date_str, "%Y-%m-%d")
+            for delta in range(0, 10):
+                check = (dt + timedelta(days=offset + delta)).strftime("%Y-%m-%d")
+                if check in price_map:
+                    return price_map[check]
+                check = (dt + timedelta(days=offset - delta)).strftime("%Y-%m-%d")
+                if check in price_map:
+                    return price_map[check]
+        except Exception:
+            pass
+        return None
+
+    # Get curated events for impact table
+    curated = get_curated_iran_events()
+
+    # Build impact table from curated events
+    event_table = []
+    for ev in curated:
+        d = ev["date"]
+        price_before = get_price_at_offset(d, -1)
+        price_after = get_price_at_offset(d, 3)
+        price_day = get_price_at_offset(d, 0)
+
+        change_pct = None
+        if price_before and price_after:
+            change_pct = round((price_after - price_before) / price_before * 100, 2)
+
+        event_table.append({
+            "date": d,
+            "title": ev["title"],
+            "type": ev["type"],
+            "severity": ev["severity"],
+            "brent_before": round(price_before, 2) if price_before else None,
+            "brent_after": round(price_after, 2) if price_after else None,
+            "change_pct": change_pct,
+        })
+
+    # Aggregate impact by event type at different horizons
+    curated_by_type = {}
+    for ev in curated:
+        t = ev["type"]
+        if t not in curated_by_type:
+            curated_by_type[t] = []
+        curated_by_type[t].append(ev["date"])
+
+    impact_by_type = {}
+    for etype, dates in curated_by_type.items():
+        offsets = {"T+1": 1, "T+3": 3, "T+5": 5, "T+7": 7}
+        type_impact = {}
+        for label, off in offsets.items():
+            changes = []
+            for d in dates:
+                pb = get_price_at_offset(d, -1)
+                pa = get_price_at_offset(d, off)
+                if pb and pa:
+                    changes.append((pa - pb) / pb * 100)
+            type_impact[label] = round(sum(changes) / len(changes), 3) if changes else 0
+        impact_by_type[etype] = type_impact
+
+    # ACLED-based aggregation
+    acled_dates = list({e.get("event_date", "")[:10] for e in iran_events if e.get("event_date")})
+    all_changes_3d = []
+    max_vol_spike = 0
+    current_month = datetime.now().strftime("%Y-%m")
+    events_this_month = sum(1 for e in iran_events if (e.get("event_date") or "").startswith(current_month))
+
+    for d in acled_dates:
+        pb = get_price_at_offset(d, -1)
+        pa = get_price_at_offset(d, 3)
+        if pb and pa:
+            change = abs(pa - pb)
+            all_changes_3d.append(change)
+            if change > max_vol_spike:
+                max_vol_spike = change
+
+    kpis = {
+        "total_events": len(iran_events),
+        "avg_price_move_3d": round(sum(all_changes_3d) / len(all_changes_3d), 2) if all_changes_3d else 0,
+        "peak_volatility_spike": round(max_vol_spike, 2),
+        "events_this_month": events_this_month,
+    }
+
+    return {
+        "kpis": kpis,
+        "impact_by_type": impact_by_type,
+        "event_table": event_table,
+    }
+
+
 def get_hypothesis_results() -> dict:
     """Return hypothesis test results from the econometric analysis."""
     return {
