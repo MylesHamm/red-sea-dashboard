@@ -61,17 +61,19 @@ def _get_acled_token() -> str:
     if not config.ACLED_USERNAME or not config.ACLED_PASSWORD:
         raise ValueError("ACLED credentials not configured (set ACLED_USERNAME and ACLED_PASSWORD env vars)")
 
+    token_payload = f"username={requests.utils.quote(config.ACLED_USERNAME, safe='')}&password={requests.utils.quote(config.ACLED_PASSWORD, safe='')}&grant_type=password&client_id=acled"
     resp = requests.post(
         config.ACLED_TOKEN_URL,
-        data={
-            "username": config.ACLED_USERNAME,
-            "password": config.ACLED_PASSWORD,
-            "grant_type": "password",
-            "client_id": "acled",
-        },
+        data=token_payload,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
         timeout=30,
     )
-    resp.raise_for_status()
+    if not resp.ok:
+        raise requests.HTTPError(
+            f"{resp.status_code} for {resp.url} | sent Content-Type={resp.request.headers.get('Content-Type')} | "
+            f"body_len={len(resp.request.body or '')} | resp={resp.text[:200]}",
+            response=resp,
+        )
     token_data = resp.json()
     _acled_token = token_data["access_token"]
     _acled_token_expires = time.time() + token_data.get("expires_in", 86400) - 300
