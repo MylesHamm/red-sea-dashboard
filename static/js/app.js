@@ -5,6 +5,8 @@
 let masterData = null;
 let eventsData = null;
 let hypothesisData = null;
+let iranEventsData = null;
+let iranImpactData = null;
 let currentTab = 'overview';
 
 // ─── Tab Navigation ─────────────────────────────────────────────────────────
@@ -54,20 +56,25 @@ async function loadAllData() {
 
     try {
         // Fetch master data and events in parallel
-        const [master, events, hypothesis] = await Promise.all([
+        const [master, events, hypothesis, iranEvents, iranImpact] = await Promise.all([
             fetchJSON('/api/master'),
             fetchJSON('/api/events'),
             fetchJSON('/api/hypothesis'),
+            fetchJSON('/api/iran-events').catch(() => ({ count: 0, data: [], curated: [] })),
+            fetchJSON('/api/iran-impact').catch(() => ({ kpis: {}, impact_by_type: {}, event_table: [] })),
         ]);
 
         masterData = master;
         eventsData = events.data || [];
         hypothesisData = hypothesis;
+        iranEventsData = iranEvents;
+        iranImpactData = iranImpact;
 
         renderOverview();
         renderEconometric();
         renderControls();
         renderDataTable();
+        renderCurrentEvents();
 
         // If map tab is active, load events
         if (currentTab === 'geospatial' && eventsData.length) {
@@ -227,6 +234,54 @@ function renderControls() {
 
     // Delay correlation chart to ensure canvas is visible
     setTimeout(() => createCorrelationChart(correlation), 200);
+}
+
+// ─── Current Events (US-Iran) ────────────────────────────────────────────
+
+function renderCurrentEvents() {
+    if (!iranEventsData || !iranImpactData) return;
+
+    const kpis = iranImpactData.kpis || {};
+    animateValue('kpi-iran-total', kpis.total_events || 0);
+    animateValue('kpi-iran-price-move', kpis.avg_price_move_3d ? `$${kpis.avg_price_move_3d}` : '--');
+    animateValue('kpi-iran-vol-spike', kpis.peak_volatility_spike ? `$${kpis.peak_volatility_spike}` : '--');
+    animateValue('kpi-iran-month', kpis.events_this_month || 0);
+
+    // Apply accent colors
+    document.querySelectorAll('#tab-currentevents .kpi-card[data-accent]').forEach(card => {
+        card.style.borderTopColor = card.dataset.accent;
+    });
+
+    // Get brent prices for the timeline chart
+    const brentPrices = masterData ?
+        masterData.timeseries.filter(d => d.brent_price).map(d => ({ date: d.date, price: d.brent_price }))
+        : [];
+
+    // Charts
+    createIranPriceTimelineChart(brentPrices, iranEventsData.curated || []);
+    createIranEventTypeChart(iranEventsData.data || []);
+    createIranImpactChart(iranImpactData.impact_by_type || {});
+
+    // Event impact table
+    const tbody = document.getElementById('iranTableBody');
+    if (tbody && iranImpactData.event_table) {
+        const rows = iranImpactData.event_table.sort((a, b) => b.date.localeCompare(a.date));
+        tbody.innerHTML = rows.map(ev => {
+            const changeCls = ev.change_pct > 0 ? 'change-positive' : ev.change_pct < 0 ? 'change-negative' : '';
+            const changeText = ev.change_pct != null ? `${ev.change_pct > 0 ? '+' : ''}${ev.change_pct}%` : '--';
+            return `
+                <tr>
+                    <td>${ev.date}</td>
+                    <td>${ev.title}</td>
+                    <td><span class="event-type-badge type-${ev.type}">${ev.type}</span></td>
+                    <td><span class="severity-badge severity-${ev.severity}">${ev.severity}</span></td>
+                    <td>${ev.brent_before != null ? '$' + ev.brent_before.toFixed(2) : '--'}</td>
+                    <td>${ev.brent_after != null ? '$' + ev.brent_after.toFixed(2) : '--'}</td>
+                    <td class="${changeCls}">${changeText}</td>
+                </tr>
+            `;
+        }).join('');
+    }
 }
 
 // ─── Data Table ─────────────────────────────────────────────────────────────
