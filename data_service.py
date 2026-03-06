@@ -201,13 +201,42 @@ def fetch_brent_prices() -> List[dict]:
             if r.get("value") is not None
         ]
         if records:
+            records = _supplement_brent_with_yfinance(records)
             _write_cache("brent_prices", records)
-            logger.info(f"Brent: fetched {len(records)} daily prices from EIA")
+            logger.info(f"Brent: fetched {len(records)} daily prices (EIA + yfinance)")
             return records
     except Exception as e:
         logger.warning(f"EIA Brent API failed: {e}")
 
-    return _load_brent_csv_fallback()
+    fallback = _load_brent_csv_fallback()
+    if fallback:
+        fallback = _supplement_brent_with_yfinance(fallback)
+    return fallback
+
+
+def _supplement_brent_with_yfinance(eia_records: List[dict]) -> List[dict]:
+    """Extend EIA Brent data with yfinance (BZ=F) for recent dates EIA doesn't cover."""
+    last_eia_date = max(r["date"] for r in eia_records) if eia_records else "2023-10-01"
+    try:
+        import yfinance as yf
+        df = yf.download("BZ=F", start=last_eia_date, progress=False)
+        if df.empty:
+            return eia_records
+
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+
+        yf_records = [
+            {"date": idx.strftime("%Y-%m-%d"), "price": round(float(row["Close"]), 2)}
+            for idx, row in df.iterrows()
+            if pd.notna(row.get("Close")) and idx.strftime("%Y-%m-%d") > last_eia_date
+        ]
+        if yf_records:
+            logger.info(f"Brent yfinance: supplemented {len(yf_records)} recent prices (after {last_eia_date})")
+            return eia_records + yf_records
+    except Exception as e:
+        logger.warning(f"Brent yfinance supplement failed: {e}")
+    return eia_records
 
 
 def _load_brent_csv_fallback() -> List[dict]:

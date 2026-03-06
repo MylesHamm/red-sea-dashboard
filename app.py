@@ -85,7 +85,9 @@ def get_iran_impact():
     """Oil price impact analysis around Iran events."""
     iran_events = data_service.fetch_iran_events()
     brent_prices = data_service.fetch_brent_prices()
-    return data_service.compute_iran_impact(iran_events, brent_prices)
+    result = data_service.compute_iran_impact(iran_events, brent_prices)
+    result["brent_prices"] = brent_prices
+    return result
 
 
 # ─── Frontend Entry Point ────────────────────────────────────────────────────

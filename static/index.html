@@ -425,8 +425,12 @@
                     <div class="chart-header">
                         <h3>Brent Crude Price vs US-Iran Events Timeline</h3>
                         <div class="chart-header-right">
+                            <div class="iran-zoom-toggle">
+                                <button class="zoom-btn active" id="zoomWar" onclick="setTimelineZoom(true)">War Period</button>
+                                <button class="zoom-btn" id="zoomFull" onclick="setTimelineZoom(false)">Full Timeline</button>
+                            </div>
                             <span class="chart-badge">Event Overlay</span>
-                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Brent crude price since January 2025 overlaid with major US-Iran events. Vertical markers indicate curated geopolitical milestones color-coded by type: Military (red), Diplomatic (blue), Sanctions (orange), Nuclear (purple), Proxy (gold). Hover for event details.</span></div>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Brent crude price overlaid with major US-Iran events. Toggle between zoomed war period (Jan-Mar 2026) and full timeline (2025-present). Color-coded by type: Military (red), Diplomatic (blue), Sanctions (orange), Nuclear (purple), Proxy (gold).</span></div>
                         </div>
                     </div>
                     <div class="chart-wrapper" style="height:420px">
@@ -439,6 +443,39 @@
                         <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#E07B4C"></span>Sanctions</span>
                         <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#7B68AE"></span>Nuclear</span>
                         <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#C9A96E"></span>Proxy</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Price Forecast -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Brent Crude Price Forecast — Scenario Analysis</h3>
+                        <div class="chart-header-right">
+                            <span class="chart-badge" style="background:rgba(196,61,61,0.12);color:#C43D3D">Forecast</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">30-day scenario-based price projection. Escalation: Hormuz remains closed, war widens to Gulf infrastructure ($100-$120). Sustained Conflict: partial blockade, insurance-driven disruption ($90-$100). Ceasefire: diplomatic breakthrough, Hormuz reopens ($75-$80). Based on historical precedents (1990 Gulf War, 1979 Iran Revolution, 2019 Aramco attack).</span></div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper" style="height:400px">
+                        <canvas id="iranForecastChart"></canvas>
+                    </div>
+                    <div class="forecast-scenarios">
+                        <div class="forecast-scenario scenario-escalation">
+                            <div class="scenario-header"><span class="scenario-dot" style="background:#C43D3D"></span>Escalation</div>
+                            <div class="scenario-detail">Hormuz closed, war widens to Gulf infrastructure. Oil supply disrupted by ~21 mbd. Historical parallel: 1990 Gulf War (+100%).</div>
+                            <div class="scenario-target">Target: $100 — $120/bbl</div>
+                        </div>
+                        <div class="forecast-scenario scenario-sustained">
+                            <div class="scenario-header"><span class="scenario-dot" style="background:#E07B4C"></span>Sustained Conflict</div>
+                            <div class="scenario-detail">Partial Hormuz blockade, insurance premiums deter transits. SPR releases partially offset. Slow grind higher.</div>
+                            <div class="scenario-target">Target: $90 — $100/bbl</div>
+                        </div>
+                        <div class="forecast-scenario scenario-ceasefire">
+                            <div class="scenario-header"><span class="scenario-dot" style="background:#2E7D5B"></span>Ceasefire / De-escalation</div>
+                            <div class="scenario-detail">Diplomatic breakthrough, Hormuz reopens. Risk premium unwinds but remains elevated vs pre-war levels.</div>
+                            <div class="scenario-target">Target: $75 — $80/bbl</div>
+                        </div>
                     </div>
                 </div>
             </div>

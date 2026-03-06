@@ -252,13 +252,20 @@ function renderCurrentEvents() {
         card.style.borderTopColor = card.dataset.accent;
     });
 
-    // Get brent prices for the timeline chart
-    const brentPrices = masterData ?
-        masterData.timeseries.filter(d => d.brent_price).map(d => ({ date: d.date, price: d.brent_price }))
-        : [];
+    // Get brent prices — prefer from iran-impact endpoint (includes yfinance supplement),
+    // fall back to masterData timeseries
+    let brentPrices = iranImpactData.brent_prices || [];
+    if (!brentPrices.length && masterData) {
+        brentPrices = masterData.timeseries.filter(d => d.brent_price).map(d => ({ date: d.date, price: d.brent_price }));
+    }
 
-    // Charts
-    createIranPriceTimelineChart(brentPrices, iranEventsData.curated || []);
+    // Store for zoom toggle reuse
+    window._iranBrentPrices = brentPrices;
+    window._iranCurated = iranEventsData.curated || [];
+
+    // Charts — default to zoomed war view
+    createIranPriceTimelineChart(brentPrices, iranEventsData.curated || [], true);
+    createIranForecastChart(brentPrices);
     createIranEventTypeChart(iranEventsData.data || []);
     createIranImpactChart(iranImpactData.impact_by_type || {});
 
@@ -281,6 +288,16 @@ function renderCurrentEvents() {
                 </tr>
             `;
         }).join('');
+    }
+}
+
+// ─── Timeline Zoom Toggle ───────────────────────────────────────────────────
+
+function setTimelineZoom(zoomToWar) {
+    document.getElementById('zoomWar').classList.toggle('active', zoomToWar);
+    document.getElementById('zoomFull').classList.toggle('active', !zoomToWar);
+    if (window._iranBrentPrices) {
+        createIranPriceTimelineChart(window._iranBrentPrices, window._iranCurated || [], zoomToWar);
     }
 }
 
