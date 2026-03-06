@@ -21,6 +21,12 @@ logger = logging.getLogger(__name__)
 # Ensure cache directory exists
 config.CACHE_DIR.mkdir(exist_ok=True)
 
+# Browser-like headers to avoid WAF blocks from cloud IPs
+_BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+}
+
 
 # ─── Cache Helpers ───────────────────────────────────────────────────────────
 
@@ -65,7 +71,7 @@ def _get_acled_token() -> str:
     resp = requests.post(
         config.ACLED_TOKEN_URL,
         data=token_payload,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        headers={**_BROWSER_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
         timeout=30,
     )
     if not resp.ok:
@@ -97,10 +103,7 @@ def fetch_acled_events() -> List[dict]:
         while True:
             resp = requests.get(
                 config.ACLED_DATA_URL,
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json",
-                },
+                headers={**_BROWSER_HEADERS, "Authorization": f"Bearer {token}"},
                 params={
                     "_format": "json",
                     "country": "Yemen",
@@ -480,10 +483,7 @@ def fetch_iran_events() -> List[dict]:
         for page in range(1, 20):
             resp = requests.get(
                 config.ACLED_DATA_URL,
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json",
-                },
+                headers={**_BROWSER_HEADERS, "Authorization": f"Bearer {token}"},
                 params={
                     "_format": "json",
                     "country": "Iran",
@@ -512,10 +512,7 @@ def fetch_iran_events() -> List[dict]:
         ]:
             resp = requests.get(
                 config.ACLED_DATA_URL,
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json",
-                },
+                headers={**_BROWSER_HEADERS, "Authorization": f"Bearer {token}"},
                 params={
                     "_format": "json",
                     "actor1": actor_pair["actor1"],
