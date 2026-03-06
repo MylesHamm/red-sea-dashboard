@@ -593,19 +593,19 @@ const IRAN_TYPE_COLORS = {
     proxy: '#C9A96E',
 };
 
-function createIranPriceTimelineChart(brentPrices, curatedEvents) {
+function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = true) {
     destroyChart('iranPriceTimelineChart');
     const ctx = document.getElementById('iranPriceTimelineChart');
     if (!ctx || !brentPrices || !brentPrices.length) return;
 
-    // Filter brent prices to 2025+
-    const filtered = brentPrices.filter(d => d.date >= '2025-01-01');
+    // Filter based on zoom level
+    const cutoff = zoomToWar ? '2026-01-15' : '2025-01-01';
+    const filtered = brentPrices.filter(d => d.date >= cutoff);
     const dates = filtered.map(d => d.date);
     const prices = filtered.map(d => d.price);
 
-    // Build event scatter points from curated events
-    const eventPoints = (curatedEvents || []).map(ev => {
-        // Find closest price date
+    // Build event scatter points from curated events (only those in range)
+    const eventPoints = (curatedEvents || []).filter(ev => ev.date >= cutoff).map(ev => {
         let closestIdx = 0;
         let minDist = Infinity;
         dates.forEach((d, i) => {
@@ -618,11 +618,15 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents) {
             title: ev.title,
             type: ev.type,
             severity: ev.severity,
+            description: ev.description || '',
         };
     }).filter(p => p.y != null);
 
     // Color events by type
     const eventColors = eventPoints.map(p => IRAN_TYPE_COLORS[p.type] || COLORS.gold);
+
+    // Add vertical annotation lines for key war dates
+    const warStartLine = dates.indexOf('2026-02-28') >= 0 ? '2026-02-28' : null;
 
     chartInstances['iranPriceTimelineChart'] = new Chart(ctx, {
         data: {
@@ -664,6 +668,10 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents) {
                 x: {
                     ...CHART_DEFAULTS.scales.x,
                     type: 'category',
+                    ticks: {
+                        ...CHART_DEFAULTS.scales.x.ticks,
+                        maxTicksAuto: zoomToWar ? 15 : 12,
+                    }
                 },
                 y: {
                     ...CHART_DEFAULTS.scales.y,
@@ -682,9 +690,161 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents) {
                             if (context.datasetIndex === 1) {
                                 const idx = context.dataIndex;
                                 const ev = eventPoints[idx];
-                                return ev ? [ev.title, `Severity: ${ev.severity}/5`] : [];
+                                return ev ? [ev.title, `Type: ${ev.type.toUpperCase()} | Severity: ${ev.severity}/5`] : [];
                             }
                             return `Brent: $${context.parsed.y?.toFixed(2)}`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+/* ─── Price Forecast Chart ─────────────────────────────────────────────── */
+
+function createIranForecastChart(brentPrices) {
+    destroyChart('iranForecastChart');
+    const ctx = document.getElementById('iranForecastChart');
+    if (!ctx || !brentPrices || !brentPrices.length) return;
+
+    // Get recent prices (last 30 trading days)
+    const recent = brentPrices.filter(d => d.date >= '2026-01-01');
+    if (recent.length < 5) return;
+
+    const lastPrice = recent[recent.length - 1].price;
+    const lastDate = recent[recent.length - 1].date;
+
+    // Historical dates and prices
+    const histDates = recent.map(d => d.date);
+    const histPrices = recent.map(d => d.price);
+
+    // Generate 30-day forecast dates
+    const forecastDays = 30;
+    const forecastDates = [];
+    const startDt = new Date(lastDate);
+    for (let i = 1; i <= forecastDays; i++) {
+        const d = new Date(startDt);
+        d.setDate(d.getDate() + i);
+        // Skip weekends
+        if (d.getDay() === 0 || d.getDay() === 6) continue;
+        forecastDates.push(d.toISOString().split('T')[0]);
+    }
+
+    // ── Scenario modeling ──
+    // Base: Strait of Hormuz closure persists, ~17% of global oil transit disrupted
+    // Pre-war Brent was ~$73. War has pushed to ~$85 (+16%).
+    // Historical precedents:
+    //   1990 Gulf War: Brent doubled ($20→$40) when 4.3 mbd disrupted
+    //   1979 Iranian Revolution: +150% over 12 months
+    //   2019 Aramco attack: +15% spike, recovered in weeks
+    // Hormuz handles ~21 mbd (21% of global oil). Full closure = catastrophic.
+
+    // Scenario 1: Escalation — War intensifies, Hormuz remains closed, Iranian attacks
+    // widen to Gulf infrastructure. Brent moves toward $100-$120.
+    const escalation = forecastDates.map((d, i) => {
+        const dayFrac = (i + 1) / forecastDates.length;
+        // Aggressive climb with volatility
+        const trend = lastPrice + (35 * dayFrac) + (5 * Math.sin(dayFrac * Math.PI * 3));
+        return Math.round(trend * 100) / 100;
+    });
+
+    // Scenario 2: Sustained conflict — Hormuz partially blocked, insurance premiums
+    // keep most tankers away, slow grind higher. Brent $90-$100 range.
+    const sustained = forecastDates.map((d, i) => {
+        const dayFrac = (i + 1) / forecastDates.length;
+        const trend = lastPrice + (15 * dayFrac) + (3 * Math.sin(dayFrac * Math.PI * 2));
+        return Math.round(trend * 100) / 100;
+    });
+
+    // Scenario 3: Ceasefire/De-escalation — Diplomatic breakthrough, Hormuz reopens,
+    // price retreats toward $75-$80. Still elevated vs pre-war due to risk premium.
+    const deescalation = forecastDates.map((d, i) => {
+        const dayFrac = (i + 1) / forecastDates.length;
+        const trend = lastPrice - (8 * dayFrac) + (2 * Math.sin(dayFrac * Math.PI * 2));
+        return Math.round(trend * 100) / 100;
+    });
+
+    // Combined labels: historical + forecast
+    const allDates = [...histDates, ...forecastDates];
+    const histLine = [...histPrices, ...new Array(forecastDates.length).fill(null)];
+    const escLine = [...new Array(histDates.length - 1).fill(null), lastPrice, ...escalation];
+    const susLine = [...new Array(histDates.length - 1).fill(null), lastPrice, ...sustained];
+    const deescLine = [...new Array(histDates.length - 1).fill(null), lastPrice, ...deescalation];
+
+    chartInstances['iranForecastChart'] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: allDates,
+            datasets: [
+                {
+                    label: 'Actual Brent Price',
+                    data: histLine,
+                    borderColor: COLORS.brent,
+                    backgroundColor: COLORS.brentBg,
+                    borderWidth: 2.5,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    fill: false,
+                    tension: 0.3,
+                },
+                {
+                    label: 'Escalation ($100-$120)',
+                    data: escLine,
+                    borderColor: '#C43D3D',
+                    backgroundColor: 'rgba(196, 61, 61, 0.08)',
+                    borderWidth: 2,
+                    borderDash: [6, 3],
+                    pointRadius: 0,
+                    fill: false,
+                    tension: 0.3,
+                },
+                {
+                    label: 'Sustained Conflict ($90-$100)',
+                    data: susLine,
+                    borderColor: '#E07B4C',
+                    backgroundColor: 'rgba(224, 123, 76, 0.08)',
+                    borderWidth: 2,
+                    borderDash: [6, 3],
+                    pointRadius: 0,
+                    fill: false,
+                    tension: 0.3,
+                },
+                {
+                    label: 'Ceasefire/De-escalation ($75-$80)',
+                    data: deescLine,
+                    borderColor: '#2E7D5B',
+                    backgroundColor: 'rgba(46, 125, 91, 0.08)',
+                    borderWidth: 2,
+                    borderDash: [6, 3],
+                    pointRadius: 0,
+                    fill: false,
+                    tension: 0.3,
+                },
+            ]
+        },
+        options: {
+            ...CHART_DEFAULTS,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: {
+                    ...CHART_DEFAULTS.scales.x,
+                    type: 'category',
+                },
+                y: {
+                    ...CHART_DEFAULTS.scales.y,
+                    title: { display: true, text: 'Brent Price (USD/barrel)', font: { family: 'Inter', size: 11 } },
+                }
+            },
+            plugins: {
+                ...CHART_DEFAULTS.plugins,
+                legend: { ...CHART_DEFAULTS.plugins.legend, position: 'top' },
+                tooltip: {
+                    ...CHART_DEFAULTS.plugins.tooltip,
+                    callbacks: {
+                        label(context) {
+                            const v = context.parsed.y;
+                            return v != null ? `${context.dataset.label}: $${v.toFixed(2)}` : '';
                         }
                     }
                 }

@@ -958,6 +958,92 @@ tbody tr:hover { background: rgba(201, 169, 110, 0.04); }
     flex-shrink: 0;
 }
 
+/* Zoom toggle buttons */
+.iran-zoom-toggle {
+    display: inline-flex;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    margin-right: 8px;
+}
+
+.zoom-btn {
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    border: none;
+    cursor: pointer;
+    background: var(--bg-card);
+    color: var(--text-light);
+    transition: all 0.2s;
+}
+
+.zoom-btn.active {
+    background: var(--navy);
+    color: #fff;
+}
+
+.zoom-btn:hover:not(.active) {
+    background: var(--bg-alt);
+}
+
+/* Forecast scenario cards */
+.forecast-scenarios {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    padding: 16px 0 4px;
+}
+
+.forecast-scenario {
+    padding: 14px 16px;
+    border-radius: 8px;
+    border-left: 4px solid;
+    background: var(--bg-alt);
+}
+
+.scenario-escalation { border-left-color: #C43D3D; }
+.scenario-sustained { border-left-color: #E07B4C; }
+.scenario-ceasefire { border-left-color: #2E7D5B; }
+
+.scenario-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--text-dark);
+    margin-bottom: 6px;
+}
+
+.scenario-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.scenario-detail {
+    font-size: 11.5px;
+    color: var(--text-light);
+    line-height: 1.5;
+    margin-bottom: 8px;
+}
+
+.scenario-target {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--navy);
+    letter-spacing: 0.3px;
+}
+
+@media (max-width: 768px) {
+    .forecast-scenarios {
+        grid-template-columns: 1fr;
+    }
+}
+
 .iran-table table {
     font-size: 13px;
 }
