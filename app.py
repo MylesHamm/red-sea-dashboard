@@ -77,7 +77,11 @@ def get_iran_events():
     """Iran-related ACLED events + curated major events."""
     acled_events = data_service.fetch_iran_events()
     curated = data_service.get_curated_iran_events()
-    return {"count": len(acled_events), "data": acled_events, "curated": curated}
+    result = {"count": len(acled_events), "data": acled_events, "curated": curated}
+    err = data_service.get_iran_fetch_error()
+    if err:
+        result["error"] = err
+    return result
 
 
 @app.get("/api/iran-impact")
