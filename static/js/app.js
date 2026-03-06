@@ -293,7 +293,10 @@ function renderCurrentEvents() {
 
 // ─── Timeline Zoom Toggle ───────────────────────────────────────────────────
 
+let _iranZoomToWar = true;
+
 function setTimelineZoom(zoomToWar) {
+    _iranZoomToWar = zoomToWar;
     document.getElementById('zoomWar').classList.toggle('active', zoomToWar);
     document.getElementById('zoomFull').classList.toggle('active', !zoomToWar);
     if (window._iranBrentPrices) {
@@ -304,6 +307,48 @@ function setTimelineZoom(zoomToWar) {
 // Bind zoom toggle buttons via event listeners (scripts load at end of body, DOM is ready)
 document.getElementById('zoomWar')?.addEventListener('click', () => setTimelineZoom(true));
 document.getElementById('zoomFull')?.addEventListener('click', () => setTimelineZoom(false));
+
+// ─── Iran Crossfilter Re-render ─────────────────────────────────────────────
+
+function renderCurrentEventsFiltered() {
+    if (!iranEventsData || !iranImpactData) return;
+
+    const brentPrices = window._iranBrentPrices || [];
+    const curated = window._iranCurated || [];
+
+    // Re-render timeline with current zoom + filter state
+    createIranPriceTimelineChart(brentPrices, curated, _iranZoomToWar);
+
+    // Re-render doughnut (dims non-selected segments)
+    createIranEventTypeChart(iranEventsData.data || []);
+
+    // Re-render impact bar chart (dims non-matching types)
+    createIranImpactChart(iranImpactData.impact_by_type || {});
+
+    // Re-filter event table
+    const tbody = document.getElementById('iranTableBody');
+    if (tbody && iranImpactData.event_table) {
+        let rows = iranImpactData.event_table.sort((a, b) => b.date.localeCompare(a.date));
+        if (typeof iranFilter !== 'undefined' && iranFilter) {
+            rows = rows.filter(ev => ev.type === iranFilter.value);
+        }
+        tbody.innerHTML = rows.map(ev => {
+            const changeCls = ev.change_pct > 0 ? 'change-positive' : ev.change_pct < 0 ? 'change-negative' : '';
+            const changeText = ev.change_pct != null ? `${ev.change_pct > 0 ? '+' : ''}${ev.change_pct}%` : '--';
+            return `
+                <tr>
+                    <td>${ev.date}</td>
+                    <td>${ev.title}</td>
+                    <td><span class="event-type-badge type-${ev.type}">${ev.type}</span></td>
+                    <td><span class="severity-badge severity-${ev.severity}">${ev.severity}</span></td>
+                    <td>${ev.brent_before != null ? '$' + ev.brent_before.toFixed(2) : '--'}</td>
+                    <td>${ev.brent_after != null ? '$' + ev.brent_after.toFixed(2) : '--'}</td>
+                    <td class="${changeCls}">${changeText}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+}
 
 // ─── Data Table ─────────────────────────────────────────────────────────────
 

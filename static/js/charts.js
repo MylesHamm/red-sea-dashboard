@@ -593,6 +593,30 @@ const IRAN_TYPE_COLORS = {
     proxy: '#C9A96E',
 };
 
+// ─── Iran Crossfilter State ─────────────────────────────────────────────────
+
+let iranFilter = null; // { type: 'iranEventType', value: 'military' }
+
+function setIranFilter(value) {
+    iranFilter = { type: 'iranEventType', value };
+    const bar = document.getElementById('iranCrossfilterBar');
+    const val = document.getElementById('iranCrossfilterValue');
+    if (bar && val) {
+        val.textContent = value.charAt(0).toUpperCase() + value.slice(1);
+        bar.style.display = 'flex';
+    }
+    if (typeof renderCurrentEventsFiltered === 'function') renderCurrentEventsFiltered();
+}
+
+function clearIranFilter() {
+    iranFilter = null;
+    const bar = document.getElementById('iranCrossfilterBar');
+    if (bar) bar.style.display = 'none';
+    if (typeof renderCurrentEventsFiltered === 'function') renderCurrentEventsFiltered();
+}
+
+document.getElementById('iranCrossfilterClear')?.addEventListener('click', clearIranFilter);
+
 function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = true) {
     destroyChart('iranPriceTimelineChart');
     const ctx = document.getElementById('iranPriceTimelineChart');
@@ -622,8 +646,16 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
         };
     }).filter(p => p.y != null);
 
-    // Color events by type
-    const eventColors = eventPoints.map(p => IRAN_TYPE_COLORS[p.type] || COLORS.gold);
+    // Color events by type — dim non-matching when filter active
+    const eventColors = eventPoints.map(p => {
+        const base = IRAN_TYPE_COLORS[p.type] || COLORS.gold;
+        if (iranFilter && iranFilter.value !== p.type) return base + '33';
+        return base;
+    });
+    const eventRadii = eventPoints.map(p => {
+        if (iranFilter && iranFilter.value !== p.type) return 3;
+        return 4 + p.severity * 2;
+    });
 
     // Add vertical annotation lines for key war dates
     const warStartLine = dates.indexOf('2026-02-28') >= 0 ? '2026-02-28' : null;
@@ -653,9 +685,9 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
                     backgroundColor: eventColors,
                     borderColor: eventColors.map(c => c),
                     borderWidth: 2,
-                    pointRadius: eventPoints.map(p => 4 + p.severity * 2),
+                    pointRadius: eventRadii,
                     pointHoverRadius: 12,
-                    pointStyle: 'triangle',
+                    pointStyle: 'circle',
                     yAxisID: 'y',
                     order: 1,
                 }
@@ -866,13 +898,19 @@ function createIranEventTypeChart(iranEvents) {
     const sorted = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
     const palette = [COLORS.attacks, COLORS.brent, COLORS.volatility, COLORS.dxy, COLORS.ovx, COLORS.positive, COLORS.gold];
 
+    // Dim non-selected segments when crossfilter active
+    const bgColors = palette.slice(0, sorted.length).map((c, i) => {
+        if (iranFilter && iranFilter.value !== sorted[i][0].toLowerCase()) return c + '33';
+        return c;
+    });
+
     chartInstances['iranEventTypeChart'] = new Chart(ctx, {
         type: 'doughnut',
         data: {
             labels: sorted.map(s => s[0]),
             datasets: [{
                 data: sorted.map(s => s[1]),
-                backgroundColor: palette.slice(0, sorted.length),
+                backgroundColor: bgColors,
                 borderColor: '#fff',
                 borderWidth: 2,
             }]
@@ -880,6 +918,17 @@ function createIranEventTypeChart(iranEvents) {
         options: {
             ...CHART_DEFAULTS,
             scales: {},
+            onClick(e, elements) {
+                if (elements.length > 0) {
+                    const idx = elements[0].index;
+                    const clickedType = sorted[idx][0].toLowerCase();
+                    if (iranFilter && iranFilter.value === clickedType) {
+                        clearIranFilter();
+                    } else {
+                        setIranFilter(clickedType);
+                    }
+                }
+            },
             plugins: {
                 ...CHART_DEFAULTS.plugins,
                 legend: { ...CHART_DEFAULTS.plugins.legend, position: 'right' },
@@ -902,7 +951,10 @@ function createIranImpactChart(impactByType) {
     const datasets = horizons.map((h, i) => ({
         label: h,
         data: types.map(t => impactByType[t][h] || 0),
-        backgroundColor: horizonColors[i],
+        backgroundColor: types.map(t => {
+            if (iranFilter && iranFilter.value !== t) return horizonColors[i].replace('0.7', '0.15');
+            return horizonColors[i];
+        }),
         borderRadius: 3,
     }));
 
