@@ -301,6 +301,10 @@ function setTimelineZoom(zoomToWar) {
     }
 }
 
+// Bind zoom toggle buttons via event listeners (scripts load at end of body, DOM is ready)
+document.getElementById('zoomWar')?.addEventListener('click', () => setTimelineZoom(true));
+document.getElementById('zoomFull')?.addEventListener('click', () => setTimelineZoom(false));
+
 // ─── Data Table ─────────────────────────────────────────────────────────────
 
 let tableData = [];
