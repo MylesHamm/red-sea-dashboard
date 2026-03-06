@@ -67,17 +67,20 @@ def _get_acled_token() -> str:
     if not config.ACLED_USERNAME or not config.ACLED_PASSWORD:
         raise ValueError("ACLED credentials not configured (set ACLED_USERNAME and ACLED_PASSWORD env vars)")
 
-    token_payload = f"username={requests.utils.quote(config.ACLED_USERNAME, safe='')}&password={requests.utils.quote(config.ACLED_PASSWORD, safe='')}&grant_type=password&client_id=acled"
     resp = requests.post(
         config.ACLED_TOKEN_URL,
-        data=token_payload,
+        data={
+            "username": config.ACLED_USERNAME,
+            "password": config.ACLED_PASSWORD,
+            "grant_type": "password",
+            "client_id": "acled",
+        },
         headers={**_BROWSER_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
         timeout=30,
     )
     if not resp.ok:
         raise requests.HTTPError(
-            f"{resp.status_code} for {resp.url} | sent Content-Type={resp.request.headers.get('Content-Type')} | "
-            f"body_len={len(resp.request.body or '')} | resp={resp.text[:200]}",
+            f"{resp.status_code} for {resp.url} | resp={resp.text[:300]}",
             response=resp,
         )
     token_data = resp.json()
@@ -547,7 +550,23 @@ def fetch_iran_events() -> List[dict]:
         _iran_fetch_error = f"{type(e).__name__}: {e}"
         logger.warning(f"Iran events API failed: {_iran_fetch_error}")
 
-    return []
+    # Fallback: load from pre-fetched JSON file
+    return _load_iran_json_fallback()
+
+
+def _load_iran_json_fallback() -> List[dict]:
+    """Load Iran events from local JSON fallback file."""
+    path = config.DATA_DIR / "iran_events.json"
+    if not path.exists():
+        logger.warning("Iran events: no JSON fallback file found")
+        return []
+    try:
+        events = json.loads(path.read_text())
+        logger.info(f"Iran events: loaded {len(events)} events from JSON fallback")
+        return events
+    except Exception as e:
+        logger.warning(f"Iran events JSON fallback failed: {e}")
+        return []
 
 
 def get_iran_fetch_error() -> Optional[str]:
