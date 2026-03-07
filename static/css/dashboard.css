@@ -1121,10 +1121,66 @@ tbody tr:hover { background: rgba(201, 169, 110, 0.04); }
     #map { height: 500px; }
 }
 
+/* Iran/Israel geospatial map */
+.iran-map-controls {
+    display: inline-flex;
+    gap: 12px;
+    margin-right: 8px;
+}
+
+.map-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-light);
+    cursor: pointer;
+}
+
+.map-toggle input[type="checkbox"] {
+    accent-color: var(--gold);
+    cursor: pointer;
+}
+
+.iran-map-legend {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    padding: 12px 0 0;
+    flex-wrap: wrap;
+}
+
+.iran-map-stats {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    padding: 8px 0 0;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--text-light);
+}
+
+.iran-map-stats strong {
+    color: var(--gold);
+    font-weight: 700;
+}
+
+/* Curated event pulse marker */
+.curated-pulse {
+    width: 16px;
+    height: 16px;
+    background: #D4A843;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 0 8px rgba(212,168,67,0.6);
+}
+
 @media (max-width: 768px) {
     .kpi-row { grid-template-columns: repeat(2, 1fr); }
     .header-content { flex-direction: column; gap: 12px; }
     .tab-nav { overflow-x: auto; }
     .container { padding: 0 16px; }
     .data-controls { flex-direction: column; align-items: stretch; }
+    .iran-map-controls { flex-wrap: wrap; gap: 8px; }
 }

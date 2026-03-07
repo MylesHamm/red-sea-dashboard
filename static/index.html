@@ -487,6 +487,38 @@
                 </div>
             </div>
 
+            <!-- Geospatial Attack Map: Iran & Israel -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Geospatial Attack Map — Iran & Israel Theaters</h3>
+                        <div class="chart-header-right">
+                            <div class="iran-map-controls">
+                                <label class="map-toggle"><input type="checkbox" id="toggleIranEvents" checked> <span>Iran ACLED</span></label>
+                                <label class="map-toggle"><input type="checkbox" id="toggleIsraelEvents" checked> <span>Israel</span></label>
+                                <label class="map-toggle"><input type="checkbox" id="toggleCuratedEvents" checked> <span>Curated</span></label>
+                                <label class="map-toggle"><input type="checkbox" id="toggleIranHeatmap" checked> <span>Heatmap</span></label>
+                            </div>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">ACLED-sourced conflict events plotted by coordinates. Iran: protests, battles, explosions, strategic developments. Israel: Houthi missile interceptions and attacks. Curated: major timeline events with verified locations. Marker size scales with fatalities; color by event type.</span></div>
+                        </div>
+                    </div>
+                    <div id="iranIsraelMap" style="height:520px;border-radius:8px;background:#0d1b2a"></div>
+                    <div class="iran-map-legend">
+                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#C43D3D"></span>Battles / Explosions</span>
+                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#3D6B99"></span>Strategic Dev.</span>
+                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#E07B4C"></span>Protests / Riots</span>
+                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#7B68AE"></span>Violence vs Civilians</span>
+                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#D4A843;border:2px solid #fff;width:12px;height:12px"></span>Curated Event</span>
+                    </div>
+                    <div class="iran-map-stats">
+                        <span>Iran Events: <strong id="iranMapStatIran">--</strong></span>
+                        <span>Israel Events: <strong id="iranMapStatIsrael">--</strong></span>
+                        <span>Curated Events: <strong id="iranMapStatCurated">--</strong></span>
+                        <span>Total Fatalities: <strong id="iranMapStatFatalities">--</strong></span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Row 2: Event Type Breakdown + Impact Analysis -->
             <div class="chart-row two-col">
                 <div class="chart-card">
