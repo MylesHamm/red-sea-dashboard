@@ -36,6 +36,16 @@ function switchTab(tab) {
         }
     }
 
+    // Initialize Iran/Israel map on current events tab visit
+    if (tab === 'currentevents') {
+        setTimeout(() => {
+            if (iranEventsData) {
+                _loadIranIsraelMapFromData();
+            }
+            resizeIranIsraelMap();
+        }, 200);
+    }
+
     // Re-render correlation heatmap when controls tab becomes visible
     // (canvas needs visible parent for correct sizing)
     if (tab === 'controls' && masterData && masterData.correlation) {
@@ -268,6 +278,11 @@ function renderCurrentEvents() {
     createIranForecastChart(brentPrices);
     createIranEventTypeChart(iranEventsData.data || []);
     createIranImpactChart(iranImpactData.impact_by_type || {});
+
+    // Geospatial attack map — only if tab is currently visible
+    if (currentTab === 'currentevents') {
+        setTimeout(() => _loadIranIsraelMapFromData(), 200);
+    }
 
     // Event impact table
     const tbody = document.getElementById('iranTableBody');
@@ -526,6 +541,25 @@ function updateLastUpdated() {
         el.textContent = `Last updated: ${now.toLocaleTimeString()}`;
     }
 }
+
+// ─── Iran/Israel Map Data Loader ─────────────────────────────────────────────
+
+function _loadIranIsraelMapFromData() {
+    if (!iranEventsData) return;
+
+    // Iran ACLED events
+    const iranAcled = iranEventsData.data || [];
+    // Curated events with coordinates
+    const curated = iranEventsData.curated || [];
+    // Israel events — filter from main events dataset by country
+    const israelEvents = (eventsData || []).filter(e =>
+        e.country === 'Israel' || e.country === 'Palestine'
+    );
+
+    initIranIsraelMap();
+    loadIranIsraelMap(iranAcled, israelEvents, curated);
+}
+
 
 // ─── Auto-Refresh ───────────────────────────────────────────────────────────
 

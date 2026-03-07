@@ -1083,3 +1083,239 @@ function createCorrelationChart(correlation) {
     });
     context.restore();
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Iran/Israel Geospatial Attack Map (Leaflet)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+let iranIsraelMap = null;
+let iranIsraelHeatLayer = null;
+let iranIsraelMarkerGroup = null;
+let _iranMapData = { iran: [], israel: [], curated: [] };
+
+const IRAN_MAP_EVENT_COLORS = {
+    'Battles': '#C43D3D',
+    'Explosions/Remote violence': '#C43D3D',
+    'Strategic developments': '#3D6B99',
+    'Protests': '#E07B4C',
+    'Riots': '#E07B4C',
+    'Violence against civilians': '#7B68AE',
+};
+
+function initIranIsraelMap() {
+    if (iranIsraelMap) return;
+
+    iranIsraelMap = L.map('iranIsraelMap', {
+        center: [32.0, 48.0],
+        zoom: 5,
+        zoomControl: true,
+        attributionControl: true,
+    });
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 19,
+    }).addTo(iranIsraelMap);
+
+    iranIsraelHeatLayer = L.heatLayer([], {
+        radius: 20,
+        blur: 15,
+        maxZoom: 10,
+        gradient: { 0.2: '#3D6B99', 0.4: '#D4A843', 0.6: '#E07B4C', 0.8: '#C43D3D', 1.0: '#8B0000' },
+    });
+
+    iranIsraelMarkerGroup = L.layerGroup().addTo(iranIsraelMap);
+
+    // Key locations labels
+    const labels = [
+        { pos: [26.5667, 56.2500], text: 'Strait of Hormuz', color: '#C9A96E' },
+        { pos: [33.5103, 51.9250], text: 'Natanz', color: '#7B68AE' },
+        { pos: [34.7564, 51.0596], text: 'Fordow', color: '#7B68AE' },
+        { pos: [32.6546, 51.6680], text: 'Isfahan', color: '#7B68AE' },
+    ];
+    labels.forEach(l => {
+        L.marker(l.pos, {
+            icon: L.divIcon({
+                className: 'chokepoint-label',
+                html: `<div style="background:rgba(27,42,74,0.9);color:${l.color};padding:3px 6px;border-radius:4px;font-size:10px;font-weight:600;white-space:nowrap;font-family:Inter,sans-serif">${l.text}</div>`,
+                iconSize: [100, 18],
+                iconAnchor: [50, 9],
+            }),
+        }).addTo(iranIsraelMap);
+    });
+
+    // Setup toggle controls
+    ['toggleIranEvents', 'toggleIsraelEvents', 'toggleCuratedEvents', 'toggleIranHeatmap'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', () => updateIranIsraelMapLayers());
+    });
+}
+
+function loadIranIsraelMap(iranEvents, israelEvents, curatedEvents) {
+    if (!iranIsraelMap) initIranIsraelMap();
+
+    _iranMapData.iran = (iranEvents || []).filter(e => e.latitude && e.longitude).map(e => ({
+        lat: parseFloat(e.latitude),
+        lng: parseFloat(e.longitude),
+        date: (e.event_date || '').substring(0, 10),
+        type: e.event_type || 'Unknown',
+        subType: e.sub_event_type || '',
+        actor: e.actor1 || '',
+        location: e.location || '',
+        notes: e.notes || '',
+        fatalities: parseInt(e.fatalities) || 0,
+        source: 'iran',
+    }));
+
+    _iranMapData.israel = (israelEvents || []).filter(e => e.latitude && e.longitude).map(e => ({
+        lat: parseFloat(e.latitude),
+        lng: parseFloat(e.longitude),
+        date: (e.event_date || '').substring(0, 10),
+        type: e.event_type || 'Unknown',
+        subType: e.sub_event_type || '',
+        actor: e.actor1 || '',
+        location: e.location || '',
+        notes: e.notes || '',
+        fatalities: parseInt(e.fatalities) || 0,
+        source: 'israel',
+    }));
+
+    _iranMapData.curated = (curatedEvents || []).filter(e => e.lat && e.lon).map(e => ({
+        lat: e.lat,
+        lng: e.lon,
+        date: e.date,
+        title: e.title,
+        type: e.type,
+        description: e.description || '',
+        severity: e.severity || 1,
+        location: e.location || '',
+        source: 'curated',
+    }));
+
+    updateIranIsraelMapLayers();
+}
+
+function updateIranIsraelMapLayers() {
+    if (!iranIsraelMap) return;
+
+    const showIran = document.getElementById('toggleIranEvents')?.checked ?? true;
+    const showIsrael = document.getElementById('toggleIsraelEvents')?.checked ?? true;
+    const showCurated = document.getElementById('toggleCuratedEvents')?.checked ?? true;
+    const showHeatmap = document.getElementById('toggleIranHeatmap')?.checked ?? true;
+
+    iranIsraelMarkerGroup.clearLayers();
+
+    let allPoints = [];
+
+    // Iran ACLED events
+    if (showIran) {
+        _iranMapData.iran.forEach(e => {
+            const color = IRAN_MAP_EVENT_COLORS[e.type] || '#636E72';
+            const radius = Math.max(4, Math.min(10, 4 + e.fatalities * 0.5));
+            const marker = L.circleMarker([e.lat, e.lng], {
+                radius: radius,
+                fillColor: color,
+                color: 'rgba(255,255,255,0.4)',
+                weight: 1,
+                fillOpacity: 0.7,
+            });
+            marker.bindPopup(_buildMapPopup(e, 'Iran ACLED'));
+            iranIsraelMarkerGroup.addLayer(marker);
+            allPoints.push([e.lat, e.lng, 0.5]);
+        });
+    }
+
+    // Israel events
+    if (showIsrael) {
+        _iranMapData.israel.forEach(e => {
+            const color = IRAN_MAP_EVENT_COLORS[e.type] || '#636E72';
+            const radius = Math.max(5, Math.min(10, 5 + e.fatalities * 0.5));
+            const marker = L.circleMarker([e.lat, e.lng], {
+                radius: radius,
+                fillColor: color,
+                color: 'rgba(255,255,255,0.6)',
+                weight: 1.5,
+                fillOpacity: 0.8,
+            });
+            marker.bindPopup(_buildMapPopup(e, 'Israel'));
+            iranIsraelMarkerGroup.addLayer(marker);
+            allPoints.push([e.lat, e.lng, 0.7]);
+        });
+    }
+
+    // Curated major events (special markers)
+    if (showCurated) {
+        _iranMapData.curated.forEach(e => {
+            const marker = L.marker([e.lat, e.lng], {
+                icon: L.divIcon({
+                    className: 'curated-pulse-wrap',
+                    html: `<div class="curated-pulse" title="${e.title}"></div>`,
+                    iconSize: [16, 16],
+                    iconAnchor: [8, 8],
+                }),
+            });
+            marker.bindPopup(`
+                <div style="font-family:Inter,sans-serif;max-width:320px">
+                    <div style="font-weight:700;font-size:13px;margin-bottom:4px;color:#D4A843">${e.date}</div>
+                    <div style="font-weight:600;font-size:12px;margin-bottom:6px;color:#1B2A4A">${e.title}</div>
+                    <div style="font-size:11px;margin-bottom:4px">
+                        <span style="color:#636E72">Type:</span>
+                        <span style="text-transform:capitalize;font-weight:500">${e.type}</span>
+                    </div>
+                    <div style="font-size:11px;margin-bottom:4px">
+                        <span style="color:#636E72">Location:</span> ${e.location}
+                    </div>
+                    <div style="font-size:11px;margin-bottom:4px">
+                        <span style="color:#636E72">Severity:</span> ${'&#9733;'.repeat(e.severity)}
+                    </div>
+                    <div style="font-size:11px;color:#636E72;margin-top:6px;line-height:1.4">${e.description}</div>
+                </div>
+            `, { maxWidth: 340 });
+            iranIsraelMarkerGroup.addLayer(marker);
+            allPoints.push([e.lat, e.lng, 1.0]);
+        });
+    }
+
+    // Heatmap
+    if (showHeatmap && iranIsraelHeatLayer) {
+        iranIsraelHeatLayer.setLatLngs(allPoints);
+        if (!iranIsraelMap.hasLayer(iranIsraelHeatLayer)) iranIsraelMap.addLayer(iranIsraelHeatLayer);
+    } else if (iranIsraelHeatLayer) {
+        iranIsraelMap.removeLayer(iranIsraelHeatLayer);
+    }
+
+    // Update stats
+    const el = (id, val) => { const elem = document.getElementById(id); if (elem) elem.textContent = val; };
+    el('iranMapStatIran', showIran ? _iranMapData.iran.length.toLocaleString() : '0');
+    el('iranMapStatIsrael', showIsrael ? _iranMapData.israel.length.toLocaleString() : '0');
+    el('iranMapStatCurated', showCurated ? _iranMapData.curated.length.toLocaleString() : '0');
+
+    let totalFatalities = 0;
+    if (showIran) totalFatalities += _iranMapData.iran.reduce((s, e) => s + e.fatalities, 0);
+    if (showIsrael) totalFatalities += _iranMapData.israel.reduce((s, e) => s + e.fatalities, 0);
+    el('iranMapStatFatalities', totalFatalities.toLocaleString());
+}
+
+function _buildMapPopup(e, label) {
+    const notesShort = (e.notes || '').substring(0, 200);
+    return `
+        <div style="font-family:Inter,sans-serif;max-width:300px">
+            <div style="font-weight:700;font-size:13px;margin-bottom:4px;color:#1B2A4A">${e.date}</div>
+            <div style="font-size:10px;color:#fff;background:${e.source === 'israel' ? '#3D6B99' : '#C43D3D'};display:inline-block;padding:2px 6px;border-radius:3px;margin-bottom:6px">${label}</div>
+            <div style="font-size:12px;margin-bottom:4px"><span style="color:#636E72">Type:</span> ${e.type}</div>
+            <div style="font-size:12px;margin-bottom:4px"><span style="color:#636E72">Sub-type:</span> ${e.subType || 'N/A'}</div>
+            <div style="font-size:12px;margin-bottom:4px"><span style="color:#636E72">Actor:</span> ${e.actor || 'N/A'}</div>
+            <div style="font-size:12px;margin-bottom:4px"><span style="color:#636E72">Location:</span> ${e.location}</div>
+            <div style="font-size:12px;margin-bottom:4px"><span style="color:#636E72">Fatalities:</span> ${e.fatalities}</div>
+            <div style="font-size:11px;color:#636E72;margin-top:6px;line-height:1.4">${notesShort}${(e.notes || '').length > 200 ? '...' : ''}</div>
+        </div>
+    `;
+}
+
+function resizeIranIsraelMap() {
+    if (iranIsraelMap) {
+        setTimeout(() => iranIsraelMap.invalidateSize(), 100);
+    }
+}
