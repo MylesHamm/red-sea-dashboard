@@ -90,8 +90,57 @@ def _get_acled_token() -> str:
     return _acled_token
 
 
+_ACLED_FIELDS = "event_id_cnty|event_date|event_type|sub_event_type|actor1|actor2|country|location|latitude|longitude|notes|fatalities|tags|source|source_scale"
+_ACLED_DATE_RANGE = "2023-10-01|2026-12-31"
+
+# Red Sea maritime keywords for filtering regional events.
+# Only very specific terms — avoids false matches from generic conflict words.
+_MARITIME_KEYWORDS = [
+    "houthi", "ansar allah", "red sea", "bab el-mandeb", "bab al-mandab",
+    "gulf of aden", "maritime", "shipping", "vessel", "tanker", "cargo ship",
+    "oil tanker", "commercial ship", "merchant vessel", "container ship",
+    "strait of hormuz", "suez canal", "usns", "uss ",
+    "piracy", "hijack", "sea route", "waterway", "blockade",
+    "coast guard", "naval blockade", "naval operation",
+]
+
+
+def _paginated_acled_fetch(token: str, params: dict, label: str) -> List[dict]:
+    """Fetch paginated ACLED results."""
+    results = []
+    for page in range(1, 30):
+        p = {**params, "page": page}
+        resp = requests.get(
+            config.ACLED_DATA_URL,
+            headers={**_BROWSER_HEADERS, "Authorization": f"Bearer {token}"},
+            params=p,
+            timeout=60,
+        )
+        resp.raise_for_status()
+        batch = resp.json().get("data", [])
+        if not batch:
+            break
+        results.extend(batch)
+        logger.info(f"ACLED {label}: page {page} ({len(batch)} events)")
+        if len(batch) < int(params.get("limit", 5000)):
+            break
+    return results
+
+
+def _is_maritime_relevant(event: dict) -> bool:
+    """Check if an event is relevant to Red Sea / maritime operations."""
+    text = f"{event.get('notes', '')} {event.get('actor1', '')} {event.get('actor2', '')}".lower()
+    return any(kw in text for kw in _MARITIME_KEYWORDS)
+
+
 def fetch_acled_events() -> List[dict]:
-    """Fetch Houthi/Yemen events from ACLED API with cache + CSV fallback."""
+    """Fetch comprehensive Houthi/Red Sea events from ACLED with multi-query approach.
+
+    Strategy:
+    1. All Yemen events (primary conflict zone)
+    2. Houthi/Ansar Allah actor events globally (maritime attacks outside Yemen)
+    3. Red Sea regional countries filtered for maritime relevance
+    """
     cached = _read_cache("acled_events", config.CACHE_TTL_ACLED)
     if cached:
         logger.info("ACLED: serving from cache")
@@ -100,51 +149,78 @@ def fetch_acled_events() -> List[dict]:
     try:
         token = _get_acled_token()
         all_events = []
-        page = 1
-        limit = 5000
+        seen_ids = set()
 
-        while True:
-            resp = requests.get(
-                config.ACLED_DATA_URL,
-                headers={**_BROWSER_HEADERS, "Authorization": f"Bearer {token}"},
-                params={
-                    "_format": "json",
-                    "country": "Yemen",
-                    "event_date": "2023-10-01|2025-12-31",
-                    "event_date_where": "BETWEEN",
-                    "fields": "event_id_cnty|event_date|event_type|sub_event_type|actor1|location|latitude|longitude|notes|fatalities|tags",
-                    "limit": limit,
-                    "page": page,
-                },
-                timeout=60,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        def _add_unique(events):
+            added = 0
+            for e in events:
+                eid = e.get("event_id_cnty")
+                if eid and eid not in seen_ids:
+                    all_events.append(e)
+                    seen_ids.add(eid)
+                    added += 1
+            return added
 
-            events = data.get("data", [])
-            if not events:
-                break
+        base_params = {
+            "_format": "json",
+            "event_date": _ACLED_DATE_RANGE,
+            "event_date_where": "BETWEEN",
+            "fields": _ACLED_FIELDS,
+            "limit": 5000,
+        }
 
-            all_events.extend(events)
-            logger.info(f"ACLED: fetched page {page} ({len(events)} events)")
+        # Query 1: All Yemen events
+        yemen = _paginated_acled_fetch(token, {**base_params, "country": "Yemen"}, "Yemen")
+        n = _add_unique(yemen)
+        logger.info(f"ACLED Q1 Yemen: {n} unique events")
 
-            if len(events) < limit:
-                break
-            page += 1
+        # Query 2: Houthi actor events globally (captures Red Sea / Indian Ocean attacks)
+        houthi = _paginated_acled_fetch(token, {
+            **base_params, "actor1": "Houthi", "actor1_where": "LIKE",
+        }, "Houthi-actor")
+        n = _add_unique(houthi)
+        logger.info(f"ACLED Q2 Houthi actor: {n} new unique events")
+
+        # Query 3: Ansar Allah actor events (alternate name)
+        ansar = _paginated_acled_fetch(token, {
+            **base_params, "actor1": "Ansar Allah", "actor1_where": "LIKE",
+        }, "AnsarAllah-actor")
+        n = _add_unique(ansar)
+        logger.info(f"ACLED Q3 Ansar Allah actor: {n} new unique events")
+
+        # Query 4: Red Sea regional countries — filtered for maritime relevance
+        for country in ["Saudi Arabia", "Djibouti", "Eritrea", "Oman", "Somalia", "Egypt", "Sudan", "Jordan", "Israel"]:
+            regional = _paginated_acled_fetch(token, {
+                **base_params, "country": country,
+            }, country)
+            maritime = [e for e in regional if _is_maritime_relevant(e)]
+            n = _add_unique(maritime)
+            logger.info(f"ACLED Q4 {country}: {len(regional)} total, {len(maritime)} maritime, {n} new")
 
         if all_events:
             _write_cache("acled_events", all_events)
-            logger.info(f"ACLED: total {len(all_events)} events fetched and cached")
+            logger.info(f"ACLED: total {len(all_events)} unique events fetched and cached")
             return all_events
 
     except Exception as e:
         logger.warning(f"ACLED API failed: {e}")
 
-    return _load_acled_csv_fallback()
+    return _load_acled_fallback()
 
 
-def _load_acled_csv_fallback() -> List[dict]:
-    """Load ACLED data from local CSV files."""
+def _load_acled_fallback() -> List[dict]:
+    """Load ACLED data from JSON fallback, then CSV files."""
+    # Try JSON fallback first (pre-fetched comprehensive dataset)
+    json_path = config.DATA_DIR / "acled_events.json"
+    if json_path.exists():
+        try:
+            events = json.loads(json_path.read_text())
+            logger.info(f"ACLED fallback: loaded {len(events)} events from acled_events.json")
+            return events
+        except Exception as e:
+            logger.warning(f"ACLED JSON fallback failed: {e}")
+
+    # Fall back to CSV files
     logger.info("ACLED: falling back to CSV")
     for path in [config.HOUTHI_CSV_PATH, config.HOUTHI_EXCEL_PATH]:
         if path.exists():
@@ -154,7 +230,6 @@ def _load_acled_csv_fallback() -> List[dict]:
                 else:
                     df = pd.read_csv(path)
 
-                # Normalize column names to lowercase
                 col_map = {c: c.lower() for c in df.columns}
                 df.rename(columns=col_map, inplace=True)
 
@@ -166,12 +241,16 @@ def _load_acled_csv_fallback() -> List[dict]:
                         "event_type": str(row.get("event_type", "")),
                         "sub_event_type": str(row.get("sub_event_type", "")),
                         "actor1": str(row.get("actor1", "")),
+                        "actor2": str(row.get("actor2", "")),
+                        "country": str(row.get("country", "")),
                         "location": str(row.get("location", "")),
                         "latitude": float(row.get("latitude", 0)) if pd.notna(row.get("latitude")) else None,
                         "longitude": float(row.get("longitude", 0)) if pd.notna(row.get("longitude")) else None,
                         "notes": str(row.get("notes", "")),
                         "fatalities": int(row.get("fatalities", 0)) if pd.notna(row.get("fatalities")) else 0,
                         "tags": str(row.get("tags", "")),
+                        "source": str(row.get("source", "")),
+                        "source_scale": str(row.get("source_scale", "")),
                     })
                 logger.info(f"ACLED CSV fallback: loaded {len(records)} events from {path.name}")
                 return records
