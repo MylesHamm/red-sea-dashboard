@@ -6,6 +6,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.background import BackgroundTasks
 
 import config
 import data_service
@@ -92,6 +93,37 @@ def get_iran_impact():
     result = data_service.compute_iran_impact(iran_events, brent_prices)
     result["brent_prices"] = brent_prices
     return result
+
+
+# ─── Data Refresh ─────────────────────────────────────────────────────────────
+
+def _do_refresh():
+    """Background task: clear caches and re-fetch ACLED data."""
+    import json
+    data_service._acled_token = None
+
+    # Clear caches
+    for name in ["acled_events.json", "iran_events.json"]:
+        p = config.CACHE_DIR / name
+        if p.exists():
+            p.unlink()
+
+    # Re-fetch (will update in-memory caches)
+    events = data_service.fetch_acled_events()
+    iran = data_service.fetch_iran_events()
+
+    # Update JSON fallbacks if we got real API data
+    if len(events) > 1000:
+        (config.DATA_DIR / "acled_events.json").write_text(json.dumps(events, default=str))
+    if len(iran) > 100:
+        (config.DATA_DIR / "iran_events.json").write_text(json.dumps(iran, default=str))
+
+
+@app.post("/api/refresh")
+def refresh_data(bg: BackgroundTasks):
+    """Trigger a background data refresh."""
+    bg.add_task(_do_refresh)
+    return {"status": "refresh started"}
 
 
 # ─── Frontend Entry Point ────────────────────────────────────────────────────

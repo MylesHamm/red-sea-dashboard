@@ -569,6 +569,27 @@ setInterval(() => {
     loadAllData();
 }, REFRESH_INTERVAL);
 
+// ─── Manual Refresh Button ──────────────────────────────────────────────────
+
+document.getElementById('refreshDataBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('refreshDataBtn');
+    btn.disabled = true;
+    btn.textContent = 'Refreshing...';
+    try {
+        await fetch('/api/refresh', { method: 'POST' });
+        // Wait for background task, then reload frontend data
+        setTimeout(async () => {
+            await loadAllData();
+            btn.textContent = 'Refresh Data';
+            btn.disabled = false;
+        }, 3000);
+    } catch (e) {
+        console.error('Refresh failed:', e);
+        btn.textContent = 'Refresh Data';
+        btn.disabled = false;
+    }
+});
+
 // ─── Initialize ─────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
