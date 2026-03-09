@@ -1202,6 +1202,7 @@ function loadIranIsraelMap(iranEvents, israelEvents, curatedEvents) {
         description: e.description || '',
         severity: e.severity || 1,
         location: e.location || '',
+        fatalities: e.fatalities || 0,
         source: 'curated',
     }));
 
@@ -1280,7 +1281,10 @@ function updateIranIsraelMapLayers() {
                     </div>
                     <div style="font-size:11px;margin-bottom:4px">
                         <span style="color:#636E72">Severity:</span> ${'&#9733;'.repeat(e.severity)}
-                    </div>
+                    </div>${e.fatalities ? `
+                    <div style="font-size:11px;margin-bottom:4px">
+                        <span style="color:#636E72">Fatalities:</span> <strong style="color:#C43D3D">${e.fatalities.toLocaleString()}</strong>
+                    </div>` : ''}
                     <div style="font-size:11px;color:#636E72;margin-top:6px;line-height:1.4">${e.description}</div>
                 </div>
             `, { maxWidth: 340 });
@@ -1306,6 +1310,7 @@ function updateIranIsraelMapLayers() {
     let totalFatalities = 0;
     if (showIran) totalFatalities += _iranMapData.iran.reduce((s, e) => s + e.fatalities, 0);
     if (showIsrael) totalFatalities += _iranMapData.israel.reduce((s, e) => s + e.fatalities, 0);
+    if (showCurated) totalFatalities += _iranMapData.curated.reduce((s, e) => s + (e.fatalities || 0), 0);
     el('iranMapStatFatalities', totalFatalities.toLocaleString());
 }
 
