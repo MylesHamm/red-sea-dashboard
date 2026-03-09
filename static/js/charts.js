@@ -622,23 +622,28 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
     const ctx = document.getElementById('iranPriceTimelineChart');
     if (!ctx || !brentPrices || !brentPrices.length) return;
 
+    // Sort prices chronologically (defensive — backend may append supplemental data)
+    const sorted = [...brentPrices].sort((a, b) => a.date.localeCompare(b.date));
+
     // Filter based on zoom level
     const cutoff = zoomToWar ? '2026-01-15' : '2025-01-01';
-    const filtered = brentPrices.filter(d => d.date >= cutoff);
-    const dates = filtered.map(d => d.date);
-    const prices = filtered.map(d => d.price);
+    const filtered = sorted.filter(d => d.date >= cutoff);
+
+    // Build {x, y} data points for the time axis
+    const lineData = filtered.map(d => ({ x: d.date, y: d.price }));
 
     // Build event scatter points from curated events (only those in range)
     const eventPoints = (curatedEvents || []).filter(ev => ev.date >= cutoff).map(ev => {
-        let closestIdx = 0;
+        // Find closest Brent price by date for the y-value
+        let closestPrice = null;
         let minDist = Infinity;
-        dates.forEach((d, i) => {
-            const dist = Math.abs(new Date(d) - new Date(ev.date));
-            if (dist < minDist) { minDist = dist; closestIdx = i; }
+        filtered.forEach(d => {
+            const dist = Math.abs(new Date(d.date) - new Date(ev.date));
+            if (dist < minDist) { minDist = dist; closestPrice = d.price; }
         });
         return {
             x: ev.date,
-            y: prices[closestIdx] || null,
+            y: closestPrice,
             title: ev.title,
             type: ev.type,
             severity: ev.severity,
@@ -657,17 +662,13 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
         return 4 + p.severity * 2;
     });
 
-    // Add vertical annotation lines for key war dates
-    const warStartLine = dates.indexOf('2026-02-28') >= 0 ? '2026-02-28' : null;
-
     chartInstances['iranPriceTimelineChart'] = new Chart(ctx, {
         data: {
-            labels: dates,
             datasets: [
                 {
                     type: 'line',
                     label: 'Brent Price (USD/bbl)',
-                    data: prices,
+                    data: lineData,
                     borderColor: COLORS.brent,
                     backgroundColor: COLORS.brentBg,
                     borderWidth: 2,
@@ -699,11 +700,18 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
             scales: {
                 x: {
                     ...CHART_DEFAULTS.scales.x,
-                    type: 'category',
+                    type: 'time',
+                    time: {
+                        unit: zoomToWar ? 'week' : 'month',
+                        displayFormats: { week: 'MMM d', month: 'MMM yyyy' },
+                        tooltipFormat: 'MMM d, yyyy',
+                    },
                     ticks: {
                         ...CHART_DEFAULTS.scales.x.ticks,
-                        maxTicksAuto: zoomToWar ? 15 : 12,
-                    }
+                        maxTicksLimit: zoomToWar ? 15 : 12,
+                        autoSkip: true,
+                    },
+                    min: cutoff,
                 },
                 y: {
                     ...CHART_DEFAULTS.scales.y,
@@ -716,7 +724,9 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
                     ...CHART_DEFAULTS.plugins.tooltip,
                     callbacks: {
                         title(items) {
-                            return items[0]?.raw?.x || items[0]?.label || '';
+                            const raw = items[0]?.raw;
+                            if (raw?.x) return raw.x;
+                            return items[0]?.label || '';
                         },
                         label(context) {
                             if (context.datasetIndex === 1) {
@@ -740,8 +750,9 @@ function createIranForecastChart(brentPrices) {
     const ctx = document.getElementById('iranForecastChart');
     if (!ctx || !brentPrices || !brentPrices.length) return;
 
-    // Get recent prices (last 30 trading days)
-    const recent = brentPrices.filter(d => d.date >= '2026-01-01');
+    // Sort chronologically then filter to recent
+    const sorted = [...brentPrices].sort((a, b) => a.date.localeCompare(b.date));
+    const recent = sorted.filter(d => d.date >= '2026-01-01');
     if (recent.length < 5) return;
 
     const lastPrice = recent[recent.length - 1].price;

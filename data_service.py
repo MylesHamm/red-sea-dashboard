@@ -306,7 +306,9 @@ def fetch_brent_prices() -> List[dict]:
 
 def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
     """Extend EIA/FRED Brent data with recent prices beyond API reporting lag."""
-    last_date = max(r["date"] for r in eia_records) if eia_records else "2023-10-01"
+    # Deduplicate by date (keep latest) and sort chronologically
+    by_date = {r["date"]: r for r in eia_records}
+    last_date = max(by_date.keys()) if by_date else "2023-10-01"
 
     # Try yfinance first
     try:
@@ -315,14 +317,13 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
         if not df.empty:
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = df.columns.get_level_values(0)
-            yf_records = [
-                {"date": idx.strftime("%Y-%m-%d"), "price": round(float(row["Close"]), 2)}
-                for idx, row in df.iterrows()
-                if pd.notna(row.get("Close")) and idx.strftime("%Y-%m-%d") > last_date
-            ]
-            if yf_records:
-                logger.info(f"Brent yfinance: supplemented {len(yf_records)} prices after {last_date}")
-                return eia_records + yf_records
+            for idx, row in df.iterrows():
+                d = idx.strftime("%Y-%m-%d")
+                if pd.notna(row.get("Close")) and d > last_date:
+                    by_date[d] = {"date": d, "price": round(float(row["Close"]), 2)}
+            if len(by_date) > len(eia_records):
+                logger.info(f"Brent yfinance: supplemented {len(by_date) - len(eia_records)} prices after {last_date}")
+                return sorted(by_date.values(), key=lambda r: r["date"])
     except Exception as e:
         logger.warning(f"Brent yfinance failed: {e}")
 
@@ -334,12 +335,13 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
         {"date": "2026-03-05", "price": 85.41},  # CNBC: Brent +4.93%, ~21% weekly
         {"date": "2026-03-06", "price": 87.12},  # Reuters: Brent +2.0%, analysts warn $100+
     ]
-    supplement = [p for p in reported_prices if p["date"] > last_date]
-    if supplement:
-        logger.info(f"Brent: supplemented {len(supplement)} war-period prices from news sources (after {last_date})")
-        return eia_records + supplement
+    for p in reported_prices:
+        if p["date"] > last_date:
+            by_date[p["date"]] = p
+    if len(by_date) > len(eia_records):
+        logger.info(f"Brent: supplemented {len(by_date) - len(eia_records)} war-period prices from news sources (after {last_date})")
 
-    return eia_records
+    return sorted(by_date.values(), key=lambda r: r["date"])
 
 
 def _load_brent_csv_fallback() -> List[dict]:
