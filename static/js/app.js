@@ -52,9 +52,11 @@ function switchTab(tab) {
         setTimeout(() => createCorrelationChart(masterData.correlation), 100);
     }
 
-    // Initialize maritime embeds on first tab visit
+    // Initialize maritime embeds and chart on first tab visit
     if (tab === 'maritime') {
         initMaritimeEmbeds();
+        // Defer chart creation until canvas is visible (avoids 0px sizing)
+        setTimeout(() => createSuezTransitChart(), 150);
     }
 }
 
@@ -576,8 +578,7 @@ function renderMaritime() {
     document.querySelectorAll('#tab-maritime .kpi-card[data-accent]').forEach(card => {
         card.style.borderTopColor = card.dataset.accent;
     });
-    // Create Suez transit chart
-    createSuezTransitChart();
+    // Chart creation deferred to switchTab('maritime') so canvas is visible
 }
 
 function getMaritimeEmbedUrl(region, tankerOnly) {
