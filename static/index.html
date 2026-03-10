@@ -12,6 +12,7 @@
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
 
     <!-- Leaflet.js -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -60,6 +61,7 @@
             <button class="tab-btn" data-tab="controls">Control Variables</button>
             <button class="tab-btn" data-tab="data">Data Explorer</button>
             <button class="tab-btn" data-tab="currentevents">US-Iran Tensions</button>
+            <button class="tab-btn" data-tab="maritime">Maritime Traffic</button>
         </nav>
     </header>
 
@@ -567,6 +569,139 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </section>
+
+    <!-- ═══ TAB 7: MARITIME TRAFFIC ═══ -->
+    <section class="tab-content" id="tab-maritime">
+        <div class="container">
+
+            <!-- KPI Row -->
+            <div class="kpi-row maritime-kpi-row">
+                <div class="kpi-card" data-accent="#C43D3D">
+                    <div class="kpi-label">Suez Canal Traffic Drop</div>
+                    <div class="kpi-value" id="kpi-suez-drop">~60%</div>
+                    <div class="kpi-sub">Below pre-crisis 2023 levels</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Suez Canal container transits dropped roughly 60% after Houthi attacks began in late 2023, as carriers diverted via the Cape of Good Hope. Source: UNCTAD / Suez Canal Authority.</span></div>
+                </div>
+                <div class="kpi-card" data-accent="#E07B4C">
+                    <div class="kpi-label">Tanker Reroute Rate</div>
+                    <div class="kpi-value" id="kpi-reroute-rate">~50%</div>
+                    <div class="kpi-sub">Oil tankers diverted via Cape</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Approximately half of oil tankers that previously transited the Red Sea have rerouted around the Cape of Good Hope to avoid Houthi attack zones. Source: EIA / S&P Global Commodity Insights.</span></div>
+                </div>
+                <div class="kpi-card" data-accent="#D4A843">
+                    <div class="kpi-label">Added Transit Days</div>
+                    <div class="kpi-value" id="kpi-added-days">+10-14</div>
+                    <div class="kpi-sub">Days per Cape reroute voyage</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Rerouting via the Cape of Good Hope adds approximately 3,500 nautical miles and 10-14 additional sailing days per voyage compared to the Suez Canal route. Source: International Chamber of Shipping.</span></div>
+                </div>
+                <div class="kpi-card" data-accent="#7B68AE">
+                    <div class="kpi-label">War Risk Insurance</div>
+                    <div class="kpi-value" id="kpi-war-insurance">0.5-1.0%</div>
+                    <div class="kpi-sub">Of hull value per Red Sea transit</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">War risk insurance premiums for Red Sea transits surged from near-zero to 0.5-1.0% of hull value after Houthi attacks began. For a typical VLCC valued at $100M, this adds $500K-$1M per transit. Source: Lloyd's / S&P Global.</span></div>
+                </div>
+            </div>
+
+            <!-- Live Ship Tracker -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Live Tanker Positions — Chokepoint Monitoring</h3>
+                        <div class="chart-header-right">
+                            <div class="maritime-view-toggle">
+                                <button class="zoom-btn active" id="viewBoth">Both</button>
+                                <button class="zoom-btn" id="viewBab">Bab el-Mandeb</button>
+                                <button class="zoom-btn" id="viewHormuz">Hormuz</button>
+                            </div>
+                            <label class="map-toggle">
+                                <input type="checkbox" id="toggleTankerFilter" checked>
+                                <span>Tankers Only</span>
+                            </label>
+                            <span class="chart-badge" style="background:rgba(46,125,91,0.12);color:#2E7D5B">Live AIS</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Real-time vessel positions from AIS (Automatic Identification System) transponders. Tanker filter shows oil/chemical/LNG carriers. Data provided by MarineTraffic. Ship icons show current heading and speed. Click a vessel for details.</span></div>
+                        </div>
+                    </div>
+                    <div class="maritime-embed-container" id="maritimeEmbedContainer">
+                        <div class="embed-placeholder" id="placeholderBab">
+                            <span style="font-size:24px">&#9875;</span>
+                            <span>Bab el-Mandeb — Red Sea</span>
+                            <span style="font-size:11px">Click tab to load live AIS data</span>
+                        </div>
+                        <div class="embed-placeholder" id="placeholderHormuz">
+                            <span style="font-size:24px">&#9875;</span>
+                            <span>Strait of Hormuz</span>
+                            <span style="font-size:11px">Click tab to load live AIS data</span>
+                        </div>
+                    </div>
+                    <div class="maritime-embed-legend">
+                        <span>Data provided by <a href="https://www.marinetraffic.com" target="_blank" rel="noopener">MarineTraffic</a></span>
+                        <span>&#x2022; AIS positions update every few minutes</span>
+                        <span>&#x2022; Click a vessel for details</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chokepoint Risk Assessment -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Chokepoint Risk Assessment</h3>
+                        <div class="chart-header-right">
+                            <span class="chart-badge" style="background:rgba(196,61,61,0.12);color:#C43D3D">Strategic</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Assessment of the two critical oil chokepoints under threat and the alternative Cape route. Oil flow volumes from the U.S. Energy Information Administration. Insurance and cost data from Lloyd's and S&P Global.</span></div>
+                        </div>
+                    </div>
+                    <div class="chokepoint-scenarios">
+                        <div class="chokepoint-card risk-high">
+                            <div class="chokepoint-name">Bab el-Mandeb Strait</div>
+                            <div class="chokepoint-flow">~8.2 mbd</div>
+                            <div class="chokepoint-detail">Primary Houthi attack zone. Connects Red Sea to Gulf of Aden. Tankers run at maximum speed (15-16 kts) to minimize exposure — the "cannonball run." War risk insurance now 0.5-1.0% of hull value per transit. Multiple successful strikes on commercial vessels since Nov 2023.</div>
+                        </div>
+                        <div class="chokepoint-card risk-critical">
+                            <div class="chokepoint-name">Strait of Hormuz</div>
+                            <div class="chokepoint-flow">~21 mbd</div>
+                            <div class="chokepoint-detail">World's most critical oil chokepoint — ~21% of global petroleum consumption flows through this 21-mile-wide passage. Controlled by Iran's IRGC Navy. Under direct threat from the US-Iran conflict. Any disruption here immediately spikes Brent crude to $100+ levels.</div>
+                        </div>
+                        <div class="chokepoint-card risk-alt">
+                            <div class="chokepoint-name">Cape of Good Hope Route</div>
+                            <div class="chokepoint-flow">+3,500 nm</div>
+                            <div class="chokepoint-detail">The safety valve. Rerouting adds 10-14 sailing days and $200-400/TEU in costs. Absorbs fuel, crew, and insurance savings vs Red Sea risk. Roughly 50% of oil tankers now take this route, straining vessel availability and tightening global freight markets.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cannonball Run Explainer -->
+            <div class="chart-row">
+                <div class="chart-card full-width maritime-explainer">
+                    <div class="explainer-subtitle">Thesis Connection</div>
+                    <div class="explainer-title">The "Cannonball Run" — How Tanker Behavior Moves Oil Prices</div>
+                    <div class="explainer-body">
+                        <strong>What it means:</strong> Oil tankers transiting the Houthi danger zone in the Red Sea accelerate to maximum speed (15-16 knots vs. the normal economic speed of ~12 knots) to minimize time in the kill zone. In the commodities trading world, this is called the "cannonball run."<br><br>
+                        <strong>Why it moves prices:</strong> Faster transit burns significantly more fuel (increasing operating costs), demands higher crew risk premiums, and still carries the risk of missile or drone strikes. War risk insurance alone can add $500K-$1M per transit for a VLCC. These costs compound across thousands of voyages, feeding directly into the Brent crude risk premium.<br><br>
+                        <strong>The transmission mechanism:</strong> This is the physical reality behind the econometric model on the previous tab. When Houthi attacks intensify (H1 variable), tankers either run the gauntlet at maximum speed or reroute via Cape — both options tighten effective oil supply and increase transport costs, which the market prices into Brent crude within hours.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Suez Canal Transit Volume Chart -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Suez Canal Transit Volume</h3>
+                        <div class="chart-header-right">
+                            <span class="chart-badge">Monthly</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Monthly vessel transits through the Suez Canal (all vessel types). Shows the dramatic traffic collapse after Houthi attacks began in November 2023. Data from Suez Canal Authority and UNCTAD reports.</span></div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper" style="height:350px">
+                        <canvas id="suezTransitChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </section>
 

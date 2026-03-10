@@ -1192,6 +1192,144 @@ tbody tr:hover { background: rgba(201, 169, 110, 0.04); }
     box-shadow: 0 0 8px rgba(212,168,67,0.6);
 }
 
+/* Maritime Traffic tab */
+.maritime-kpi-row {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.maritime-embed-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.maritime-embed-container iframe {
+    width: 100%;
+    height: 450px;
+    border: 1px solid rgba(201, 169, 110, 0.2);
+    border-radius: var(--radius);
+    background: #0d1b2a;
+}
+
+.maritime-embed-container.single-view {
+    grid-template-columns: 1fr;
+}
+
+.maritime-embed-container.single-view iframe {
+    height: 550px;
+}
+
+.maritime-embed-container .embed-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 450px;
+    border: 1px dashed rgba(201, 169, 110, 0.3);
+    border-radius: var(--radius);
+    background: #0d1b2a;
+    color: var(--text-muted);
+    font-size: 13px;
+    gap: 8px;
+}
+
+.maritime-embed-legend {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    padding: 8px 0;
+    font-size: 11px;
+    color: var(--text-light);
+}
+
+.maritime-embed-legend a {
+    color: var(--gold);
+    text-decoration: none;
+}
+
+.maritime-view-toggle {
+    display: inline-flex;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    margin-right: 8px;
+}
+
+.maritime-explainer {
+    border-left: 4px solid var(--gold);
+    padding: 20px 24px;
+}
+
+.maritime-explainer .explainer-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--navy);
+    margin-bottom: 6px;
+}
+
+.maritime-explainer .explainer-subtitle {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--gold);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+}
+
+.maritime-explainer .explainer-body {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text);
+}
+
+.maritime-explainer .explainer-body strong {
+    color: var(--navy);
+}
+
+.chokepoint-scenarios {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.chokepoint-card {
+    padding: 18px;
+    border-radius: var(--radius);
+    background: var(--bg);
+    border-top: 3px solid var(--border);
+}
+
+.chokepoint-card.risk-high { border-top-color: #C43D3D; }
+.chokepoint-card.risk-critical { border-top-color: #8B0000; }
+.chokepoint-card.risk-alt { border-top-color: #2E7D5B; }
+
+.chokepoint-card .chokepoint-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--navy);
+    margin-bottom: 4px;
+}
+
+.chokepoint-card .chokepoint-flow {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--gold);
+    margin-bottom: 8px;
+}
+
+.chokepoint-card .chokepoint-detail {
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text-light);
+}
+
+@media (max-width: 1200px) {
+    .maritime-kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .maritime-embed-container { grid-template-columns: 1fr; }
+    .chokepoint-scenarios { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 768px) {
     .kpi-row { grid-template-columns: repeat(2, 1fr); }
     .header-content { flex-direction: column; gap: 12px; }

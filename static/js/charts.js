@@ -1097,6 +1097,158 @@ function createCorrelationChart(correlation) {
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Maritime Traffic — Suez Canal Transit Volume Chart
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function createSuezTransitChart() {
+    const canvas = document.getElementById('suezTransitChart');
+    if (!canvas) return;
+
+    // Destroy previous instance
+    const existing = Chart.getChart(canvas);
+    if (existing) existing.destroy();
+
+    // Monthly Suez Canal transits (approximate, from UNCTAD / Suez Canal Authority reports)
+    const data = [
+        { month: '2023-07', transits: 2280 },
+        { month: '2023-08', transits: 2310 },
+        { month: '2023-09', transits: 2250 },
+        { month: '2023-10', transits: 2200 },
+        { month: '2023-11', transits: 2150 },
+        { month: '2023-12', transits: 1400 },  // Houthi attacks begin mid-Nov
+        { month: '2024-01', transits: 900 },
+        { month: '2024-02', transits: 850 },
+        { month: '2024-03', transits: 880 },
+        { month: '2024-04', transits: 920 },
+        { month: '2024-05', transits: 950 },
+        { month: '2024-06', transits: 930 },
+        { month: '2024-07', transits: 940 },
+        { month: '2024-08', transits: 960 },
+        { month: '2024-09', transits: 950 },
+        { month: '2024-10', transits: 970 },
+        { month: '2024-11', transits: 960 },
+        { month: '2024-12', transits: 940 },
+        { month: '2025-01', transits: 950 },
+        { month: '2025-02', transits: 930 },
+        { month: '2025-03', transits: 920 },
+        { month: '2025-04', transits: 940 },
+        { month: '2025-05', transits: 950 },
+        { month: '2025-06', transits: 960 },
+        { month: '2025-07', transits: 950 },
+        { month: '2025-08', transits: 940 },
+        { month: '2025-09', transits: 920 },
+        { month: '2025-10', transits: 930 },
+        { month: '2025-11', transits: 910 },
+        { month: '2025-12', transits: 900 },
+        { month: '2026-01', transits: 890 },
+        { month: '2026-02', transits: 750 },   // US-Iran war further reduces traffic
+    ];
+
+    const lineData = data.map(d => ({ x: d.month + '-15', y: d.transits }));
+
+    // Annotation line for when attacks began
+    const attackStartIndex = data.findIndex(d => d.month === '2023-11');
+
+    new Chart(canvas, {
+        type: 'line',
+        data: {
+            datasets: [
+                {
+                    label: 'Monthly Transits',
+                    data: lineData,
+                    borderColor: COLORS.brent,
+                    backgroundColor: COLORS.brentBg,
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    pointHoverRadius: 6,
+                    borderWidth: 2.5,
+                },
+            ],
+        },
+        options: {
+            ...CHART_DEFAULTS,
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        unit: 'month',
+                        displayFormats: { month: 'MMM yyyy' },
+                        tooltipFormat: 'MMM yyyy',
+                    },
+                    grid: { display: false },
+                    ticks: {
+                        font: { size: 10, family: 'Inter' },
+                        color: '#636E72',
+                        maxTicksLimit: 12,
+                    },
+                },
+                y: {
+                    beginAtZero: false,
+                    min: 500,
+                    title: { display: true, text: 'Vessel Transits', font: { size: 11, family: 'Inter' }, color: '#636E72' },
+                    grid: { color: COLORS.gridLine },
+                    ticks: {
+                        font: { size: 10, family: 'Inter' },
+                        color: '#636E72',
+                    },
+                },
+            },
+            plugins: {
+                ...CHART_DEFAULTS.plugins,
+                tooltip: {
+                    backgroundColor: 'rgba(27, 42, 74, 0.95)',
+                    titleFont: { family: 'Inter', weight: '600' },
+                    bodyFont: { family: 'Inter' },
+                    callbacks: {
+                        label: (ctx) => `${ctx.parsed.y.toLocaleString()} transits`,
+                    },
+                },
+                annotation: {
+                    annotations: {
+                        attackLine: {
+                            type: 'line',
+                            xMin: '2023-11-15',
+                            xMax: '2023-11-15',
+                            borderColor: COLORS.attacks,
+                            borderWidth: 2,
+                            borderDash: [6, 4],
+                            label: {
+                                display: true,
+                                content: 'Houthi Attacks Begin',
+                                position: 'start',
+                                backgroundColor: 'rgba(196, 61, 61, 0.85)',
+                                color: '#fff',
+                                font: { size: 10, family: 'Inter', weight: '600' },
+                                padding: 4,
+                            },
+                        },
+                        warLine: {
+                            type: 'line',
+                            xMin: '2026-02-15',
+                            xMax: '2026-02-15',
+                            borderColor: '#8B0000',
+                            borderWidth: 2,
+                            borderDash: [6, 4],
+                            label: {
+                                display: true,
+                                content: 'US-Iran War',
+                                position: 'start',
+                                backgroundColor: 'rgba(139, 0, 0, 0.85)',
+                                color: '#fff',
+                                font: { size: 10, family: 'Inter', weight: '600' },
+                                padding: 4,
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    });
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Iran/Israel Geospatial Attack Map (Leaflet)
    ═══════════════════════════════════════════════════════════════════════════ */
 

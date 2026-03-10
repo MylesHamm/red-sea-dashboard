@@ -51,6 +51,11 @@ function switchTab(tab) {
     if (tab === 'controls' && masterData && masterData.correlation) {
         setTimeout(() => createCorrelationChart(masterData.correlation), 100);
     }
+
+    // Initialize maritime embeds on first tab visit
+    if (tab === 'maritime') {
+        initMaritimeEmbeds();
+    }
 }
 
 // ─── Data Fetching ──────────────────────────────────────────────────────────
@@ -85,6 +90,7 @@ async function loadAllData() {
         renderControls();
         renderDataTable();
         renderCurrentEvents();
+        renderMaritime();
 
         // If map tab is active, load events
         if (currentTab === 'geospatial' && eventsData.length) {
@@ -560,6 +566,94 @@ function _loadIranIsraelMapFromData() {
     loadIranIsraelMap(iranAcled, israelEvents, curated);
 }
 
+
+// ─── Maritime Traffic ────────────────────────────────────────────────────────
+
+let maritimeEmbedsLoaded = false;
+
+function renderMaritime() {
+    // Apply accent colors to maritime KPI cards
+    document.querySelectorAll('#tab-maritime .kpi-card[data-accent]').forEach(card => {
+        card.style.borderTopColor = card.dataset.accent;
+    });
+    // Create Suez transit chart
+    createSuezTransitChart();
+}
+
+function getMaritimeEmbedUrl(region, tankerOnly) {
+    const vtypes = tankerOnly ? '8' : '';
+    const configs = {
+        bab: { centery: 13.5, centerx: 43.5, zoom: 7 },
+        hormuz: { centery: 26.5, centerx: 56.0, zoom: 7 },
+    };
+    const c = configs[region];
+    return `https://www.marinetraffic.com/en/ais/embed/zoom:${c.zoom}/centery:${c.centery}/centerx:${c.centerx}/maptype:4/shownames:true/mmsi:0/shipid:0/fleet:/fleet_id:/vtypes:${vtypes}/showmenu:false/remember:false`;
+}
+
+function initMaritimeEmbeds() {
+    if (maritimeEmbedsLoaded) return;
+    maritimeEmbedsLoaded = true;
+
+    const container = document.getElementById('maritimeEmbedContainer');
+    if (!container) return;
+
+    const tankerOnly = document.getElementById('toggleTankerFilter')?.checked ?? true;
+
+    // Replace placeholders with iframes
+    container.innerHTML = `
+        <iframe id="embedBab" src="${getMaritimeEmbedUrl('bab', tankerOnly)}"
+                loading="lazy" allowfullscreen
+                title="Bab el-Mandeb AIS Vessel Tracker"></iframe>
+        <iframe id="embedHormuz" src="${getMaritimeEmbedUrl('hormuz', tankerOnly)}"
+                loading="lazy" allowfullscreen
+                title="Strait of Hormuz AIS Vessel Tracker"></iframe>
+    `;
+}
+
+function setMaritimeView(mode) {
+    const container = document.getElementById('maritimeEmbedContainer');
+    if (!container) return;
+
+    // Update toggle buttons
+    ['viewBoth', 'viewBab', 'viewHormuz'].forEach(id => {
+        document.getElementById(id)?.classList.remove('active');
+    });
+    const btnId = mode === 'both' ? 'viewBoth' : mode === 'bab' ? 'viewBab' : 'viewHormuz';
+    document.getElementById(btnId)?.classList.add('active');
+
+    const babFrame = document.getElementById('embedBab');
+    const hormuzFrame = document.getElementById('embedHormuz');
+
+    if (mode === 'both') {
+        container.classList.remove('single-view');
+        if (babFrame) babFrame.style.display = '';
+        if (hormuzFrame) hormuzFrame.style.display = '';
+    } else if (mode === 'bab') {
+        container.classList.add('single-view');
+        if (babFrame) babFrame.style.display = '';
+        if (hormuzFrame) hormuzFrame.style.display = 'none';
+    } else {
+        container.classList.add('single-view');
+        if (babFrame) babFrame.style.display = 'none';
+        if (hormuzFrame) hormuzFrame.style.display = '';
+    }
+}
+
+function refreshMaritimeEmbeds() {
+    const tankerOnly = document.getElementById('toggleTankerFilter')?.checked ?? true;
+    const babFrame = document.getElementById('embedBab');
+    const hormuzFrame = document.getElementById('embedHormuz');
+    if (babFrame) babFrame.src = getMaritimeEmbedUrl('bab', tankerOnly);
+    if (hormuzFrame) hormuzFrame.src = getMaritimeEmbedUrl('hormuz', tankerOnly);
+}
+
+// Maritime event listeners
+document.getElementById('viewBoth')?.addEventListener('click', () => setMaritimeView('both'));
+document.getElementById('viewBab')?.addEventListener('click', () => setMaritimeView('bab'));
+document.getElementById('viewHormuz')?.addEventListener('click', () => setMaritimeView('hormuz'));
+document.getElementById('toggleTankerFilter')?.addEventListener('change', () => {
+    if (maritimeEmbedsLoaded) refreshMaritimeEmbeds();
+});
 
 // ─── Auto-Refresh ───────────────────────────────────────────────────────────
 
