@@ -581,14 +581,13 @@ function renderMaritime() {
     // Chart creation deferred to switchTab('maritime') so canvas is visible
 }
 
-function getMaritimeEmbedUrl(region, tankerOnly) {
-    const vtypes = tankerOnly ? '8' : '';
+function getMaritimeEmbedUrl(region) {
     const configs = {
         bab: { centery: 13.5, centerx: 43.5, zoom: 7 },
         hormuz: { centery: 26.5, centerx: 56.0, zoom: 7 },
     };
     const c = configs[region];
-    return `https://www.marinetraffic.com/en/ais/embed/zoom:${c.zoom}/centery:${c.centery}/centerx:${c.centerx}/maptype:4/shownames:true/mmsi:0/shipid:0/fleet:/fleet_id:/vtypes:${vtypes}/showmenu:false/remember:false`;
+    return `https://www.marinetraffic.com/en/ais/embed/zoom:${c.zoom}/centery:${c.centery}/centerx:${c.centerx}/maptype:4/shownames:true/mmsi:0/shipid:0/fleet:/fleet_id:/vtypes:/showmenu:false/remember:false`;
 }
 
 function initMaritimeEmbeds() {
@@ -598,14 +597,12 @@ function initMaritimeEmbeds() {
     const container = document.getElementById('maritimeEmbedContainer');
     if (!container) return;
 
-    const tankerOnly = document.getElementById('toggleTankerFilter')?.checked ?? true;
-
     // Replace placeholders with iframes
     container.innerHTML = `
-        <iframe id="embedBab" src="${getMaritimeEmbedUrl('bab', tankerOnly)}"
+        <iframe id="embedBab" src="${getMaritimeEmbedUrl('bab')}"
                 loading="lazy" allowfullscreen
                 title="Bab el-Mandeb AIS Vessel Tracker"></iframe>
-        <iframe id="embedHormuz" src="${getMaritimeEmbedUrl('hormuz', tankerOnly)}"
+        <iframe id="embedHormuz" src="${getMaritimeEmbedUrl('hormuz')}"
                 loading="lazy" allowfullscreen
                 title="Strait of Hormuz AIS Vessel Tracker"></iframe>
     `;
@@ -640,21 +637,10 @@ function setMaritimeView(mode) {
     }
 }
 
-function refreshMaritimeEmbeds() {
-    const tankerOnly = document.getElementById('toggleTankerFilter')?.checked ?? true;
-    const babFrame = document.getElementById('embedBab');
-    const hormuzFrame = document.getElementById('embedHormuz');
-    if (babFrame) babFrame.src = getMaritimeEmbedUrl('bab', tankerOnly);
-    if (hormuzFrame) hormuzFrame.src = getMaritimeEmbedUrl('hormuz', tankerOnly);
-}
-
 // Maritime event listeners
 document.getElementById('viewBoth')?.addEventListener('click', () => setMaritimeView('both'));
 document.getElementById('viewBab')?.addEventListener('click', () => setMaritimeView('bab'));
 document.getElementById('viewHormuz')?.addEventListener('click', () => setMaritimeView('hormuz'));
-document.getElementById('toggleTankerFilter')?.addEventListener('change', () => {
-    if (maritimeEmbedsLoaded) refreshMaritimeEmbeds();
-});
 
 // ─── Auto-Refresh ───────────────────────────────────────────────────────────
 
