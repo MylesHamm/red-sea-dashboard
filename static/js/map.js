@@ -11,14 +11,25 @@ let filteredMapEvents = [];
 let timeSlider = null;
 let mapInitialized = false;
 
-const TANKER_KEYWORDS = /tanker|crude|oil|petroleum|lng|lpg|chemical/i;
+// Maritime vessel keywords — must indicate an actual ship, not land-based "oil facility" or "water tanker"
+const VESSEL_CONTEXT = /\b(vessel|ship|carrier|MV |MT |IMO:|flag(?:ged)?)\b/i;
+const ENERGY_CARGO = /\b(crude|petroleum|lng|lpg)\b/i;
+const MARITIME_TANKER = /\b(?:oil[- ]?tanker|chemical[- ]?tanker|fuel[- ]?tanker|products?\s+tanker)\b(?!\s+(?:truck|lorry|driver))/i;
+const MARITIME_LOCATION = /red sea|gulf of aden|bab el.mandeb|strait of hormuz|arabian sea|indian ocean|south red sea/i;
 const CHOKEPOINT_LAT_MIN = 12.4;
 const CHOKEPOINT_LAT_MAX = 13.8;
 const MAP_CENTER = [14.0, 44.0];
 const MAP_ZOOM = 6;
 
 function isTankerTarget(notes) {
-    return TANKER_KEYWORDS.test(notes || '');
+    if (!notes) return false;
+    // Direct match: "oil tanker", "chemical tanker", etc.
+    if (MARITIME_TANKER.test(notes)) return true;
+    // "tanker" + maritime location context (not land-based water/fuel tankers)
+    if (/\btanker\b/i.test(notes) && MARITIME_LOCATION.test(notes)) return true;
+    // Energy cargo (crude, LNG, LPG) + vessel context (ship, vessel, MV, IMO)
+    if (ENERGY_CARGO.test(notes) && VESSEL_CONTEXT.test(notes)) return true;
+    return false;
 }
 
 function isChokepoint(lat) {
