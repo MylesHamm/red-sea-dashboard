@@ -16,6 +16,19 @@ const VESSEL_CONTEXT = /\b(vessel|ship|carrier|MV |MT |IMO:|flag(?:ged)?)\b/i;
 const ENERGY_CARGO = /\b(crude|petroleum|lng|lpg)\b/i;
 const MARITIME_TANKER = /\b(?:oil[- ]?tanker|chemical[- ]?tanker|fuel[- ]?tanker|products?\s+tanker)\b(?!\s+(?:truck|lorry|driver))/i;
 const MARITIME_LOCATION = /red sea|gulf of aden|bab el.mandeb|strait of hormuz|arabian sea|indian ocean|south red sea/i;
+// Filter to only maritime/shipping-relevant events (exclude land-based Yemen civil conflict)
+const MARITIME_EVENT = /\b(vessel|ship|tanker|maritime|navy|destroyer|frigate|warship|anti-ship|drone.?boat|hijack|boarding|piracy|naval|USS |HMS |USNS |MV |MT |IMO:|missile.*launch|intercept(?:ed|ion)|shot down|drone|ballistic|cruise missile|one-way attack|houthi.*fire|fire.*houthi|sea mine)\b/i;
+const MARITIME_LOC = /red sea|gulf of aden|bab el.mandeb|strait|arabian sea|indian ocean|mediterranean|south red sea|north red sea|west arabian/i;
+
+function isMaritimeRelevant(event) {
+    const loc = event.location || '';
+    const notes = event.notes || '';
+    // Include if in a maritime location
+    if (MARITIME_LOC.test(loc)) return true;
+    // Include if notes reference maritime/shipping activity
+    if (MARITIME_EVENT.test(notes) && MARITIME_LOC.test(notes)) return true;
+    return false;
+}
 const CHOKEPOINT_LAT_MIN = 12.4;
 const CHOKEPOINT_LAT_MAX = 13.8;
 const MAP_CENTER = [14.0, 44.0];
@@ -120,7 +133,7 @@ function initMap() {
 }
 
 function loadMapEvents(events) {
-    allMapEvents = events.filter(e => e.latitude && e.longitude).map(e => ({
+    allMapEvents = events.filter(e => e.latitude && e.longitude && isMaritimeRelevant(e)).map(e => ({
         ...e,
         lat: parseFloat(e.latitude),
         lng: parseFloat(e.longitude),
