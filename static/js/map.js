@@ -29,6 +29,7 @@ function isMaritimeRelevant(event) {
     if (MARITIME_EVENT.test(notes) && MARITIME_LOC.test(notes)) return true;
     return false;
 }
+
 const CHOKEPOINT_LAT_MIN = 12.4;
 const CHOKEPOINT_LAT_MAX = 13.8;
 const MAP_CENTER = [14.0, 44.0];

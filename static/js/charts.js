@@ -1142,7 +1142,7 @@ function createSuezTransitChart() {
         { month: '2025-12', transits: 900 },
         { month: '2026-01', transits: 890 },
         { month: '2026-02', transits: 750 },   // US-Iran war further reduces traffic
-        { month: '2026-03', transits: 1050 },  // Hormuz blockade diverts some traffic to Suez; ~30-43 daily crossings
+        { month: '2026-03', transits: 820 },   // Dual-chokepoint threat keeps traffic low; US Navy Red Sea escorts allow limited Suez use
     ];
 
     const lineData = data.map(d => ({ x: d.month + '-15', y: d.transits }));
