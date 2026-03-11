@@ -81,7 +81,7 @@
                     <div class="kpi-label">Total ACLED Events</div>
                     <div class="kpi-value" id="kpi-events">--</div>
                     <div class="kpi-sub">Yemen conflict events</div>
-                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Total conflict events in Yemen recorded by the Armed Conflict Location &amp; Event Data Project (ACLED) during the study period, Oct 2023 &ndash; Oct 2025.</span></div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Total conflict events in Yemen recorded by the Armed Conflict Location &amp; Event Data Project (ACLED) during the study period, Oct 2023 &ndash; present.</span></div>
                 </div>
                 <div class="kpi-card" data-accent="#D4A843">
                     <div class="kpi-label">Peak Daily Volatility</div>
@@ -168,7 +168,7 @@
                         <div class="slider-label">
                             <span id="sliderStartDate">Oct 2023</span>
                             <span class="slider-title">Attack Timeline</span>
-                            <span id="sliderEndDate">Oct 2025</span>
+                            <span id="sliderEndDate">Present</span>
                         </div>
                         <div id="timeSlider"></div>
                     </div>
@@ -246,7 +246,7 @@
                 <div class="chart-card">
                     <div class="chart-header">
                         <h3>Model Comparison (R² Values)</h3>
-                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">R² measures the proportion of variance in Brent price explained by each hypothesis model. Higher R² indicates stronger explanatory power. H1 (attack frequency) shows the strongest fit.</span></div>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">R² measures the proportion of variance in Brent price explained by each hypothesis model. Higher R² indicates stronger explanatory power. All three models show low R² values, with H1 (attack frequency) at ~12% — suggesting Houthi attacks alone explain only a small portion of price variance.</span></div>
                     </div>
                     <div class="chart-wrapper">
                         <canvas id="modelComparisonChart"></canvas>
@@ -364,7 +364,7 @@
                 <div class="filter-group">
                     <label>Date Range:</label>
                     <input type="date" id="dataStartDate" value="2023-10-01">
-                    <input type="date" id="dataEndDate" value="2025-12-31">
+                    <input type="date" id="dataEndDate" value="2026-12-31">
                 </div>
                 <button class="btn-primary" id="applyFilters">Apply</button>
                 <button class="btn-secondary" id="resetFilters">Reset</button>
@@ -416,10 +416,10 @@
                     <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Average absolute change in Brent crude price within 3 trading days following an Iran-related event. Measures the typical market reaction magnitude.</span></div>
                 </div>
                 <div class="kpi-card" data-accent="#E07B4C">
-                    <div class="kpi-label">Peak Volatility Spike</div>
+                    <div class="kpi-label">Peak 3-Day Price Move</div>
                     <div class="kpi-value" id="kpi-iran-vol-spike">--</div>
-                    <div class="kpi-sub">Largest 3-day move (USD)</div>
-                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">The single largest absolute Brent price change within 3 trading days of any Iran event. Indicates the most impactful event for oil markets.</span></div>
+                    <div class="kpi-sub">Largest absolute move (USD)</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">The single largest absolute Brent crude price change within 3 trading days of any Iran event. Indicates the most impactful event for oil markets.</span></div>
                 </div>
                 <div class="kpi-card" data-accent="#7B68AE">
                     <div class="kpi-label">Events This Month</div>
@@ -569,6 +569,22 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Live Intelligence Feed -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Live Intelligence Feed</h3>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span class="live-ais-badge">LIVE</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Auto-fetched headlines from major news sources (Google News RSS). Filtered for relevance to the Iran conflict, oil markets, and Strait of Hormuz. Updates every 30 minutes.</span></div>
+                        </div>
+                    </div>
+                    <div id="newsFeedContainer" class="news-feed-container">
+                        <p class="news-feed-loading">Loading headlines...</p>
+                    </div>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -582,13 +598,13 @@
                     <div class="kpi-label">Chokepoints at Risk</div>
                     <div class="kpi-value" id="kpi-chokepoints">2</div>
                     <div class="kpi-sub">Hormuz + Bab el-Mandeb simultaneous threat</div>
-                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">For the first time since 1980, both major Middle East oil chokepoints are under simultaneous threat. The Strait of Hormuz faces direct disruption from the US-Iran war, while Houthi proxy forces (backed by Iran) continue attacking vessels in the Red Sea at Bab el-Mandeb.</span></div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Both major Middle East oil chokepoints are under simultaneous threat — the most severe dual-chokepoint disruption since the 1980s Iran-Iraq Tanker War. The Strait of Hormuz faces direct disruption from the US-Iran war, while Houthi proxy forces (backed by Iran) continue attacking vessels in the Red Sea at Bab el-Mandeb.</span></div>
                 </div>
                 <div class="kpi-card" data-accent="#C43D3D">
                     <div class="kpi-label">Oil Flow at Risk</div>
                     <div class="kpi-value" id="kpi-oil-flow">~29 mbd</div>
                     <div class="kpi-sub">Combined Hormuz (21) + Bab el-Mandeb (8.2)</div>
-                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">The Strait of Hormuz carries ~21 million barrels/day and Bab el-Mandeb carries ~8.2 mbd. Together, nearly 30% of global seaborne oil trade is under direct threat from the US-Iran conflict and Iranian proxy operations. Source: U.S. EIA.</span></div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">The Strait of Hormuz carries ~21 million barrels/day and Bab el-Mandeb carries ~8.2 mbd. Together, nearly 30% of global oil supply (~29 mbd of ~100 mbd global consumption) is under direct threat from the US-Iran conflict and Iranian proxy operations. Source: U.S. EIA.</span></div>
                 </div>
                 <div class="kpi-card" data-accent="#D4A843">
                     <div class="kpi-label">War Risk Premium</div>
@@ -598,7 +614,7 @@
                 </div>
                 <div class="kpi-card" data-accent="#E07B4C">
                     <div class="kpi-label">Suez Traffic Collapse</div>
-                    <div class="kpi-value" id="kpi-suez-drop">~65%</div>
+                    <div class="kpi-value" id="kpi-suez-drop">~60%</div>
                     <div class="kpi-sub">Below 2023 levels (Houthi + war compound)</div>
                     <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Suez Canal transits dropped ~60% after Houthi attacks began (Nov 2023), then fell further as the US-Iran war escalated in Feb-Mar 2026. Carriers now face threats on both sides of the Arabian Peninsula. Source: UNCTAD / Suez Canal Authority.</span></div>
                 </div>
@@ -675,9 +691,9 @@
                     <div class="explainer-subtitle">Thesis Connection — The US-Iran War &amp; Maritime Disruption</div>
                     <div class="explainer-title">The "Cannonball Run" — How the War Moves Oil Prices Hour by Hour</div>
                     <div class="explainer-body">
-                        <strong>Two chokepoints, one war:</strong> The US-Iran conflict has created a historically unprecedented situation — both the Strait of Hormuz (~21 mbd) and Bab el-Mandeb (~8.2 mbd) are under simultaneous threat. Iran controls Hormuz directly through the IRGC Navy, and wages a proxy campaign at Bab el-Mandeb through the Houthis. Together, nearly 30% of global seaborne oil trade is at risk.<br><br>
+                        <strong>Two chokepoints, one war:</strong> The US-Iran conflict has created a historically unprecedented situation — both the Strait of Hormuz (~21 mbd) and Bab el-Mandeb (~8.2 mbd) are under simultaneous threat. Iran controls Hormuz directly through the IRGC Navy, and wages a proxy campaign at Bab el-Mandeb through the Houthis. Together, nearly 30% of global oil supply is at risk.<br><br>
                         <strong>The "cannonball run":</strong> Oil tankers transiting these danger zones accelerate to maximum speed (15-16 knots vs. the normal economic speed of ~12 knots) to minimize exposure time. In commodities trading, this is the "cannonball run." Since Operation Epic Fury (Feb 28, 2026), tankers in the Persian Gulf are running the gauntlet past Iranian naval assets while Houthi drones and missiles target vessels in the Red Sea.<br><br>
-                        <strong>Why it moves prices by the hour:</strong> Each transit through either chokepoint now costs $1-2M in war risk insurance alone (for a $100M VLCC). Faster transit burns more fuel. Crew demand hazard pay. Some tankers refuse to transit at all. This cascading disruption — insurance, fuel, labor, rerouting, vessel scarcity — compounds across thousands of daily voyages and is priced into Brent crude in real time. This is the physical mechanism behind the thesis's H1 variable: when attack frequency increases, oil volatility spikes because the maritime supply chain physically cannot deliver oil safely.
+                        <strong>Why it moves prices by the hour:</strong> Each transit through either chokepoint now costs $1-2M in war risk insurance alone (for a $100M VLCC). Faster transit burns more fuel. Crew demand hazard pay. Some tankers refuse to transit at all. This cascading disruption — insurance, fuel, labor, rerouting, vessel scarcity — compounds across thousands of daily voyages and is priced into Brent crude in real time. Notably, the thesis's H1 regression found that sustained attack frequency actually correlates with <em>decreased</em> volatility over time — a "new normal" effect where markets adapt to persistent disruption. The acute price shocks visible above occur at escalation points (war onset, chokepoint closure), not from cumulative attack counts.
                     </div>
                 </div>
             </div>
@@ -704,7 +720,7 @@
     <!-- ═══ FOOTER ═══ -->
     <footer class="footer">
         <p>Data Sources: ACLED &middot; U.S. Energy Information Administration &middot; Federal Reserve (FRED) &middot; Yahoo Finance</p>
-        <p>Myles Hamm — Masters Thesis — Mercyhurst University — 2025</p>
+        <p>Myles Hamm — Master's Thesis — Mercyhurst University — 2025</p>
     </footer>
 
     <!-- Dashboard JS -->

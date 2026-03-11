@@ -292,7 +292,7 @@ function renderCurrentEvents() {
         setTimeout(() => _loadIranIsraelMapFromData(), 200);
     }
 
-    // Event impact table
+    // Event impact table — curated events only (with price analysis)
     const tbody = document.getElementById('iranTableBody');
     if (tbody && iranImpactData.event_table) {
         const rows = iranImpactData.event_table.sort((a, b) => b.date.localeCompare(a.date));
@@ -312,6 +312,49 @@ function renderCurrentEvents() {
             `;
         }).join('');
     }
+
+    // Live Intelligence Feed
+    renderNewsFeed(iranEventsData.news || []);
+}
+
+// ─── Live Intelligence Feed ──────────────────────────────────────────────────
+
+function renderNewsFeed(news) {
+    const container = document.getElementById('newsFeedContainer');
+    if (!container || !news.length) {
+        if (container) container.innerHTML = '<p class="news-feed-empty">No recent headlines available.</p>';
+        return;
+    }
+
+    // Group articles by date
+    const byDate = {};
+    news.forEach(n => {
+        if (!byDate[n.date]) byDate[n.date] = [];
+        byDate[n.date].push(n);
+    });
+    const sortedDates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
+
+    container.innerHTML = sortedDates.map(date => {
+        const articles = byDate[date];
+        const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        return `
+            <div class="news-date-group">
+                <div class="news-date-header">
+                    <span class="news-date-label">${dateLabel}</span>
+                    <span class="news-date-count">${articles.length} article${articles.length !== 1 ? 's' : ''}</span>
+                </div>
+                <div class="news-articles">
+                    ${articles.map(a => `
+                        <a href="${a.url || '#'}" target="_blank" rel="noopener" class="news-article">
+                            <span class="news-article-type type-${a.type}">${a.type}</span>
+                            <span class="news-article-title">${a.title}</span>
+                            <span class="news-article-source">${a.source || ''}</span>
+                        </a>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 // ─── Timeline Zoom Toggle ───────────────────────────────────────────────────
@@ -497,7 +540,7 @@ document.getElementById('resetFilters')?.addEventListener('click', () => {
     document.getElementById('searchInput').value = '';
     document.getElementById('eventTypeFilter').value = '';
     document.getElementById('dataStartDate').value = '2023-10-01';
-    document.getElementById('dataEndDate').value = '2025-12-31';
+    document.getElementById('dataEndDate').value = '2026-12-31';
     applyTableFilters();
 });
 

@@ -1,6 +1,6 @@
 """
 Data Service Layer - API integration with caching and CSV fallback.
-Handles: ACLED, EIA (Brent + SPR), yfinance (DXY, OVX), FRED (China PMI)
+Handles: ACLED, EIA (Brent + SPR), yfinance (DXY, OVX), FRED (China BCI)
 """
 import json
 import time
@@ -310,25 +310,9 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
     by_date = {r["date"]: r for r in eia_records}
     last_date = max(by_date.keys()) if by_date else "2023-10-01"
 
-    # Try yfinance first
-    try:
-        import yfinance as yf
-        df = yf.download("BZ=F", start=last_date, progress=False)
-        if not df.empty:
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.get_level_values(0)
-            for idx, row in df.iterrows():
-                d = idx.strftime("%Y-%m-%d")
-                if pd.notna(row.get("Close")) and d > last_date:
-                    by_date[d] = {"date": d, "price": round(float(row["Close"]), 2)}
-            if len(by_date) > len(eia_records):
-                logger.info(f"Brent yfinance: supplemented {len(by_date) - len(eia_records)} prices after {last_date}")
-                return sorted(by_date.values(), key=lambda r: r["date"])
-    except Exception as e:
-        logger.warning(f"Brent yfinance failed: {e}")
-
-    # Fallback: war-period prices from verified news sources (CNBC, Reuters)
-    # EIA/FRED have a 2-4 day reporting lag; these fill the gap for the Iran war period
+    # Verified war-period prices from news sources (CNBC, Reuters, Bloomberg, etc.)
+    # These override Yahoo Finance because event titles reference these specific prices
+    # and BZ=F futures can differ from spot/settlement prices reported by news outlets.
     reported_prices = [
         {"date": "2026-03-03", "price": 81.40},   # CNBC: Brent settles +4.71%
         {"date": "2026-03-04", "price": 82.76},   # Reuters: Brent +1.6%
@@ -337,12 +321,61 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
         {"date": "2026-03-07", "price": 92.69},   # CNN: continued climb amid sustained strikes
         {"date": "2026-03-08", "price": 107.10},  # Gulf News: Brent breaks $100 after Israel hits oil infra
         {"date": "2026-03-09", "price": 114.00},  # Bloomberg: Brent spikes to $119.50, settles ~$114
+        {"date": "2026-03-10", "price": 91.54},   # Fortune: sharp pullback as Trump signals war "very complete"
+        {"date": "2026-03-11", "price": 90.96},   # Fortune: continued slight decline amid ceasefire signals
     ]
+    reported_dates = {p["date"] for p in reported_prices}
+
+    # Try Yahoo Finance direct API (more reliable than yfinance library)
+    try:
+        from datetime import datetime, timedelta
+        last_dt = datetime.strptime(last_date, "%Y-%m-%d")
+        period1 = int(last_dt.timestamp())
+        period2 = int((datetime.now() + timedelta(days=1)).timestamp())
+        yf_url = (
+            f"https://query1.finance.yahoo.com/v8/finance/chart/BZ=F"
+            f"?period1={period1}&period2={period2}&interval=1d"
+        )
+        yf_resp = requests.get(yf_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+        yf_resp.raise_for_status()
+        yf_data = yf_resp.json()
+        result = yf_data.get("chart", {}).get("result", [])
+        if result:
+            timestamps = result[0].get("timestamp", [])
+            closes = result[0]["indicators"]["quote"][0].get("close", [])
+            added = 0
+            for ts, close in zip(timestamps, closes):
+                if close is None:
+                    continue
+                d = datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+                if d > last_date and d not in reported_dates:
+                    by_date[d] = {"date": d, "price": round(float(close), 2)}
+                    added += 1
+            if added > 0:
+                logger.info(f"Brent Yahoo Finance API: supplemented {added} prices after {last_date}")
+    except Exception as e:
+        logger.warning(f"Yahoo Finance API failed: {e}")
+
+    # Fallback: try yfinance library for dates not covered by reported prices
+    if not any(d > last_date and d not in reported_dates for d in by_date):
+        try:
+            import yfinance as yf
+            df = yf.download("BZ=F", start=last_date, progress=False)
+            if not df.empty:
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = df.columns.get_level_values(0)
+                for idx, row in df.iterrows():
+                    d = idx.strftime("%Y-%m-%d")
+                    if pd.notna(row.get("Close")) and d > last_date and d not in reported_dates:
+                        by_date[d] = {"date": d, "price": round(float(row["Close"]), 2)}
+        except Exception as e:
+            logger.warning(f"Brent yfinance failed: {e}")
+
+    # Apply verified war-period prices (always override EIA/Yahoo data for these dates)
     for p in reported_prices:
-        if p["date"] > last_date:
-            by_date[p["date"]] = p
+        by_date[p["date"]] = p
     if len(by_date) > len(eia_records):
-        logger.info(f"Brent: supplemented {len(by_date) - len(eia_records)} war-period prices from news sources (after {last_date})")
+        logger.info(f"Brent: supplemented {len(by_date) - len(eia_records)} prices after {last_date}")
 
     return sorted(by_date.values(), key=lambda r: r["date"])
 
@@ -442,7 +475,7 @@ def fetch_ovx() -> List[dict]:
     return fetch_yfinance_series("^OVX", "ovx")
 
 
-# ─── FRED API (China PMI) ───────────────────────────────────────────────────
+# ─── FRED API (China BCI) ───────────────────────────────────────────────────
 
 def fetch_china_pmi() -> List[dict]:
     """Fetch China business confidence from FRED."""
@@ -461,7 +494,7 @@ def fetch_china_pmi() -> List[dict]:
         ]
         if records:
             _write_cache("china_pmi", records)
-            logger.info(f"FRED China PMI: fetched {len(records)} data points")
+            logger.info(f"FRED China BCI: fetched {len(records)} data points")
             return records
     except Exception as e:
         logger.warning(f"FRED API failed: {e}")
@@ -691,7 +724,7 @@ def get_curated_iran_events() -> List[dict]:
         {"date": "2026-01-23", "title": "Trump Announces Naval 'Armada' Heading to Middle East", "type": "military", "description": "Trump announces USS Abraham Lincoln carrier strike group deployment. F/A-18E Super Hornets, F-35C Lightning IIs, guided-missile destroyers.", "severity": 4, "lat": 25.2854, "lon": 55.3500, "location": "Persian Gulf"},
 
         # ── Phase 6: War Buildup (Feb 2026) ──
-        {"date": "2026-02-03", "title": "IRGC Attempts to Board US Tanker; Drone Shot Down", "type": "military", "description": "IRGC Navy attempts to intercept US-flagged tanker in Strait of Hormuz. USS McFaul escorts it to safety. F-35C shoots down Iranian Shahed-139 drone.", "severity": 3, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
+        {"date": "2026-02-03", "title": "IRGC Attempts to Board US Tanker; Drone Shot Down", "type": "military", "description": "IRGC Navy attempts to intercept US-flagged tanker in Strait of Hormuz. USS McFaul escorts it to safety. F-35C shoots down Iranian Shahed-136 drone.", "severity": 3, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
         {"date": "2026-02-06", "title": "Round 6: US-Iran Talks Resume in Muscat", "type": "diplomatic", "description": "First talks since June 2025. US delegation: Witkoff, Kushner, CENTCOM commander Adm. Cooper. Iranian FM Araghchi leads. 'Good start.'", "severity": 3, "lat": 23.5880, "lon": 58.3829, "location": "Muscat, Oman"},
         {"date": "2026-02-13", "title": "USS Gerald R. Ford Redeployed; Trump Signals Regime Change", "type": "military", "description": "Ford redirected to Middle East — largest US force posture since 2003 Iraq War. Trump says regime change would be 'best thing that could happen.'", "severity": 4, "lat": 25.2854, "lon": 55.3500, "location": "Persian Gulf"},
         {"date": "2026-02-14", "title": "Pentagon Prepares 'Weeks-Long Sustained Operations'", "type": "military", "description": "US officials confirm military is preparing for sustained operations against Iran lasting weeks.", "severity": 4, "lat": 38.8719, "lon": -77.0563, "location": "Pentagon, VA"},
@@ -713,7 +746,115 @@ def get_curated_iran_events() -> List[dict]:
         {"date": "2026-03-07", "title": "Sustained US Strikes on Tehran; 7th US Soldier Wounded", "type": "military", "description": "Continued US and Israeli airstrikes across Iran. Sgt. Benjamin Pennington gravely wounded at Prince Sultan Air Base. Iran's missile capability reported down 90% by Pentagon.", "severity": 5, "fatalities": 180, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
         {"date": "2026-03-08", "title": "Israel Strikes Iranian Oil Infrastructure; Brent Breaks $100", "type": "military", "description": "Israel hits Shahran oil depot near Tehran — massive fires and toxic smoke over capital. Brent crude breaks $100/bbl for first time in 4 years. 2 killed in Saudi Arabia. 7th US soldier dies. Bahrain desalination plant hit.", "severity": 5, "fatalities": 210, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
         {"date": "2026-03-09", "title": "Mojtaba Khamenei Named Supreme Leader; Brent Hits $114", "type": "military", "description": "Assembly of Experts names Mojtaba Khamenei as new Supreme Leader. Qatar targeted by 17 missiles (intercepted). Saudi intercepts drone toward Shaybah oilfield. Brent spikes to $119.50, settles ~$114. Cumulative toll: 2,400+ killed in Iran.", "severity": 5, "fatalities": 250, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
+        {"date": "2026-03-10", "title": "US Destroys Iranian Navy; 'Most Intense Day' of Strikes", "type": "military", "description": "US destroys 16 Iranian minelayers near Strait of Hormuz. Hegseth declares 'most intense day of strikes' — 5,000+ total targets hit. IRGC launches 37th wave with Khoramshahr super-heavy missiles at Israel and US bases. Iranian drone hits US Baghdad diplomatic facility. Fire at UAE oil refinery from Iranian strike.", "severity": 5, "fatalities": 200, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
+        {"date": "2026-03-10", "title": "Trump Signals War 'Very Complete'; Oil Pulls Back to $91", "type": "diplomatic", "description": "Trump tells CBS war is 'very complete, pretty much' while also vowing 'most intense day' of strikes. Brent crude pulls back sharply from $114 to ~$91 as markets interpret exit signal. B-1B bombers arrive at UK and German bases.", "severity": 4, "lat": 38.9072, "lon": -77.0369, "location": "Washington, DC"},
+        {"date": "2026-03-11", "title": "Day 12 (Since Feb 28): Iran Rejects Ceasefire; 1,300+ Civilians Killed", "type": "military", "description": "Iran's parliament speaker declares 'we aren't seeking a ceasefire.' Tehran accuses US of striking girls' school killing ~175 students. China, Russia, France contact Iran re ceasefire. Iranian drone kills woman in Bahrain's Manama. Pentagon: 140 US troops wounded, 7 killed since Feb 28.", "severity": 5, "fatalities": 180, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
     ]
+
+
+def fetch_iran_news() -> List[dict]:
+    """Fetch live Iran/oil war news headlines from Google News RSS. No API key needed."""
+    cached = _read_cache("iran_news", 1800)  # 30-minute cache
+    if cached:
+        logger.info("Iran news: serving from cache")
+        return cached
+
+    try:
+        import xml.etree.ElementTree as ET
+        from datetime import datetime as dt
+
+        # Multiple targeted queries to capture different angles of the conflict
+        queries = [
+            "Iran+war+US+strikes",
+            "Strait+of+Hormuz+oil+shipping",
+            "Brent+crude+oil+Iran",
+        ]
+        seen_titles = set()
+        all_articles = []
+
+        for q in queries:
+            url = f"https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+            if resp.status_code != 200:
+                continue
+            root = ET.fromstring(resp.text)
+            for item in root.findall(".//item"):
+                title_el = item.find("title")
+                pub_el = item.find("pubDate")
+                source_el = item.find("source")
+                link_el = item.find("link")
+                if title_el is None or pub_el is None:
+                    continue
+                title = title_el.text or ""
+                # Deduplicate across queries
+                title_lower = title.lower()
+                if title_lower in seen_titles:
+                    continue
+                seen_titles.add(title_lower)
+                all_articles.append({
+                    "title": title,
+                    "pubDate": pub_el.text or "",
+                    "source": source_el.text if source_el is not None else "",
+                    "url": link_el.text if link_el is not None else "",
+                })
+
+        # Relevance filter: must mention Iran/Hormuz AND oil/military/war context
+        iran_terms = {"iran", "iranian", "tehran", "hormuz", "irgc", "persian gulf", "hezbollah", "houthi"}
+        context_terms = {"oil", "brent", "crude", "war", "strike", "military", "missile",
+                         "drone", "attack", "bomb", "navy", "sanctions", "nuclear",
+                         "ceasefire", "tanker", "shipping", "casualt", "killed", "troops"}
+
+        filtered = []
+        for a in all_articles:
+            t = a["title"].lower()
+            has_iran = any(term in t for term in iran_terms)
+            has_context = any(term in t for term in context_terms)
+            if has_iran and has_context:
+                filtered.append(a)
+
+        # Classify type based on keywords
+        def classify_type(title):
+            t = title.lower()
+            if any(w in t for w in ["oil", "brent", "crude", "price", "opec", "tanker", "shipping", "hormuz", "trade"]):
+                return "proxy"
+            if any(w in t for w in ["sanction", "embargo", "treasury", "ofac"]):
+                return "sanctions"
+            if any(w in t for w in ["nuclear", "uranium", "iaea", "enrich"]):
+                return "nuclear"
+            if any(w in t for w in ["talk", "negotiat", "diplomat", "ceasefire", "peace", "deal", "summit"]):
+                return "diplomatic"
+            return "military"
+
+        # Parse dates and build structured output
+        results = []
+        for a in filtered[:50]:  # Cap at 50 most recent
+            try:
+                pub_dt = dt.strptime(a["pubDate"][:25], "%a, %d %b %Y %H:%M:%S")
+                date_str = pub_dt.strftime("%Y-%m-%d")
+            except (ValueError, IndexError):
+                continue
+
+            results.append({
+                "date": date_str,
+                "title": a["title"],
+                "type": classify_type(a["title"]),
+                "source": a["source"],
+                "url": a["url"],
+                "severity": 3,  # Default; news headlines don't have severity
+                "auto": True,   # Flag to distinguish from curated events
+            })
+
+        # Sort by date descending
+        results.sort(key=lambda x: x["date"], reverse=True)
+
+        if results:
+            _write_cache("iran_news", results)
+            logger.info(f"Iran news: fetched {len(results)} relevant articles from Google News")
+        return results
+
+    except Exception as e:
+        logger.warning(f"Iran news fetch failed: {e}")
+        return []
 
 
 def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
@@ -725,28 +866,25 @@ def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
     price_map = {p["date"]: p["price"] for p in brent_prices}
     sorted_dates = sorted(price_map.keys())
 
-    def get_price_at_offset(date_str: str, offset: int):
-        """Get price at T+offset trading days from date."""
-        try:
-            idx = sorted_dates.index(date_str)
-            target_idx = idx + offset
-            if 0 <= target_idx < len(sorted_dates):
-                return price_map[sorted_dates[target_idx]]
-        except (ValueError, IndexError):
-            pass
-        # Fallback: find nearest date
-        try:
-            from datetime import datetime, timedelta
-            dt = datetime.strptime(date_str, "%Y-%m-%d")
-            for delta in range(0, 10):
-                check = (dt + timedelta(days=offset + delta)).strftime("%Y-%m-%d")
-                if check in price_map:
-                    return price_map[check]
-                check = (dt + timedelta(days=offset - delta)).strftime("%Y-%m-%d")
-                if check in price_map:
-                    return price_map[check]
-        except Exception:
-            pass
+    def get_closing_price_before(date_str: str):
+        """Get the closing price on the most recent trading day BEFORE this date."""
+        import bisect
+        idx = bisect.bisect_left(sorted_dates, date_str)
+        if idx > 0:
+            return price_map[sorted_dates[idx - 1]]
+        return None
+
+    def get_closing_price_after(date_str: str, days: int):
+        """Get the closing price on the nearest trading day on or after date + days."""
+        from datetime import datetime, timedelta
+        target = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=days)).strftime("%Y-%m-%d")
+        import bisect
+        idx = bisect.bisect_left(sorted_dates, target)
+        if idx < len(sorted_dates):
+            return price_map[sorted_dates[idx]]
+        # If past the end, use the last available price
+        if sorted_dates:
+            return price_map[sorted_dates[-1]]
         return None
 
     # Get curated events for impact table
@@ -756,9 +894,8 @@ def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
     event_table = []
     for ev in curated:
         d = ev["date"]
-        price_before = get_price_at_offset(d, -1)
-        price_after = get_price_at_offset(d, 3)
-        price_day = get_price_at_offset(d, 0)
+        price_before = get_closing_price_before(d)
+        price_after = get_closing_price_after(d, 3)
 
         change_pct = None
         if price_before and price_after:
@@ -789,8 +926,8 @@ def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
         for label, off in offsets.items():
             changes = []
             for d in dates:
-                pb = get_price_at_offset(d, -1)
-                pa = get_price_at_offset(d, off)
+                pb = get_closing_price_before(d)
+                pa = get_closing_price_after(d, off)
                 if pb and pa:
                     changes.append((pa - pb) / pb * 100)
             type_impact[label] = round(sum(changes) / len(changes), 3) if changes else 0
@@ -806,8 +943,8 @@ def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
     events_this_month = acled_this_month + curated_this_month
 
     for d in acled_dates:
-        pb = get_price_at_offset(d, -1)
-        pa = get_price_at_offset(d, 3)
+        pb = get_closing_price_before(d)
+        pa = get_closing_price_after(d, 3)
         if pb and pa:
             change = abs(pa - pb)
             all_changes_3d.append(change)
@@ -862,7 +999,7 @@ def get_hypothesis_results() -> dict:
             "model": "GJR-GARCH(1,1,1)",
             "distribution": "Normal",
             "mean_model": "Constant",
-            "observations": 731,
+            "observations": 521,
             "log_likelihood": -1185.2,
             "aic": 2374,
             "bic": 2384,

@@ -1006,7 +1006,7 @@ function createCorrelationChart(correlation) {
             'OPEC_Dummy': 'OPEC',
             'RussiaUkraine_Dummy': 'Rus-Ukr',
             'IranIsrael_Escalation': 'Iran-Isr',
-            'China_PMI': 'China PMI',
+            'China_PMI': 'China BCI',
             'Baker_Hughes_Rigs': 'Rigs',
             'SPR_Release_Volume': 'SPR',
             'DXY': 'DXY',
@@ -1142,6 +1142,7 @@ function createSuezTransitChart() {
         { month: '2025-12', transits: 900 },
         { month: '2026-01', transits: 890 },
         { month: '2026-02', transits: 750 },   // US-Iran war further reduces traffic
+        { month: '2026-03', transits: 1050 },  // Hormuz blockade diverts some traffic to Suez; ~30-43 daily crossings
     ];
 
     const lineData = data.map(d => ({ x: d.month + '-15', y: d.transits }));
@@ -1294,7 +1295,7 @@ function initIranIsraelMap() {
     // Key locations labels
     const labels = [
         { pos: [26.5667, 56.2500], text: 'Strait of Hormuz', color: '#C9A96E' },
-        { pos: [33.5103, 51.9250], text: 'Natanz', color: '#7B68AE' },
+        { pos: [33.7225, 51.7275], text: 'Natanz', color: '#7B68AE' },
         { pos: [34.7564, 51.0596], text: 'Fordow', color: '#7B68AE' },
         { pos: [32.6546, 51.6680], text: 'Isfahan', color: '#7B68AE' },
     ];

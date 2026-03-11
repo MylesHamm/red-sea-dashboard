@@ -75,10 +75,11 @@ def get_hypothesis():
 
 @app.get("/api/iran-events")
 def get_iran_events():
-    """Iran-related ACLED events + curated major events."""
+    """Iran-related ACLED events + curated major events + live news."""
     acled_events = data_service.fetch_iran_events()
     curated = data_service.get_curated_iran_events()
-    result = {"count": len(acled_events), "data": acled_events, "curated": curated}
+    news = data_service.fetch_iran_news()
+    result = {"count": len(acled_events), "data": acled_events, "curated": curated, "news": news}
     err = data_service.get_iran_fetch_error()
     if err:
         result["error"] = err
