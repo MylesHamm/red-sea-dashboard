@@ -117,7 +117,7 @@ function renderOverview() {
     // KPI cards
     animateValue('kpi-brent', `$${kpis.latest_brent_price}`);
     animateValue('kpi-events', eventsData ? eventsData.length : '--');
-    animateValue('kpi-volatility', kpis.peak_volatility);
+    animateValue('kpi-volatility', kpis.peak_volatility != null ? `${kpis.peak_volatility.toFixed(2)}%` : '--');
     animateValue('kpi-attacks', kpis.max_weekly_attacks);
     animateValue('kpi-dxy', kpis.latest_dxy || '--');
     animateValue('kpi-ovx', kpis.latest_ovx || '--');

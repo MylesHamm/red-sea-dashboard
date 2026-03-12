@@ -244,7 +244,7 @@ function createVolatilityChart(timeseries) {
                 x: { ...CHART_DEFAULTS.scales.x },
                 y: {
                     ...CHART_DEFAULTS.scales.y,
-                    title: { display: true, text: 'Volatility', font: { family: 'Inter', size: 11 } }
+                    title: { display: true, text: 'Volatility (% Daily Change)', font: { family: 'Inter', size: 11 } }
                 }
             }
         }
@@ -413,7 +413,7 @@ function createScatterChart(timeseries) {
                 },
                 y: {
                     ...CHART_DEFAULTS.scales.y,
-                    title: { display: true, text: 'Daily Volatility', font: { family: 'Inter', size: 11 } }
+                    title: { display: true, text: 'Daily Volatility (% Change)', font: { family: 'Inter', size: 11 } }
                 }
             }
         }
@@ -576,7 +576,7 @@ function createSprChart(timeseries) {
                 x: { ...CHART_DEFAULTS.scales.x },
                 y: {
                     ...CHART_DEFAULTS.scales.y,
-                    title: { display: true, text: 'Volume Change', font: { family: 'Inter', size: 11 } }
+                    title: { display: true, text: 'Volume Change (Million Barrels)', font: { family: 'Inter', size: 11 } }
                 }
             }
         }
@@ -1021,11 +1021,11 @@ function createCorrelationChart(correlation) {
         const map = {
             'Brent_Price': 'Brent',
             'Daily_Volatility': 'Volatility',
-            'WeekleyAttackFrq': 'Attacks',
+            'WeekleyAttackFrq': 'Attack Freq.',
             'OPEC_Dummy': 'OPEC',
             'RussiaUkraine_Dummy': 'Rus-Ukr',
             'IranIsrael_Escalation': 'Iran-Isr',
-            'China_PMI': 'China BCI',
+            'China_PMI': 'China PMI',
             'Baker_Hughes_Rigs': 'Rigs',
             'SPR_Release_Volume': 'SPR',
             'DXY': 'DXY',
@@ -1127,7 +1127,8 @@ function createSuezTransitChart() {
     const existing = Chart.getChart(canvas);
     if (existing) existing.destroy();
 
-    // Monthly Suez Canal transits (approximate, from UNCTAD / Suez Canal Authority reports)
+    // Monthly Suez Canal transits (approximate estimates from UNCTAD / Suez Canal Authority reports)
+    // NOTE: These are approximate values for illustrative purposes. Exact monthly figures vary by source.
     const data = [
         { month: '2023-07', transits: 2280 },
         { month: '2023-08', transits: 2310 },
@@ -1174,7 +1175,7 @@ function createSuezTransitChart() {
         data: {
             datasets: [
                 {
-                    label: 'Monthly Transits',
+                    label: 'Monthly Transits (Est.)',
                     data: lineData,
                     borderColor: COLORS.brent,
                     backgroundColor: COLORS.brentBg,
