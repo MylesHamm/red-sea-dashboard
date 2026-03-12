@@ -682,7 +682,7 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
                     borderWidth: 2,
                     pointRadius: 0,
                     pointHoverRadius: 5,
-                    pointHitRadius: 20,
+                    pointHitRadius: 1000,
                     fill: true,
                     tension: 0.3,
                     yAxisID: 'y',
@@ -705,7 +705,7 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
         },
         options: {
             ...CHART_DEFAULTS,
-            interaction: { mode: 'nearest', intersect: false, axis: 'x' },
+            interaction: { mode: 'nearest', intersect: false },
             scales: {
                 x: {
                     ...CHART_DEFAULTS.scales.x,
@@ -731,6 +731,11 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
                 ...CHART_DEFAULTS.plugins,
                 tooltip: {
                     ...CHART_DEFAULTS.plugins.tooltip,
+                    filter(item) {
+                        // Only show tooltip for the line dataset (index 0);
+                        // event info is appended via afterBody
+                        return item.datasetIndex === 0;
+                    },
                     callbacks: {
                         title(items) {
                             const raw = items[0]?.raw;
@@ -738,12 +743,15 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
                             return items[0]?.label || '';
                         },
                         label(context) {
-                            if (context.datasetIndex === 1) {
-                                const idx = context.dataIndex;
-                                const ev = eventPoints[idx];
-                                return ev ? [ev.title, `Type: ${ev.type.toUpperCase()} | Severity: ${ev.severity}/5`] : [];
-                            }
                             return `Brent: $${context.parsed.y?.toFixed(2)}`;
+                        },
+                        afterBody(items) {
+                            // Show event info if the hovered date matches an event
+                            const date = items[0]?.raw?.x;
+                            if (!date) return [];
+                            const ev = eventPoints.find(p => p.x === date);
+                            if (!ev) return [];
+                            return ['', `⬤ ${ev.title}`, `Type: ${ev.type.toUpperCase()} | Severity: ${ev.severity}/5`];
                         }
                     }
                 }

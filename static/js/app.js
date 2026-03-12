@@ -40,10 +40,10 @@ function switchTab(tab) {
     // (Chart.js needs a visible parent to compute correct canvas dimensions)
     if (tab === 'currentevents') {
         setTimeout(() => {
-            if (iranEventsData) {
-                _loadIranIsraelMapFromData();
-            }
-            resizeIranIsraelMap();
+            try {
+                if (iranEventsData) _loadIranIsraelMapFromData();
+                resizeIranIsraelMap();
+            } catch (e) { console.warn('Iran map init:', e); }
             // Re-render charts that may have been created while tab was hidden (0×0 canvas)
             if (iranImpactData) {
                 const brentPrices = iranImpactData.brent_prices || (masterData ? masterData.timeseries.filter(d => d.brent_price).map(d => ({ date: d.date, price: d.brent_price })) : []);
