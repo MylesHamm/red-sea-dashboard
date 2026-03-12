@@ -662,6 +662,10 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
         return 4 + p.severity * 2;
     });
 
+    // Intraday spike on Mar 9 — Brent hit $119 before settling at $98.96
+    // Show this as a distinct point so the chart reflects the true price range
+    const intradaySpike = { x: '2026-03-09', y: 119, label: 'Intraday High: $119' };
+
     chartInstances['iranPriceTimelineChart'] = new Chart(ctx, {
         data: {
             datasets: [
@@ -677,7 +681,7 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
                     fill: true,
                     tension: 0.3,
                     yAxisID: 'y',
-                    order: 2,
+                    order: 3,
                 },
                 {
                     type: 'scatter',
@@ -689,6 +693,19 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
                     pointRadius: eventRadii,
                     pointHoverRadius: 12,
                     pointStyle: 'circle',
+                    yAxisID: 'y',
+                    order: 2,
+                },
+                {
+                    type: 'scatter',
+                    label: 'Intraday High ($119)',
+                    data: [{ x: intradaySpike.x, y: intradaySpike.y }],
+                    backgroundColor: '#C43D3D',
+                    borderColor: '#8B0000',
+                    borderWidth: 2,
+                    pointRadius: 10,
+                    pointHoverRadius: 14,
+                    pointStyle: 'triangle',
                     yAxisID: 'y',
                     order: 1,
                 }
@@ -734,6 +751,9 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
                                 const ev = eventPoints[idx];
                                 return ev ? [ev.title, `Type: ${ev.type.toUpperCase()} | Severity: ${ev.severity}/5`] : [];
                             }
+                            if (context.datasetIndex === 2) {
+                                return ['Intraday High: $119/bbl', 'Mar 9 — settled at $98.96'];
+                            }
                             return `Brent: $${context.parsed.y?.toFixed(2)}`;
                         }
                     }
@@ -775,8 +795,8 @@ function createIranForecastChart(brentPrices) {
     }
 
     // ── Scenario modeling ──
-    // Base: Strait of Hormuz closure persists, ~17% of global oil transit disrupted
-    // Pre-war Brent was ~$73. War has pushed to ~$85 (+16%).
+    // Base: Strait of Hormuz closure persists, ~21% of global oil transit disrupted
+    // Pre-war Brent was ~$71. War has pushed to ~$92 (+29%), spiking to $119 intraday.
     // Historical precedents:
     //   1990 Gulf War: Brent doubled ($20→$40) when 4.3 mbd disrupted
     //   1979 Iranian Revolution: +150% over 12 months
@@ -815,6 +835,9 @@ function createIranForecastChart(brentPrices) {
     const susLine = [...new Array(histDates.length - 1).fill(null), lastPrice, ...sustained];
     const deescLine = [...new Array(histDates.length - 1).fill(null), lastPrice, ...deescalation];
 
+    // Intraday spike: $119 on Mar 9 — show as a distinct point on the forecast chart
+    const spikeData = allDates.map(d => d === '2026-03-09' ? 119 : null);
+
     chartInstances['iranForecastChart'] = new Chart(ctx, {
         type: 'line',
         data: {
@@ -830,6 +853,18 @@ function createIranForecastChart(brentPrices) {
                     pointHoverRadius: 4,
                     fill: false,
                     tension: 0.3,
+                },
+                {
+                    label: 'Intraday High ($119)',
+                    data: spikeData,
+                    borderColor: 'transparent',
+                    backgroundColor: '#C43D3D',
+                    borderWidth: 0,
+                    pointRadius: 8,
+                    pointHoverRadius: 12,
+                    pointStyle: 'triangle',
+                    fill: false,
+                    showLine: false,
                 },
                 {
                     label: 'Escalation ($100-$120)',
