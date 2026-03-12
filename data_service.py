@@ -890,36 +890,53 @@ def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
     # Get curated events for impact table
     curated = get_curated_iran_events()
 
-    # Group curated events by date so each day shows one before/after row
+    # Group curated events by TRADING day.
+    # Weekend events (Sat/Sun) roll forward to the next Monday when markets
+    # actually reacted, so before/after prices form a clean chain.
     from collections import OrderedDict
-    events_by_date = OrderedDict()
-    for ev in curated:
-        d = ev["date"]
-        if d not in events_by_date:
-            events_by_date[d] = []
-        events_by_date[d].append(ev)
+    from datetime import datetime, timedelta
 
-    # Build impact table — one row per day
+    def _next_trading_day(date_str: str) -> str:
+        """If date falls on a weekend, roll forward to Monday."""
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        while dt.weekday() >= 5:  # 5=Sat, 6=Sun
+            dt += timedelta(days=1)
+        return dt.strftime("%Y-%m-%d")
+
+    events_by_trading_day = OrderedDict()
+    for ev in curated:
+        td = _next_trading_day(ev["date"])
+        if td not in events_by_trading_day:
+            events_by_trading_day[td] = []
+        events_by_trading_day[td].append(ev)
+
+    # Build impact table — one row per trading day
     event_table = []
-    for d, day_events in events_by_date.items():
-        price_before = get_closing_price_before(d)
-        price_after = get_closing_price_after(d, 0)  # Event-day close
+    for td, day_events in events_by_trading_day.items():
+        price_before = get_closing_price_before(td)
+        price_after = get_closing_price_after(td, 0)  # Trading-day close
 
         change_pct = None
         if price_before and price_after:
             change_pct = round((price_after - price_before) / price_before * 100, 2)
 
-        # Collect all event details for this day
+        # Collect all event details for this trading day
         max_severity = max(ev["severity"] for ev in day_events)
         types = list(dict.fromkeys(ev["type"] for ev in day_events))  # unique, order-preserving
 
+        # Show the actual date range if events span multiple calendar days
+        event_dates = sorted(set(ev["date"] for ev in day_events))
+        display_date = event_dates[0] if len(event_dates) == 1 else f"{event_dates[0]} – {event_dates[-1]}"
+
         event_table.append({
-            "date": d,
+            "date": td,                        # trading day (for sorting/filtering)
+            "display_date": display_date,       # shows date range if weekend events rolled in
             "events": [{"title": ev["title"], "type": ev["type"], "severity": ev["severity"],
-                         "description": ev.get("description", "")} for ev in day_events],
-            "title": day_events[0]["title"],  # primary event title (backwards compat)
-            "type": types[0],                  # primary type (backwards compat)
-            "types": types,                    # all types for the day
+                         "description": ev.get("description", ""),
+                         "actual_date": ev["date"]} for ev in day_events],
+            "title": day_events[0]["title"],    # primary event title (backwards compat)
+            "type": types[0],                   # primary type (backwards compat)
+            "types": types,                     # all types for the day
             "severity": max_severity,
             "brent_before": round(price_before, 2) if price_before else None,
             "brent_after": round(price_after, 2) if price_after else None,

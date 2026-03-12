@@ -300,12 +300,13 @@ function renderCurrentEvents() {
             const changeCls = day.change_pct > 0 ? 'change-positive' : day.change_pct < 0 ? 'change-negative' : '';
             const changeText = day.change_pct != null ? `${day.change_pct > 0 ? '+' : ''}${day.change_pct}%` : '--';
             const events = day.events || [{ title: day.title, type: day.type, severity: day.severity }];
+            const displayDate = day.display_date || day.date;
             const eventsList = events.map(e =>
                 `<div class="day-event"><span class="event-type-badge type-${e.type}">${e.type}</span> ${e.title}</div>`
             ).join('');
             return `
                 <tr>
-                    <td>${day.date}</td>
+                    <td>${displayDate}</td>
                     <td class="day-events-cell">${eventsList}</td>
                     <td><span class="severity-badge severity-${day.severity}">${day.severity}</span></td>
                     <td>${day.brent_before != null ? '$' + day.brent_before.toFixed(2) : '--'}</td>
@@ -409,12 +410,13 @@ function renderCurrentEventsFiltered() {
             const changeCls = day.change_pct > 0 ? 'change-positive' : day.change_pct < 0 ? 'change-negative' : '';
             const changeText = day.change_pct != null ? `${day.change_pct > 0 ? '+' : ''}${day.change_pct}%` : '--';
             const events = day.events || [{ title: day.title, type: day.type, severity: day.severity }];
+            const displayDate = day.display_date || day.date;
             const eventsList = events.map(e =>
                 `<div class="day-event"><span class="event-type-badge type-${e.type}">${e.type}</span> ${e.title}</div>`
             ).join('');
             return `
                 <tr>
-                    <td>${day.date}</td>
+                    <td>${displayDate}</td>
                     <td class="day-events-cell">${eventsList}</td>
                     <td><span class="severity-badge severity-${day.severity}">${day.severity}</span></td>
                     <td>${day.brent_before != null ? '$' + day.brent_before.toFixed(2) : '--'}</td>
