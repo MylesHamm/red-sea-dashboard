@@ -6,6 +6,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from starlette.responses import Response
 from fastapi.background import BackgroundTasks
 
 import config
@@ -131,7 +132,9 @@ def refresh_data(bg: BackgroundTasks):
 
 @app.get("/")
 def serve_dashboard():
-    return FileResponse(config.BASE_DIR / "static" / "index.html")
+    response = FileResponse(config.BASE_DIR / "static" / "index.html")
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
 
 
 # ─── Run ─────────────────────────────────────────────────────────────────────
