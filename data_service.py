@@ -310,19 +310,19 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
     by_date = {r["date"]: r for r in eia_records}
     last_date = max(by_date.keys()) if by_date else "2023-10-01"
 
-    # Verified war-period prices from news sources (CNBC, Reuters, Bloomberg, etc.)
-    # These override Yahoo Finance because event titles reference these specific prices
-    # and BZ=F futures can differ from spot/settlement prices reported by news outlets.
+    # Verified war-period Brent crude settlements from news sources (CNBC, Reuters, Bloomberg, etc.)
+    # These override Yahoo Finance for dates beyond EIA reporting lag.
+    # Note: Mar 7 (Sat) and Mar 8 (Sun) are non-trading days — no settlements.
     reported_prices = [
-        {"date": "2026-03-03", "price": 81.40},   # CNBC: Brent settles +4.71%
-        {"date": "2026-03-04", "price": 82.76},   # Reuters: Brent +1.6%
-        {"date": "2026-03-05", "price": 85.41},   # CNBC: Brent +3.2% daily, ~21% since war began
-        {"date": "2026-03-06", "price": 87.12},   # Reuters: Brent +2.0%, analysts warn $100+
-        {"date": "2026-03-07", "price": 92.69},   # CNN: continued climb amid sustained strikes
-        {"date": "2026-03-08", "price": 107.10},  # Gulf News: Brent breaks $100 after Israel hits oil infra
-        {"date": "2026-03-09", "price": 114.00},  # Bloomberg: Brent spikes to $119.50, settles ~$114
-        {"date": "2026-03-10", "price": 91.54},   # Fortune: sharp pullback as Trump signals war "very complete"
-        {"date": "2026-03-11", "price": 90.96},   # Fortune: continued slight decline amid ceasefire signals
+        {"date": "2026-03-02", "price": 77.24},   # First trading day after war started Feb 28 (Sat)
+        {"date": "2026-03-03", "price": 83.28},   # Brent surges as shipping suspended
+        {"date": "2026-03-04", "price": 81.56},   # Slight pullback amid heavy strikes
+        {"date": "2026-03-05", "price": 88.59},   # Brent surges on insurance withdrawal, 500+ missiles
+        {"date": "2026-03-06", "price": 95.74},   # Analysts warn $100+; Iran strikes Gulf states
+        # Mar 7 (Sat) and Mar 8 (Sun) — no trading
+        {"date": "2026-03-09", "price": 98.96},   # Brent spikes to $119 intraday, settles ~$99; new Supreme Leader named
+        {"date": "2026-03-10", "price": 87.80},   # Sharp pullback (-11.3%) as Trump signals war "very complete"
+        {"date": "2026-03-11", "price": 91.98},   # CNBC: Brent +4.76% as IEA releases 400M bbl reserves
     ]
     reported_dates = {p["date"] for p in reported_prices}
 
@@ -739,15 +739,15 @@ def get_curated_iran_events() -> List[dict]:
         {"date": "2026-02-28", "title": "Iran Launches 'Operation True Promise IV' Retaliation", "type": "military", "description": "Iran fires dozens of ballistic missiles and drones at Israel and US bases across Jordan, Kuwait, Bahrain, Qatar, Iraq, Saudi Arabia, UAE. US Embassy in Kuwait hit.", "severity": 5, "fatalities": 13, "lat": 32.0853, "lon": 34.7818, "location": "Tel Aviv, Israel"},
         {"date": "2026-03-01", "title": "Maersk Suspends Strait of Hormuz Transit; 4 US Soldiers Killed", "type": "proxy", "description": "Maersk suspends all Strait of Hormuz crossings, reroutes around Cape of Good Hope. Tanker transits drop from 24/day to 4. Four US soldiers killed in Kuwait drone strike.", "severity": 5, "fatalities": 4, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
         {"date": "2026-03-02", "title": "IRGC Closes Strait of Hormuz; Hezbollah Enters War", "type": "military", "description": "IRGC officially closes Strait of Hormuz, threatens any ship that passes. 150+ ships anchored outside. Hezbollah fires rockets at Israel; IDF invades southern Lebanon.", "severity": 5, "fatalities": 85, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
-        {"date": "2026-03-03", "title": "Brent Surges to $81.40; Global Shipping Suspended", "type": "proxy", "description": "Brent settles at $81.40 (+4.71%). CMA CGM, Hapag-Lloyd, MSC suspend strait transits. Iranian drones hit Amazon data centers in Bahrain and UAE. Natanz explosion reported.", "severity": 5, "fatalities": 45, "lat": 33.5103, "lon": 51.9250, "location": "Natanz, Iran"},
-        {"date": "2026-03-04", "title": "Brent Hits $82.76; Cumulative Death Toll Passes 1,100", "type": "military", "description": "Brent rises to $82.76. US gas up 27 cents to $3.25/gal. Over 1,100 Iranian civilians killed since war began per state media. Drone attacks near Iran-Azerbaijan border.", "severity": 5, "fatalities": 120, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
-        {"date": "2026-03-05", "title": "Brent Surges to $85.41; Iran Fires 500+ Missiles, 2000 Drones", "type": "military", "description": "Brent at $85.41 (+3.2% daily, ~21% since war began). Insurance withdrawn for Hormuz transit. Iran has fired 500+ missiles and 2,000 drones. NATO intercepts missile over Turkey.", "severity": 5, "fatalities": 150, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
-        {"date": "2026-03-06", "title": "Iran Targets Gulf States; Analysts Warn $100+ Oil", "type": "military", "description": "Iran strikes Saudi Arabia, Kuwait, Qatar, Bahrain, UAE. Missile hits Jerusalem. Bushehr Airport hit. Analysts warn Brent could hit $100-$120/bbl if disruptions persist.", "severity": 5, "fatalities": 95, "lat": 28.9234, "lon": 50.8203, "location": "Bushehr, Iran"},
+        {"date": "2026-03-03", "title": "Brent Surges to $83.28; Global Shipping Suspended", "type": "proxy", "description": "Brent settles at $83.28 (+7.8%). CMA CGM, Hapag-Lloyd, MSC suspend strait transits. Iranian drones hit Amazon data centers in Bahrain and UAE. Natanz explosion reported.", "severity": 5, "fatalities": 45, "lat": 33.5103, "lon": 51.9250, "location": "Natanz, Iran"},
+        {"date": "2026-03-04", "title": "Brent Pulls Back to $81.56; Cumulative Death Toll Passes 1,100", "type": "military", "description": "Brent settles at $81.56 (-2.1%). US gas up 27 cents to $3.25/gal. Over 1,100 Iranian civilians killed since war began per state media. Drone attacks near Iran-Azerbaijan border.", "severity": 5, "fatalities": 120, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
+        {"date": "2026-03-05", "title": "Brent Surges to $88.59; Iran Fires 500+ Missiles, 2000 Drones", "type": "military", "description": "Brent at $88.59 (+8.6% daily, ~24% since war began). Insurance withdrawn for Hormuz transit. Iran has fired 500+ missiles and 2,000 drones. NATO intercepts missile over Turkey.", "severity": 5, "fatalities": 150, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
+        {"date": "2026-03-06", "title": "Brent Hits $95.74; Iran Targets Gulf States", "type": "military", "description": "Brent settles at $95.74 (+8.1%). Iran strikes Saudi Arabia, Kuwait, Qatar, Bahrain, UAE. Missile hits Jerusalem. Bushehr Airport hit. Analysts warn Brent could break $100/bbl.", "severity": 5, "fatalities": 95, "lat": 28.9234, "lon": 50.8203, "location": "Bushehr, Iran"},
         {"date": "2026-03-07", "title": "Sustained US Strikes on Tehran; 7th US Soldier Wounded", "type": "military", "description": "Continued US and Israeli airstrikes across Iran. Sgt. Benjamin Pennington gravely wounded at Prince Sultan Air Base. Iran's missile capability reported down 90% by Pentagon.", "severity": 5, "fatalities": 180, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
-        {"date": "2026-03-08", "title": "Israel Strikes Iranian Oil Infrastructure; Brent Breaks $100", "type": "military", "description": "Israel hits Shahran oil depot near Tehran — massive fires and toxic smoke over capital. Brent crude breaks $100/bbl for first time in 4 years. 2 killed in Saudi Arabia. 7th US soldier dies. Bahrain desalination plant hit.", "severity": 5, "fatalities": 210, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
-        {"date": "2026-03-09", "title": "Mojtaba Khamenei Named Supreme Leader; Brent Hits $114", "type": "military", "description": "Assembly of Experts names Mojtaba Khamenei as new Supreme Leader. Qatar targeted by 17 missiles (intercepted). Saudi intercepts drone toward Shaybah oilfield. Brent spikes to $119.50, settles ~$114. Cumulative toll: 2,400+ killed in Iran.", "severity": 5, "fatalities": 250, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
+        {"date": "2026-03-08", "title": "Israel Strikes Iranian Oil Infrastructure", "type": "military", "description": "Israel hits Shahran oil depot near Tehran — massive fires and toxic smoke over capital. Brent crude surges past $100/bbl intraday on electronic markets. 2 killed in Saudi Arabia. 7th US soldier dies. Bahrain desalination plant hit.", "severity": 5, "fatalities": 210, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
+        {"date": "2026-03-09", "title": "Mojtaba Khamenei Named Supreme Leader; Brent Settles at $98.96", "type": "military", "description": "Assembly of Experts names Mojtaba Khamenei as new Supreme Leader. Qatar targeted by 17 missiles (intercepted). Saudi intercepts drone toward Shaybah oilfield. Brent spikes to $119 intraday, settles at $98.96 (+3.4%). Cumulative toll: 2,400+ killed in Iran.", "severity": 5, "fatalities": 250, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
         {"date": "2026-03-10", "title": "US Destroys Iranian Navy; 'Most Intense Day' of Strikes", "type": "military", "description": "US destroys 16 Iranian minelayers near Strait of Hormuz. Hegseth declares 'most intense day of strikes' — 5,000+ total targets hit. IRGC launches 37th wave with Khoramshahr super-heavy missiles at Israel and US bases. Iranian drone hits US Baghdad diplomatic facility. Fire at UAE oil refinery from Iranian strike.", "severity": 5, "fatalities": 200, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
-        {"date": "2026-03-10", "title": "Trump Signals War 'Very Complete'; Oil Pulls Back to $91", "type": "diplomatic", "description": "Trump tells CBS war is 'very complete, pretty much' while also vowing 'most intense day' of strikes. Brent crude pulls back sharply from $114 to ~$91 as markets interpret exit signal. B-1B bombers arrive at UK and German bases.", "severity": 4, "lat": 38.9072, "lon": -77.0369, "location": "Washington, DC"},
+        {"date": "2026-03-10", "title": "Trump Signals War 'Very Complete'; Oil Crashes to $87.80", "type": "diplomatic", "description": "Trump tells CBS war is 'very complete, pretty much' while also vowing 'most intense day' of strikes. Brent crude crashes 11.3% from $98.96 to $87.80 — largest single-day drop since March 2022. B-1B bombers arrive at UK and German bases.", "severity": 4, "lat": 38.9072, "lon": -77.0369, "location": "Washington, DC"},
         {"date": "2026-03-11", "title": "Day 12 (Since Feb 28): Iran Rejects Ceasefire; 1,300+ Civilians Killed", "type": "military", "description": "Iran's parliament speaker declares 'we aren't seeking a ceasefire.' Tehran accuses US of striking girls' school killing ~175 students. China, Russia, France contact Iran re ceasefire. Iranian drone kills woman in Bahrain's Manama. Pentagon: 140 US troops wounded, 7 killed since Feb 28.", "severity": 5, "fatalities": 180, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
     ]
 
@@ -895,7 +895,7 @@ def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
     for ev in curated:
         d = ev["date"]
         price_before = get_closing_price_before(d)
-        price_after = get_closing_price_after(d, 3)
+        price_after = get_closing_price_after(d, 0)  # Event-day close (what it was AFTER the event)
 
         change_pct = None
         if price_before and price_after:
