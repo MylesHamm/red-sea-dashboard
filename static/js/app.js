@@ -292,21 +292,24 @@ function renderCurrentEvents() {
         setTimeout(() => _loadIranIsraelMapFromData(), 200);
     }
 
-    // Event impact table — curated events only (with price analysis)
+    // Event impact table — grouped by day with before/after prices
     const tbody = document.getElementById('iranTableBody');
     if (tbody && iranImpactData.event_table) {
         const rows = iranImpactData.event_table.sort((a, b) => b.date.localeCompare(a.date));
-        tbody.innerHTML = rows.map(ev => {
-            const changeCls = ev.change_pct > 0 ? 'change-positive' : ev.change_pct < 0 ? 'change-negative' : '';
-            const changeText = ev.change_pct != null ? `${ev.change_pct > 0 ? '+' : ''}${ev.change_pct}%` : '--';
+        tbody.innerHTML = rows.map(day => {
+            const changeCls = day.change_pct > 0 ? 'change-positive' : day.change_pct < 0 ? 'change-negative' : '';
+            const changeText = day.change_pct != null ? `${day.change_pct > 0 ? '+' : ''}${day.change_pct}%` : '--';
+            const events = day.events || [{ title: day.title, type: day.type, severity: day.severity }];
+            const eventsList = events.map(e =>
+                `<div class="day-event"><span class="event-type-badge type-${e.type}">${e.type}</span> ${e.title}</div>`
+            ).join('');
             return `
                 <tr>
-                    <td>${ev.date}</td>
-                    <td>${ev.title}</td>
-                    <td><span class="event-type-badge type-${ev.type}">${ev.type}</span></td>
-                    <td><span class="severity-badge severity-${ev.severity}">${ev.severity}</span></td>
-                    <td>${ev.brent_before != null ? '$' + ev.brent_before.toFixed(2) : '--'}</td>
-                    <td>${ev.brent_after != null ? '$' + ev.brent_after.toFixed(2) : '--'}</td>
+                    <td>${day.date}</td>
+                    <td class="day-events-cell">${eventsList}</td>
+                    <td><span class="severity-badge severity-${day.severity}">${day.severity}</span></td>
+                    <td>${day.brent_before != null ? '$' + day.brent_before.toFixed(2) : '--'}</td>
+                    <td>${day.brent_after != null ? '$' + day.brent_after.toFixed(2) : '--'}</td>
                     <td class="${changeCls}">${changeText}</td>
                 </tr>
             `;
@@ -391,24 +394,31 @@ function renderCurrentEventsFiltered() {
     // Re-render impact bar chart (dims non-matching types)
     createIranImpactChart(iranImpactData.impact_by_type || {});
 
-    // Re-filter event table
+    // Re-filter event table (grouped by day)
     const tbody = document.getElementById('iranTableBody');
     if (tbody && iranImpactData.event_table) {
         let rows = iranImpactData.event_table.sort((a, b) => b.date.localeCompare(a.date));
         if (typeof iranFilter !== 'undefined' && iranFilter) {
-            rows = rows.filter(ev => ev.type === iranFilter.value);
+            // Filter days that contain at least one event of the filtered type
+            rows = rows.filter(day => {
+                const events = day.events || [{ type: day.type }];
+                return events.some(e => e.type === iranFilter.value);
+            });
         }
-        tbody.innerHTML = rows.map(ev => {
-            const changeCls = ev.change_pct > 0 ? 'change-positive' : ev.change_pct < 0 ? 'change-negative' : '';
-            const changeText = ev.change_pct != null ? `${ev.change_pct > 0 ? '+' : ''}${ev.change_pct}%` : '--';
+        tbody.innerHTML = rows.map(day => {
+            const changeCls = day.change_pct > 0 ? 'change-positive' : day.change_pct < 0 ? 'change-negative' : '';
+            const changeText = day.change_pct != null ? `${day.change_pct > 0 ? '+' : ''}${day.change_pct}%` : '--';
+            const events = day.events || [{ title: day.title, type: day.type, severity: day.severity }];
+            const eventsList = events.map(e =>
+                `<div class="day-event"><span class="event-type-badge type-${e.type}">${e.type}</span> ${e.title}</div>`
+            ).join('');
             return `
                 <tr>
-                    <td>${ev.date}</td>
-                    <td>${ev.title}</td>
-                    <td><span class="event-type-badge type-${ev.type}">${ev.type}</span></td>
-                    <td><span class="severity-badge severity-${ev.severity}">${ev.severity}</span></td>
-                    <td>${ev.brent_before != null ? '$' + ev.brent_before.toFixed(2) : '--'}</td>
-                    <td>${ev.brent_after != null ? '$' + ev.brent_after.toFixed(2) : '--'}</td>
+                    <td>${day.date}</td>
+                    <td class="day-events-cell">${eventsList}</td>
+                    <td><span class="severity-badge severity-${day.severity}">${day.severity}</span></td>
+                    <td>${day.brent_before != null ? '$' + day.brent_before.toFixed(2) : '--'}</td>
+                    <td>${day.brent_after != null ? '$' + day.brent_after.toFixed(2) : '--'}</td>
                     <td class="${changeCls}">${changeText}</td>
                 </tr>
             `;

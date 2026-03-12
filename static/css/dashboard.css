@@ -1128,6 +1128,12 @@ tbody tr:hover { background: rgba(201, 169, 110, 0.04); }
 .type-nuclear { background: rgba(123, 104, 174, 0.12); color: #7B68AE; }
 .type-proxy { background: rgba(201, 169, 110, 0.12); color: #C9A96E; }
 
+/* Day-grouped event table */
+.day-events-cell { text-align: left; }
+.day-event { padding: 3px 0; line-height: 1.4; }
+.day-event + .day-event { border-top: 1px solid rgba(201, 169, 110, 0.1); }
+.day-event .event-type-badge { margin-right: 6px; font-size: 10px; vertical-align: middle; }
+
 /* Live Intelligence Feed */
 .news-feed-container {
     max-height: 500px;
