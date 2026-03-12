@@ -31,7 +31,7 @@
     <script src="https://cdn.jsdelivr.net/npm/nouislider@15.8.1/dist/nouislider.min.js"></script>
 
     <!-- Dashboard CSS -->
-    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260311b">
+    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260311c">
 </head>
 <body>
 
@@ -497,6 +497,15 @@
                         <h3>Geospatial Attack Map — Iran & Israel Theaters</h3>
                         <div class="chart-header-right">
                             <div class="iran-map-controls">
+                                <select id="iranMapEventTypeFilter" class="iran-map-filter-select">
+                                    <option value="all">All Event Types</option>
+                                    <option value="Battles">Battles</option>
+                                    <option value="Explosions/Remote violence">Explosions</option>
+                                    <option value="Strategic developments">Strategic Dev.</option>
+                                    <option value="Protests">Protests</option>
+                                    <option value="Riots">Riots</option>
+                                    <option value="Violence against civilians">Violence vs Civilians</option>
+                                </select>
                                 <label class="map-toggle"><input type="checkbox" id="toggleIranEvents" checked> <span>Iran ACLED</span></label>
                                 <label class="map-toggle"><input type="checkbox" id="toggleIsraelEvents" checked> <span>Israel</span></label>
                                 <label class="map-toggle"><input type="checkbox" id="toggleCuratedEvents" checked> <span>Curated</span></label>
@@ -723,8 +732,8 @@
     </footer>
 
     <!-- Dashboard JS -->
-    <script src="/static/js/charts.js?v=20260311b"></script>
-    <script src="/static/js/map.js?v=20260311b"></script>
-    <script src="/static/js/app.js?v=20260311b"></script>
+    <script src="/static/js/charts.js?v=20260311c"></script>
+    <script src="/static/js/map.js?v=20260311c"></script>
+    <script src="/static/js/app.js?v=20260311c"></script>
 </body>
 </html>

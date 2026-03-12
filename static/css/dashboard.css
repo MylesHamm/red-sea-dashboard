@@ -1245,8 +1245,25 @@ tbody tr:hover { background: rgba(201, 169, 110, 0.04); }
 /* Iran/Israel geospatial map */
 .iran-map-controls {
     display: inline-flex;
+    align-items: center;
     gap: 12px;
     margin-right: 8px;
+}
+
+.iran-map-filter-select {
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    cursor: pointer;
+    outline: none;
+}
+.iran-map-filter-select:focus {
+    border-color: var(--gold);
 }
 
 .map-toggle {

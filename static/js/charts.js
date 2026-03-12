@@ -630,74 +630,80 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
     const ctx = document.getElementById('iranPriceTimelineChart');
     if (!ctx || !brentPrices || !brentPrices.length) return;
 
-    // Sort prices chronologically (defensive — backend may append supplemental data)
+    // Sort prices chronologically
     const sorted = [...brentPrices].sort((a, b) => a.date.localeCompare(b.date));
 
     // Filter based on zoom level
     const cutoff = zoomToWar ? '2026-01-15' : '2025-01-01';
     const filtered = sorted.filter(d => d.date >= cutoff);
 
-    // Build {x, y} data points for the time axis
-    const lineData = filtered.map(d => ({ x: d.date, y: d.price }));
+    // Use labels array (like the working overview charts) so mode:'index' works
+    const dates = filtered.map(d => d.date);
+    const prices = filtered.map(d => d.price);
 
-    // Build event scatter points from curated events (only those in range)
+    // Build event lookup by date for scatter overlay + tooltip afterBody
     const eventPoints = (curatedEvents || []).filter(ev => ev.date >= cutoff).map(ev => {
-        // Find closest Brent price by date for the y-value
-        let closestPrice = null;
-        let minDist = Infinity;
-        filtered.forEach(d => {
-            const dist = Math.abs(new Date(d.date) - new Date(ev.date));
-            if (dist < minDist) { minDist = dist; closestPrice = d.price; }
-        });
+        const idx = dates.indexOf(ev.date);
+        const closestPrice = idx >= 0 ? prices[idx] : null;
         return {
-            x: ev.date,
-            y: closestPrice,
+            date: ev.date,
+            price: closestPrice,
             title: ev.title,
             type: ev.type,
             severity: ev.severity,
             description: ev.description || '',
         };
-    }).filter(p => p.y != null);
+    }).filter(p => p.price != null);
+    const eventByDate = {};
+    eventPoints.forEach(p => { eventByDate[p.date] = p; });
+
+    // Build scatter data aligned to the labels axis (null for non-event dates)
+    const scatterData = dates.map(d => eventByDate[d] ? eventByDate[d].price : null);
 
     // Color events by type — dim non-matching when filter active
-    const eventColors = eventPoints.map(p => {
-        const base = IRAN_TYPE_COLORS[p.type] || COLORS.gold;
-        if (iranFilter && iranFilter.value !== p.type) return base + '33';
+    const eventColors = dates.map(d => {
+        const ev = eventByDate[d];
+        if (!ev) return 'transparent';
+        const base = IRAN_TYPE_COLORS[ev.type] || COLORS.gold;
+        if (iranFilter && iranFilter.value !== ev.type) return base + '33';
         return base;
     });
-    const eventRadii = eventPoints.map(p => {
-        if (iranFilter && iranFilter.value !== p.type) return 3;
-        return 4 + p.severity * 2;
+    const eventRadii = dates.map(d => {
+        const ev = eventByDate[d];
+        if (!ev) return 0;
+        if (iranFilter && iranFilter.value !== ev.type) return 3;
+        return 4 + ev.severity * 2;
     });
 
     chartInstances['iranPriceTimelineChart'] = new Chart(ctx, {
         data: {
+            labels: dates,
             datasets: [
                 {
                     type: 'line',
                     label: 'Brent Price (USD/bbl)',
-                    data: lineData,
+                    data: prices,
                     borderColor: COLORS.brent,
                     backgroundColor: COLORS.brentBg,
                     borderWidth: 2,
                     pointRadius: 0,
-                    pointHoverRadius: 5,
-                    pointHitRadius: 1000,
+                    pointHoverRadius: 4,
                     fill: true,
                     tension: 0.3,
                     yAxisID: 'y',
                     order: 2,
                 },
                 {
-                    type: 'scatter',
+                    type: 'line',
                     label: 'Major Events',
-                    data: eventPoints.map(p => ({ x: p.x, y: p.y })),
+                    data: scatterData,
+                    borderWidth: 0,
                     backgroundColor: eventColors,
-                    borderColor: eventColors.map(c => c),
-                    borderWidth: 2,
+                    borderColor: eventColors,
                     pointRadius: eventRadii,
-                    pointHoverRadius: 12,
+                    pointHoverRadius: eventRadii.map(r => r > 0 ? 12 : 0),
                     pointStyle: 'circle',
+                    showLine: false,
                     yAxisID: 'y',
                     order: 1,
                 }
@@ -705,7 +711,7 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
         },
         options: {
             ...CHART_DEFAULTS,
-            interaction: { mode: 'nearest', intersect: false },
+            interaction: { mode: 'index', intersect: false },
             scales: {
                 x: {
                     ...CHART_DEFAULTS.scales.x,
@@ -732,24 +738,19 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
                 tooltip: {
                     ...CHART_DEFAULTS.plugins.tooltip,
                     filter(item) {
-                        // Only show tooltip for the line dataset (index 0);
-                        // event info is appended via afterBody
+                        // Hide "Major Events" line from tooltip — show event info via afterBody
                         return item.datasetIndex === 0;
                     },
                     callbacks: {
-                        title(items) {
-                            const raw = items[0]?.raw;
-                            if (raw?.x) return raw.x;
-                            return items[0]?.label || '';
-                        },
                         label(context) {
                             return `Brent: $${context.parsed.y?.toFixed(2)}`;
                         },
                         afterBody(items) {
-                            // Show event info if the hovered date matches an event
-                            const date = items[0]?.raw?.x;
-                            if (!date) return [];
-                            const ev = eventPoints.find(p => p.x === date);
+                            // Use the raw label (date string) via dataIndex, not the formatted tooltip label
+                            const idx = items[0]?.dataIndex;
+                            if (idx == null) return [];
+                            const date = dates[idx];
+                            const ev = eventByDate[date];
                             if (!ev) return [];
                             return ['', `⬤ ${ev.title}`, `Type: ${ev.type.toUpperCase()} | Severity: ${ev.severity}/5`];
                         }
@@ -1352,6 +1353,10 @@ function initIranIsraelMap() {
         const el = document.getElementById(id);
         if (el) el.addEventListener('change', () => updateIranIsraelMapLayers());
     });
+
+    // Event type filter dropdown
+    const typeFilter = document.getElementById('iranMapEventTypeFilter');
+    if (typeFilter) typeFilter.addEventListener('change', () => updateIranIsraelMapLayers());
 }
 
 function loadIranIsraelMap(iranEvents, israelEvents, curatedEvents) {
@@ -1406,6 +1411,7 @@ function updateIranIsraelMapLayers() {
     const showIsrael = document.getElementById('toggleIsraelEvents')?.checked ?? true;
     const showCurated = document.getElementById('toggleCuratedEvents')?.checked ?? true;
     const showHeatmap = document.getElementById('toggleIranHeatmap')?.checked ?? true;
+    const eventTypeFilter = document.getElementById('iranMapEventTypeFilter')?.value || 'all';
 
     iranIsraelMarkerGroup.clearLayers();
 
@@ -1413,7 +1419,7 @@ function updateIranIsraelMapLayers() {
 
     // Iran ACLED events
     if (showIran) {
-        _iranMapData.iran.forEach(e => {
+        _iranMapData.iran.filter(e => eventTypeFilter === 'all' || e.type === eventTypeFilter).forEach(e => {
             const color = IRAN_MAP_EVENT_COLORS[e.type] || '#636E72';
             const radius = Math.max(4, Math.min(10, 4 + e.fatalities * 0.5));
             const marker = L.circleMarker([e.lat, e.lng], {
@@ -1431,7 +1437,7 @@ function updateIranIsraelMapLayers() {
 
     // Israel events
     if (showIsrael) {
-        _iranMapData.israel.forEach(e => {
+        _iranMapData.israel.filter(e => eventTypeFilter === 'all' || e.type === eventTypeFilter).forEach(e => {
             const color = IRAN_MAP_EVENT_COLORS[e.type] || '#636E72';
             const radius = Math.max(5, Math.min(10, 5 + e.fatalities * 0.5));
             const marker = L.circleMarker([e.lat, e.lng], {
@@ -1491,15 +1497,18 @@ function updateIranIsraelMapLayers() {
         iranIsraelMap.removeLayer(iranIsraelHeatLayer);
     }
 
-    // Update stats
+    // Update stats (respect event type filter)
     const el = (id, val) => { const elem = document.getElementById(id); if (elem) elem.textContent = val; };
-    el('iranMapStatIran', showIran ? _iranMapData.iran.length.toLocaleString() : '0');
-    el('iranMapStatIsrael', showIsrael ? _iranMapData.israel.length.toLocaleString() : '0');
+    const filterFn = e => eventTypeFilter === 'all' || e.type === eventTypeFilter;
+    const iranFiltered = _iranMapData.iran.filter(filterFn);
+    const israelFiltered = _iranMapData.israel.filter(filterFn);
+    el('iranMapStatIran', showIran ? iranFiltered.length.toLocaleString() : '0');
+    el('iranMapStatIsrael', showIsrael ? israelFiltered.length.toLocaleString() : '0');
     el('iranMapStatCurated', showCurated ? _iranMapData.curated.length.toLocaleString() : '0');
 
     let totalFatalities = 0;
-    if (showIran) totalFatalities += _iranMapData.iran.reduce((s, e) => s + e.fatalities, 0);
-    if (showIsrael) totalFatalities += _iranMapData.israel.reduce((s, e) => s + e.fatalities, 0);
+    if (showIran) totalFatalities += iranFiltered.reduce((s, e) => s + e.fatalities, 0);
+    if (showIsrael) totalFatalities += israelFiltered.reduce((s, e) => s + e.fatalities, 0);
     if (showCurated) totalFatalities += _iranMapData.curated.reduce((s, e) => s + (e.fatalities || 0), 0);
     el('iranMapStatFatalities', totalFatalities.toLocaleString());
 }
