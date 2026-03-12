@@ -139,8 +139,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function destroyChart(id) {
     if (chartInstances[id]) {
+        const canvas = chartInstances[id].canvas;
         chartInstances[id].destroy();
         delete chartInstances[id];
+        // Clear stale inline styles left by Chart.js (critical for charts
+        // created while their tab was hidden — they get stuck at 0×0)
+        if (canvas) {
+            canvas.removeAttribute('style');
+            canvas.removeAttribute('width');
+            canvas.removeAttribute('height');
+        }
     }
 }
 
@@ -697,7 +705,7 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
         },
         options: {
             ...CHART_DEFAULTS,
-            interaction: { mode: 'index', intersect: false, axis: 'x' },
+            interaction: { mode: 'nearest', intersect: false, axis: 'x' },
             scales: {
                 x: {
                     ...CHART_DEFAULTS.scales.x,

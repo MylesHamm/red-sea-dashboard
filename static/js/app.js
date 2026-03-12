@@ -36,14 +36,25 @@ function switchTab(tab) {
         }
     }
 
-    // Initialize Iran/Israel map on current events tab visit
+    // Initialize Iran/Israel map + resize charts on current events tab visit
+    // (Chart.js needs a visible parent to compute correct canvas dimensions)
     if (tab === 'currentevents') {
         setTimeout(() => {
             if (iranEventsData) {
                 _loadIranIsraelMapFromData();
             }
             resizeIranIsraelMap();
-        }, 200);
+            // Re-render charts that may have been created while tab was hidden (0×0 canvas)
+            if (iranImpactData) {
+                const brentPrices = iranImpactData.brent_prices || (masterData ? masterData.timeseries.filter(d => d.brent_price).map(d => ({ date: d.date, price: d.brent_price })) : []);
+                const curated = iranEventsData ? iranEventsData.curated || [] : [];
+                const isWarZoom = document.getElementById('zoomWar')?.classList.contains('active') ?? true;
+                createIranPriceTimelineChart(brentPrices, curated, isWarZoom);
+                createIranForecastChart(brentPrices);
+                createIranImpactChart(iranImpactData.impact_by_type || {});
+                if (iranEventsData) createIranEventTypeChart(iranEventsData.data || []);
+            }
+        }, 150);
     }
 
     // Re-render correlation heatmap when controls tab becomes visible
