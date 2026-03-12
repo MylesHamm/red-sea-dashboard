@@ -774,39 +774,58 @@ function createIranForecastChart(brentPrices) {
         forecastDates.push(d.toISOString().split('T')[0]);
     }
 
-    // ── Scenario modeling ──
-    // Base: Strait of Hormuz closure persists, ~21% of global oil transit disrupted
-    // Pre-war Brent was ~$71. War has pushed to ~$92 (+29%), spiking to $119 intraday.
+    // ── Dynamic scenario modeling ──
+    // Scenarios are computed as percentage moves from the latest actual price.
     // Historical precedents:
     //   1990 Gulf War: Brent doubled ($20→$40) when 4.3 mbd disrupted
     //   1979 Iranian Revolution: +150% over 12 months
     //   2019 Aramco attack: +15% spike, recovered in weeks
     // Hormuz handles ~21 mbd (21% of global oil). Full closure = catastrophic.
 
-    // Scenario 1: Escalation — War intensifies, Hormuz remains closed, Iranian attacks
-    // widen to Gulf infrastructure. Brent moves toward $100-$120.
+    // Scenario ranges (% of lastPrice)
+    const escGain = lastPrice * 0.40;   // +40% over 30 days (war widens)
+    const susGain = lastPrice * 0.15;   // +15% over 30 days (slow grind)
+    const ceaseDropAbs = lastPrice * 0.15; // -15% over 30 days (risk unwinds)
+
+    // Compute 30-day target ranges for display
+    const escLow  = Math.round(lastPrice + escGain * 0.7);
+    const escHigh = Math.round(lastPrice + escGain);
+    const susLow  = Math.round(lastPrice + susGain * 0.5);
+    const susHigh = Math.round(lastPrice + susGain);
+    const ceaseLow  = Math.round(lastPrice - ceaseDropAbs);
+    const ceaseHigh = Math.round(lastPrice - ceaseDropAbs * 0.5);
+
+    // Scenario 1: Escalation — War intensifies, Hormuz stays closed
     const escalation = forecastDates.map((d, i) => {
         const dayFrac = (i + 1) / forecastDates.length;
-        // Aggressive climb with volatility
-        const trend = lastPrice + (35 * dayFrac) + (5 * Math.sin(dayFrac * Math.PI * 3));
+        const trend = lastPrice + (escGain * dayFrac) + (escGain * 0.08 * Math.sin(dayFrac * Math.PI * 3));
         return Math.round(trend * 100) / 100;
     });
 
-    // Scenario 2: Sustained conflict — Hormuz partially blocked, insurance premiums
-    // keep most tankers away, slow grind higher. Brent $90-$100 range.
+    // Scenario 2: Sustained conflict — partial blockade, insurance-driven
     const sustained = forecastDates.map((d, i) => {
         const dayFrac = (i + 1) / forecastDates.length;
-        const trend = lastPrice + (15 * dayFrac) + (3 * Math.sin(dayFrac * Math.PI * 2));
+        const trend = lastPrice + (susGain * dayFrac) + (susGain * 0.1 * Math.sin(dayFrac * Math.PI * 2));
         return Math.round(trend * 100) / 100;
     });
 
-    // Scenario 3: Ceasefire/De-escalation — Diplomatic breakthrough, Hormuz reopens,
-    // price retreats toward $75-$80. Still elevated vs pre-war due to risk premium.
+    // Scenario 3: Ceasefire — Hormuz reopens, risk premium unwinds
     const deescalation = forecastDates.map((d, i) => {
         const dayFrac = (i + 1) / forecastDates.length;
-        const trend = lastPrice - (8 * dayFrac) + (2 * Math.sin(dayFrac * Math.PI * 2));
+        const trend = lastPrice - (ceaseDropAbs * dayFrac) + (ceaseDropAbs * 0.1 * Math.sin(dayFrac * Math.PI * 2));
         return Math.round(trend * 100) / 100;
     });
+
+    // Update HTML scenario target labels with live-computed ranges
+    const setEl = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    setEl('scenarioTargetEsc', `Target: $${escLow} — $${escHigh}/bbl`);
+    setEl('scenarioTargetSus', `Target: $${susLow} — $${susHigh}/bbl`);
+    setEl('scenarioTargetCease', `Target: $${ceaseLow} — $${ceaseHigh}/bbl`);
+
+    // Chart legend labels with live ranges
+    const escLabel = `Escalation ($${escLow}-$${escHigh})`;
+    const susLabel = `Sustained Conflict ($${susLow}-$${susHigh})`;
+    const ceaseLabel = `Ceasefire ($${ceaseLow}-$${ceaseHigh})`;
 
     // Combined labels: historical + forecast
     const allDates = [...histDates, ...forecastDates];
@@ -832,7 +851,7 @@ function createIranForecastChart(brentPrices) {
                     tension: 0.3,
                 },
                 {
-                    label: 'Escalation ($100-$120)',
+                    label: escLabel,
                     data: escLine,
                     borderColor: '#C43D3D',
                     backgroundColor: 'rgba(196, 61, 61, 0.08)',
@@ -843,7 +862,7 @@ function createIranForecastChart(brentPrices) {
                     tension: 0.3,
                 },
                 {
-                    label: 'Sustained Conflict ($90-$100)',
+                    label: susLabel,
                     data: susLine,
                     borderColor: '#E07B4C',
                     backgroundColor: 'rgba(224, 123, 76, 0.08)',
@@ -854,7 +873,7 @@ function createIranForecastChart(brentPrices) {
                     tension: 0.3,
                 },
                 {
-                    label: 'Ceasefire/De-escalation ($75-$80)',
+                    label: ceaseLabel,
                     data: deescLine,
                     borderColor: '#2E7D5B',
                     backgroundColor: 'rgba(46, 125, 91, 0.08)',

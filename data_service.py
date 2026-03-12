@@ -319,9 +319,8 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
         {"date": "2026-03-04", "price": 81.56},   # Slight pullback amid heavy strikes
         {"date": "2026-03-05", "price": 88.59},   # Brent surges on insurance withdrawal, 500+ missiles
         {"date": "2026-03-06", "price": 95.74},   # Analysts warn $100+; Iran strikes Gulf states
-        # Mar 7 (Sat) — no regular session
-        {"date": "2026-03-08", "price": 119.00},  # Sunday electronic trading: Brent spikes to $119 after Israel hits oil infra
-        {"date": "2026-03-09", "price": 98.96},   # Monday settlement: profit-taking pulls price back to ~$99
+        # Mar 7 (Sat) and Mar 8 (Sun) — no settlement
+        {"date": "2026-03-09", "price": 98.96},   # Brent settles +3.4% from Friday; hit $119 intraday
         {"date": "2026-03-10", "price": 87.80},   # Sharp pullback (-11.3%) as Trump signals war "very complete"
         {"date": "2026-03-11", "price": 91.98},   # CNBC: Brent +4.76% as IEA releases 400M bbl reserves
     ]

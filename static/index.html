@@ -464,7 +464,7 @@
                         <h3>Brent Crude Price Forecast — Scenario Analysis</h3>
                         <div class="chart-header-right">
                             <span class="chart-badge" style="background:rgba(196,61,61,0.12);color:#C43D3D">Forecast</span>
-                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">30-day scenario-based price projection. Escalation: Hormuz remains closed, war widens to Gulf infrastructure ($100-$120). Sustained Conflict: partial blockade, insurance-driven disruption ($90-$100). Ceasefire: diplomatic breakthrough, Hormuz reopens ($75-$80). Based on historical precedents (1990 Gulf War, 1979 Iran Revolution, 2019 Aramco attack).</span></div>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">30-day scenario-based price projection from the latest settlement price. Escalation: Hormuz remains closed, war widens to Gulf infrastructure (+30-50%). Sustained Conflict: partial blockade, insurance-driven disruption (+10-20%). Ceasefire: diplomatic breakthrough, Hormuz reopens (-10-20%). Based on historical precedents (1990 Gulf War, 1979 Iran Revolution, 2019 Aramco attack). Ranges update automatically with each new price.</span></div>
                         </div>
                     </div>
                     <div class="chart-wrapper" style="height:400px">
@@ -474,17 +474,17 @@
                         <div class="forecast-scenario scenario-escalation">
                             <div class="scenario-header"><span class="scenario-dot" style="background:#C43D3D"></span>Escalation</div>
                             <div class="scenario-detail">Hormuz closed, war widens to Gulf infrastructure. Up to ~21 mbd at risk (~13-15 mbd net disruption after pipeline bypasses). Historical parallel: 1990 Gulf War (+100%).</div>
-                            <div class="scenario-target">Target: $100 — $120/bbl</div>
+                            <div class="scenario-target" id="scenarioTargetEsc">Target: --</div>
                         </div>
                         <div class="forecast-scenario scenario-sustained">
                             <div class="scenario-header"><span class="scenario-dot" style="background:#E07B4C"></span>Sustained Conflict</div>
                             <div class="scenario-detail">Partial Hormuz blockade, insurance premiums deter transits. SPR releases partially offset. Slow grind higher.</div>
-                            <div class="scenario-target">Target: $90 — $100/bbl</div>
+                            <div class="scenario-target" id="scenarioTargetSus">Target: --</div>
                         </div>
                         <div class="forecast-scenario scenario-ceasefire">
                             <div class="scenario-header"><span class="scenario-dot" style="background:#2E7D5B"></span>Ceasefire / De-escalation</div>
                             <div class="scenario-detail">Diplomatic breakthrough, Hormuz reopens. Risk premium unwinds but remains elevated vs pre-war levels.</div>
-                            <div class="scenario-target">Target: $75 — $80/bbl</div>
+                            <div class="scenario-target" id="scenarioTargetCease">Target: --</div>
                         </div>
                     </div>
                 </div>
@@ -549,7 +549,7 @@
                 <div class="chart-card full-width">
                     <div class="chart-header">
                         <h3>Major US-Iran Events — Oil Price Impact</h3>
-                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Curated timeline of major US-Iran geopolitical events with Brent crude price before and 3 days after each event. Change % shows the directional market response to each event.</span></div>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Curated timeline of major US-Iran geopolitical events grouped by trading day. 'Before' is the previous trading day's close; 'After' is that day's settlement. Change % shows the single-day market response. Weekend events are grouped with the next trading day.</span></div>
                     </div>
                     <div class="table-container iran-table">
                         <table id="iranEventTable">
