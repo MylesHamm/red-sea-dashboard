@@ -673,7 +673,8 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
                     backgroundColor: COLORS.brentBg,
                     borderWidth: 2,
                     pointRadius: 0,
-                    pointHoverRadius: 4,
+                    pointHoverRadius: 5,
+                    pointHitRadius: 20,
                     fill: true,
                     tension: 0.3,
                     yAxisID: 'y',
@@ -696,7 +697,7 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
         },
         options: {
             ...CHART_DEFAULTS,
-            interaction: { mode: 'nearest', intersect: true },
+            interaction: { mode: 'index', intersect: false, axis: 'x' },
             scales: {
                 x: {
                     ...CHART_DEFAULTS.scales.x,

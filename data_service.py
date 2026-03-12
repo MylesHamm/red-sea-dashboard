@@ -310,21 +310,20 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
     by_date = {r["date"]: r for r in eia_records}
     last_date = max(by_date.keys()) if by_date else "2023-10-01"
 
-    # Verified war-period Brent crude settlements from news sources (CNBC, Reuters, Bloomberg, etc.)
-    # These override Yahoo Finance for dates beyond EIA reporting lag.
+    # Fallback war-period Brent crude settlements from news sources (CNBC, Reuters, Bloomberg, etc.)
+    # Used ONLY when live data (EIA/Yahoo Finance) is unavailable for a given date.
     # Note: Mar 7 (Sat) and Mar 8 (Sun) are non-trading days — no settlements.
-    reported_prices = [
-        {"date": "2026-03-02", "price": 77.24},   # First trading day after war started Feb 28 (Sat)
-        {"date": "2026-03-03", "price": 83.28},   # Brent surges as shipping suspended
-        {"date": "2026-03-04", "price": 81.56},   # Slight pullback amid heavy strikes
-        {"date": "2026-03-05", "price": 88.59},   # Brent surges on insurance withdrawal, 500+ missiles
-        {"date": "2026-03-06", "price": 95.74},   # Analysts warn $100+; Iran strikes Gulf states
+    fallback_prices = {
+        "2026-03-02": 77.24,   # First trading day after war started Feb 28 (Sat)
+        "2026-03-03": 83.28,   # Brent surges as shipping suspended
+        "2026-03-04": 81.56,   # Slight pullback amid heavy strikes
+        "2026-03-05": 88.59,   # Brent surges on insurance withdrawal, 500+ missiles
+        "2026-03-06": 95.74,   # Analysts warn $100+; Iran strikes Gulf states
         # Mar 7 (Sat) and Mar 8 (Sun) — no settlement
-        {"date": "2026-03-09", "price": 98.96},   # Brent settles +3.4% from Friday; hit $119 intraday
-        {"date": "2026-03-10", "price": 87.80},   # Sharp pullback (-11.3%) as Trump signals war "very complete"
-        {"date": "2026-03-11", "price": 91.98},   # CNBC: Brent +4.76% as IEA releases 400M bbl reserves
-    ]
-    reported_dates = {p["date"] for p in reported_prices}
+        "2026-03-09": 98.96,   # Brent settles +3.4% from Friday; hit $119 intraday
+        "2026-03-10": 87.80,   # Sharp pullback (-11.3%) as Trump signals war "very complete"
+        "2026-03-11": 91.98,   # CNBC: Brent +4.76% as IEA releases 400M bbl reserves
+    }
 
     # Try Yahoo Finance direct API (more reliable than yfinance library)
     try:
@@ -348,7 +347,7 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
                 if close is None:
                     continue
                 d = datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
-                if d > last_date and d not in reported_dates:
+                if d > last_date:
                     by_date[d] = {"date": d, "price": round(float(close), 2)}
                     added += 1
             if added > 0:
@@ -356,8 +355,9 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
     except Exception as e:
         logger.warning(f"Yahoo Finance API failed: {e}")
 
-    # Fallback: try yfinance library for dates not covered by reported prices
-    if not any(d > last_date and d not in reported_dates for d in by_date):
+    # Fallback: try yfinance library for any remaining gaps
+    live_dates_after = {d for d in by_date if d > last_date}
+    if not live_dates_after:
         try:
             import yfinance as yf
             df = yf.download("BZ=F", start=last_date, progress=False)
@@ -366,14 +366,16 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
                     df.columns = df.columns.get_level_values(0)
                 for idx, row in df.iterrows():
                     d = idx.strftime("%Y-%m-%d")
-                    if pd.notna(row.get("Close")) and d > last_date and d not in reported_dates:
+                    if pd.notna(row.get("Close")) and d > last_date:
                         by_date[d] = {"date": d, "price": round(float(row["Close"]), 2)}
         except Exception as e:
             logger.warning(f"Brent yfinance failed: {e}")
 
-    # Apply verified war-period prices (always override EIA/Yahoo data for these dates)
-    for p in reported_prices:
-        by_date[p["date"]] = p
+    # Apply fallback prices ONLY for dates not already covered by live data
+    for date_str, price in fallback_prices.items():
+        if date_str not in by_date:
+            by_date[date_str] = {"date": date_str, "price": price}
+            logger.info(f"Brent: using fallback price for {date_str}: ${price}")
     if len(by_date) > len(eia_records):
         logger.info(f"Brent: supplemented {len(by_date) - len(eia_records)} prices after {last_date}")
 
