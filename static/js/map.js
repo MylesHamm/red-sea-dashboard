@@ -20,14 +20,20 @@ const MARITIME_LOCATION = /red sea|gulf of aden|bab el.mandeb|strait of hormuz|a
 const MARITIME_EVENT = /\b(vessel|ship|tanker|maritime|navy|destroyer|frigate|warship|anti-ship|drone.?boat|hijack|boarding|piracy|naval|USS |HMS |USNS |MV |MT |IMO:|missile.*launch|intercept(?:ed|ion)|shot down|drone|ballistic|cruise missile|one-way attack|houthi.*fire|fire.*houthi|sea mine)\b/i;
 const MARITIME_LOC = /red sea|gulf of aden|bab el.mandeb|strait|arabian sea|indian ocean|mediterranean|south red sea|north red sea|west arabian/i;
 
+// Strict ship/vessel keywords — the thesis counts attacks on vessels, not land targets
+const SHIP_KEYWORDS = /\b(vessel|ship|tanker|cargo|bulk.?carrier|container.?ship|MV |MT |HMS |USS |USNS |warship|destroyer|frigate|corvette|naval|navy|maritime|hijack|boarding|piracy|sea.?mine)\b/i;
+
 function isMaritimeRelevant(event) {
     const loc = event.location || '';
     const notes = event.notes || '';
-    // Include if in a maritime location
-    if (MARITIME_LOC.test(loc)) return true;
-    // Include if notes reference maritime/shipping activity
-    if (MARITIME_EVENT.test(notes) && MARITIME_LOC.test(notes)) return true;
-    return false;
+
+    // Thesis scope: only events involving actual ships/vessels in maritime zones.
+    // This is the independent variable (weekly attack frequency) in H1/H2/H3.
+    const inMaritimeZone = MARITIME_LOC.test(loc) || MARITIME_LOC.test(notes);
+    const involvesShip = SHIP_KEYWORDS.test(notes);
+
+    // Must be in a maritime zone AND involve an actual ship/vessel
+    return inMaritimeZone && involvesShip;
 }
 
 const CHOKEPOINT_LAT_MIN = 12.4;
