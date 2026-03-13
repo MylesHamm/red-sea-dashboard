@@ -632,8 +632,52 @@ function _loadIranIsraelMapFromData() {
 
     initIranIsraelMap();
     loadIranIsraelMap(iranAcled, israelEvents, curated);
+    renderCuratedTimeline(curated);
 }
 
+// ─── Curated Event Timeline (full detail panel) ─────────────────────────────
+
+function renderCuratedTimeline(events) {
+    const container = document.getElementById('curatedTimelineContainer');
+    const countEl = document.getElementById('curatedEventCount');
+    if (!container || !events || !events.length) return;
+
+    // Sort newest first
+    const sorted = [...events].sort((a, b) => b.date.localeCompare(a.date));
+    if (countEl) countEl.textContent = `${sorted.length} events`;
+
+    container.innerHTML = sorted.map(e => {
+        const severity = '\u2605'.repeat(e.severity || 0);
+        const fatStr = e.fatalities ? `<div class="curated-timeline-fatalities">${e.fatalities.toLocaleString()} fatalities</div>` : '';
+        return `
+            <div class="curated-timeline-item" data-lat="${e.lat}" data-lon="${e.lon || e.lng}">
+                <div class="curated-timeline-date">${e.date}</div>
+                <div class="curated-timeline-body">
+                    <div class="curated-timeline-title">${e.title}</div>
+                    <div class="curated-timeline-meta">
+                        <span class="curated-timeline-type type-${e.type}">${e.type}</span>
+                        <span class="curated-timeline-severity">${severity}</span>
+                        <span class="curated-timeline-location">${e.location || ''}</span>
+                    </div>
+                    <div class="curated-timeline-desc">${e.description}</div>
+                    ${fatStr}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Click to fly to location on map
+    container.querySelectorAll('.curated-timeline-item').forEach(el => {
+        el.addEventListener('click', () => {
+            const lat = parseFloat(el.dataset.lat);
+            const lon = parseFloat(el.dataset.lon);
+            if (!isNaN(lat) && !isNaN(lon) && typeof iranIsraelMap !== 'undefined' && iranIsraelMap) {
+                document.querySelector('.iran-map-layout')?.scrollIntoView({ behavior: 'smooth' });
+                setTimeout(() => iranIsraelMap.flyTo([lat, lon], 8, { duration: 1.2 }), 300);
+            }
+        });
+    });
+}
 
 // ─── Maritime Traffic ────────────────────────────────────────────────────────
 

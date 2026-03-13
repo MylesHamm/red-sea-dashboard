@@ -73,7 +73,7 @@ function initMap() {
         radius: 25,
         blur: 15,
         maxZoom: 10,
-        gradient: { 0.2: '#3D6B99', 0.4: '#D4A843', 0.6: '#E07B4C', 0.8: '#C43D3D', 1.0: '#8B0000' }
+        gradient: { 0.1: '#0a2463', 0.3: '#00d4ff33', 0.5: '#00d4ff', 0.7: '#ffcc00', 0.85: '#ff4444', 1.0: '#ff0000' }
     }).addTo(map);
 
     markerClusterGroup = L.markerClusterGroup({
@@ -95,11 +95,11 @@ function initMap() {
     chokepointRect = L.rectangle(
         [[CHOKEPOINT_LAT_MIN, 41.5], [CHOKEPOINT_LAT_MAX, 45.5]],
         {
-            color: '#D4A843',
-            weight: 2,
+            color: '#00d4ff',
+            weight: 1.5,
             dashArray: '6 4',
-            fillColor: '#D4A843',
-            fillOpacity: 0.08,
+            fillColor: '#00d4ff',
+            fillOpacity: 0.04,
         }
     ).addTo(map);
 
@@ -107,7 +107,7 @@ function initMap() {
     L.marker([12.6, 43.4], {
         icon: L.divIcon({
             className: 'chokepoint-label',
-            html: '<div style="background:rgba(27,42,74,0.9);color:#C9A96E;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap;font-family:Inter,sans-serif">Bab el-Mandeb Strait</div>',
+            html: '<div style="background:rgba(7,13,21,0.85);color:#00d4ff;padding:2px 6px;border:1px solid rgba(0,212,255,0.2);border-radius:2px;font-size:9px;font-weight:700;white-space:nowrap;font-family:\'SF Mono\',\'Fira Code\',Consolas,monospace;letter-spacing:1.5px">BAB EL-MANDEB STRAIT</div>',
             iconSize: [140, 24],
             iconAnchor: [70, 12],
         })
@@ -123,9 +123,9 @@ function initMap() {
             font-family: Inter, sans-serif; font-size: 12px;
             box-shadow: 0 2px 6px rgba(0,0,0,0.3);
         }
-        .cluster-small { background: rgba(61,107,153,0.85); width: 30px; height: 30px; }
-        .cluster-medium { background: rgba(212,168,67,0.85); width: 36px; height: 36px; }
-        .cluster-large { background: rgba(196,61,61,0.85); width: 42px; height: 42px; font-size: 14px; }
+        .cluster-small { background: rgba(0,212,255,0.7); width: 30px; height: 30px; box-shadow: 0 0 8px rgba(0,212,255,0.4); }
+        .cluster-medium { background: rgba(255,204,0,0.7); width: 36px; height: 36px; box-shadow: 0 0 8px rgba(255,204,0,0.4); }
+        .cluster-large { background: rgba(255,68,68,0.7); width: 42px; height: 42px; font-size: 14px; box-shadow: 0 0 10px rgba(255,68,68,0.4); }
     `;
     document.head.appendChild(style);
 
@@ -183,34 +183,48 @@ function updateMapLayers() {
             const marker = L.circleMarker([e.lat, e.lng], {
                 radius: size,
                 fillColor: color,
-                color: '#fff',
-                weight: 1,
-                fillOpacity: 0.8,
+                color: color,
+                weight: 1.5,
+                fillOpacity: 0.55,
+                opacity: 0.8,
             });
+
+            // Glow ring for tanker targets
+            if (e.isTanker) {
+                const glow = L.circleMarker([e.lat, e.lng], {
+                    radius: size + 4,
+                    fillColor: color,
+                    color: color,
+                    weight: 0,
+                    fillOpacity: 0.15,
+                    interactive: false,
+                });
+                markerClusterGroup.addLayer(glow);
+            }
 
             const dateStr = e.event_date ? e.event_date.substring(0, 10) : 'Unknown';
             const notesShort = (e.notes || '').substring(0, 200);
 
             marker.bindPopup(`
-                <div style="font-family:Inter,sans-serif;max-width:300px">
-                    <div style="font-weight:700;font-size:13px;margin-bottom:6px;color:#1B2A4A">${dateStr}</div>
-                    <div style="font-size:12px;margin-bottom:4px">
-                        <span style="color:#636E72">Type:</span> ${e.event_type || 'N/A'}
+                <div style="font-family:'SF Mono','Fira Code',Consolas,monospace;max-width:300px">
+                    <div style="font-weight:700;font-size:11px;margin-bottom:6px;color:#00d4ff;letter-spacing:1px">${dateStr}</div>
+                    <div style="font-size:10px;margin-bottom:3px">
+                        <span style="color:#5a6a7a">TYPE</span> <span style="color:#c0cad8;margin-left:4px">${e.event_type || 'N/A'}</span>
                     </div>
-                    <div style="font-size:12px;margin-bottom:4px">
-                        <span style="color:#636E72">Sub-type:</span> ${e.sub_event_type || 'N/A'}
+                    <div style="font-size:10px;margin-bottom:3px">
+                        <span style="color:#5a6a7a">SUB</span> <span style="color:#c0cad8;margin-left:4px">${e.sub_event_type || 'N/A'}</span>
                     </div>
-                    <div style="font-size:12px;margin-bottom:4px">
-                        <span style="color:#636E72">Actor:</span> ${e.actor1 || 'N/A'}
+                    <div style="font-size:10px;margin-bottom:3px">
+                        <span style="color:#5a6a7a">ACTOR</span> <span style="color:#c0cad8;margin-left:4px">${e.actor1 || 'N/A'}</span>
                     </div>
-                    <div style="font-size:12px;margin-bottom:4px">
-                        <span style="color:#636E72">Location:</span> ${e.location || 'N/A'}
+                    <div style="font-size:10px;margin-bottom:3px">
+                        <span style="color:#5a6a7a">LOC</span> <span style="color:#c0cad8;margin-left:4px">${e.location || 'N/A'}</span>
                     </div>
-                    <div style="font-size:12px;margin-bottom:4px">
-                        <span style="color:#636E72">Fatalities:</span> ${e.fatalities}
+                    <div style="font-size:10px;margin-bottom:3px">
+                        <span style="color:#5a6a7a">KIA</span> <strong style="color:${e.fatalities > 0 ? '#ff4444' : '#c0cad8'};margin-left:4px">${e.fatalities}</strong>
                     </div>
-                    ${e.isTanker ? '<div style="font-size:11px;color:#C43D3D;font-weight:600;margin-top:6px">⚠ TANKER/ENERGY TARGET</div>' : ''}
-                    <div style="font-size:11px;color:#636E72;margin-top:8px;line-height:1.4">${notesShort}${(e.notes || '').length > 200 ? '...' : ''}</div>
+                    ${e.isTanker ? '<div style="font-size:10px;color:#ff4444;font-weight:700;margin-top:6px;letter-spacing:0.5px">TANKER / ENERGY TARGET</div>' : ''}
+                    <div style="font-size:9px;color:#4a5a6a;margin-top:8px;line-height:1.4">${notesShort}${(e.notes || '').length > 200 ? '...' : ''}</div>
                 </div>
             `, { maxWidth: 320 });
 

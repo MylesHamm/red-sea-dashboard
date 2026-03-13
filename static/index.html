@@ -31,7 +31,7 @@
     <script src="https://cdn.jsdelivr.net/npm/nouislider@15.8.1/dist/nouislider.min.js"></script>
 
     <!-- Dashboard CSS -->
-    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260313a">
+    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260313b">
 </head>
 <body>
 
@@ -62,6 +62,7 @@
             <button class="tab-btn" data-tab="data">Data Explorer</button>
             <button class="tab-btn" data-tab="currentevents">US-Iran Tensions</button>
             <button class="tab-btn" data-tab="maritime">Maritime Traffic</button>
+            <button class="tab-btn" data-tab="sources">Sources</button>
         </nav>
     </header>
 
@@ -175,60 +176,27 @@
                 </div>
                 <!-- Side Panel -->
                 <div class="map-sidebar">
-                    <h3>Map Controls</h3>
+                    <h3>Filters</h3>
                     <div class="map-control-group">
-                        <label class="toggle-label">
-                            <input type="checkbox" id="toggleHeatmap" checked>
-                            <span>Heatmap Layer</span>
-                        </label>
-                        <label class="toggle-label">
-                            <input type="checkbox" id="toggleMarkers" checked>
-                            <span>Attack Markers</span>
-                        </label>
-                        <label class="toggle-label">
-                            <input type="checkbox" id="toggleChokepoint" checked>
-                            <span>Chokepoint Zone</span>
-                        </label>
-                        <label class="toggle-label">
-                            <input type="checkbox" id="filterTankers">
-                            <span>Tanker Targets Only</span>
-                        </label>
+                        <label class="toggle-label"><input type="checkbox" id="toggleHeatmap" checked> <span>Heatmap Overlay</span></label>
+                        <label class="toggle-label"><input type="checkbox" id="toggleMarkers" checked> <span>Attack Markers</span></label>
+                        <label class="toggle-label"><input type="checkbox" id="toggleChokepoint" checked> <span>Chokepoint Zone</span></label>
+                        <label class="toggle-label"><input type="checkbox" id="filterTankers"> <span>Tanker Targets Only</span></label>
                     </div>
 
-                    <h3>Attack Statistics</h3>
+                    <h3>Situational Awareness</h3>
                     <div class="stats-grid">
-                        <div class="stat-item">
-                            <div class="stat-value" id="stat-total">--</div>
-                            <div class="stat-label">Total Events</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-value" id="stat-tanker">--</div>
-                            <div class="stat-label">Tanker Attacks</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-value" id="stat-chokepoint">--</div>
-                            <div class="stat-label">Chokepoint Zone</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-value" id="stat-fatalities">--</div>
-                            <div class="stat-label">Fatalities</div>
-                        </div>
+                        <div class="stat-item"><div class="stat-value" id="stat-total">--</div><div class="stat-label">Total Events</div></div>
+                        <div class="stat-item"><div class="stat-value" id="stat-tanker">--</div><div class="stat-label">Tanker Attacks</div></div>
+                        <div class="stat-item"><div class="stat-value" id="stat-chokepoint">--</div><div class="stat-label">Chokepoint Zone</div></div>
+                        <div class="stat-item"><div class="stat-value" id="stat-fatalities">--</div><div class="stat-label">Confirmed KIA</div></div>
                     </div>
 
-                    <h3>Legend</h3>
+                    <h3>Classification</h3>
                     <div class="map-legend">
-                        <div class="legend-item">
-                            <span class="legend-dot" style="background:#C43D3D"></span>
-                            Tanker / Energy Target
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-dot" style="background:#3D6B99"></span>
-                            General Commercial
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-rect" style="background:rgba(212,168,67,0.2); border:1px solid #D4A843"></span>
-                            Bab el-Mandeb Zone
-                        </div>
+                        <div class="legend-item"><span class="legend-dot" style="background:#C43D3D;box-shadow:0 0 6px rgba(196,61,61,0.6)"></span> Tanker / Energy Target</div>
+                        <div class="legend-item"><span class="legend-dot" style="background:#3D6B99;box-shadow:0 0 6px rgba(61,107,153,0.6)"></span> General Commercial</div>
+                        <div class="legend-item"><span class="legend-rect" style="background:rgba(0,212,255,0.08); border:1px solid rgba(0,212,255,0.3)"></span> Bab el-Mandeb Zone</div>
                     </div>
                 </div>
             </div>
@@ -541,6 +509,20 @@
                 </div><!-- /.iran-map-grid -->
             </div>
 
+            <!-- Curated Event Timeline (full detail) -->
+            <div class="chart-card full-width iran-event-timeline-card">
+                <div class="chart-header">
+                    <h3>Curated Event Timeline</h3>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <span class="event-timeline-count" id="curatedEventCount">--</span>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Full curated timeline of major US-Iran events with descriptions, severity ratings, and geolocations. Click any event to fly to its location on the map.</span></div>
+                    </div>
+                </div>
+                <div id="curatedTimelineContainer" class="curated-timeline-container">
+                    <p class="news-feed-loading">Loading events...</p>
+                </div>
+            </div>
+
             <!-- Row 2: Event Type Breakdown + Impact Analysis -->
             <div class="chart-row two-col">
                 <div class="chart-card">
@@ -735,6 +717,74 @@
         </div>
     </section>
 
+    <!-- ═══ TAB 8: SOURCES & METHODOLOGY ═══ -->
+    <section class="tab-content" id="tab-sources">
+        <div class="container">
+            <h2 style="font-size:18px;font-weight:700;color:var(--navy);margin-bottom:20px">Data Sources & Methodology</h2>
+
+            <div class="sources-grid">
+                <div class="source-card">
+                    <span class="source-badge api">API</span>
+                    <h4>ACLED (Armed Conflict Location & Event Data)</h4>
+                    <p>All conflict event data for Iran and Israel. Includes event type, sub-type, actors, fatalities, and precise geolocations. Updated weekly with 1-7 day lag.</p>
+                    <a class="source-link" href="https://acleddata.com" target="_blank" rel="noopener">acleddata.com</a>
+                </div>
+                <div class="source-card">
+                    <span class="source-badge api">API</span>
+                    <h4>U.S. Energy Information Administration (EIA)</h4>
+                    <p>Brent crude oil daily spot prices (Europe FOB). Primary dependent variable in all regression models. Historical data from 2023 to present.</p>
+                    <a class="source-link" href="https://www.eia.gov/petroleum/" target="_blank" rel="noopener">eia.gov/petroleum</a>
+                </div>
+                <div class="source-card">
+                    <span class="source-badge api">API</span>
+                    <h4>Federal Reserve Economic Data (FRED)</h4>
+                    <p>DXY (US Dollar Index) and Cboe OVX (Crude Oil Volatility Index). Used as control variables in the econometric models to isolate oil-specific effects.</p>
+                    <a class="source-link" href="https://fred.stlouisfed.org" target="_blank" rel="noopener">fred.stlouisfed.org</a>
+                </div>
+                <div class="source-card">
+                    <span class="source-badge api">API</span>
+                    <h4>Yahoo Finance</h4>
+                    <p>Brent crude futures (BZ=F) for intraday and daily settlement prices. Supplements EIA data for the most recent trading sessions before EIA publishes.</p>
+                    <a class="source-link" href="https://finance.yahoo.com" target="_blank" rel="noopener">finance.yahoo.com</a>
+                </div>
+                <div class="source-card">
+                    <span class="source-badge live">LIVE</span>
+                    <h4>Google News RSS</h4>
+                    <p>Auto-fetched headlines for the Live Intelligence Feed. Queries: "Iran war US strikes," "Strait of Hormuz oil shipping," "Brent crude oil Iran." Updated every 30 minutes.</p>
+                    <a class="source-link" href="https://news.google.com" target="_blank" rel="noopener">news.google.com/rss</a>
+                </div>
+                <div class="source-card">
+                    <span class="source-badge live">LIVE</span>
+                    <h4>MarineTraffic AIS</h4>
+                    <p>Live vessel positions via AIS transponders for the Maritime Traffic tab. Embedded maps showing tanker positions at Bab el-Mandeb and Strait of Hormuz chokepoints.</p>
+                    <a class="source-link" href="https://www.marinetraffic.com" target="_blank" rel="noopener">marinetraffic.com</a>
+                </div>
+                <div class="source-card">
+                    <span class="source-badge manual">CURATED</span>
+                    <h4>Curated Event Timeline</h4>
+                    <p>Hand-curated timeline of 70+ major US-Iran events (Jan 2025 to present) with verified dates, geolocations, severity ratings, and descriptions. Compiled from Reuters, AP, WSJ, NYT, and official government statements.</p>
+                </div>
+                <div class="source-card">
+                    <span class="source-badge manual">CURATED</span>
+                    <h4>Suez Canal Transit Data</h4>
+                    <p>Monthly vessel transit estimates from UNCTAD and the Suez Canal Authority. Used to quantify the impact of Houthi attacks and the US-Iran war on global shipping volumes.</p>
+                    <a class="source-link" href="https://unctad.org" target="_blank" rel="noopener">unctad.org</a>
+                </div>
+            </div>
+
+            <div class="methodology-section">
+                <h3>Methodology</h3>
+                <p>This dashboard supports a Master's thesis examining the relationship between Houthi maritime attacks and Brent crude oil price volatility. Three hypotheses are tested:</p>
+                <ul>
+                    <li><strong>H1:</strong> Attack frequency correlates with increased Brent price volatility (weekly rolling window OLS regression).</li>
+                    <li><strong>H2:</strong> Tanker-specific attacks produce larger price movements than general commercial vessel attacks (dummy variable regression).</li>
+                    <li><strong>H3:</strong> Attacks in the Bab el-Mandeb chokepoint zone produce larger price movements than attacks elsewhere (geographic proximity model).</li>
+                </ul>
+                <p style="margin-top:12px">All regressions use Newey-West HAC standard errors to account for heteroscedasticity and autocorrelation. Control variables include the DXY index and OVX volatility index. The study period spans October 2023 (onset of Houthi attacks) through the present, with the US-Iran war (February 2026) representing a structural break in the time series.</p>
+            </div>
+        </div>
+    </section>
+
     <!-- ═══ FOOTER ═══ -->
     <footer class="footer">
         <p>Data Sources: ACLED &middot; U.S. Energy Information Administration &middot; Federal Reserve (FRED) &middot; Yahoo Finance</p>
@@ -742,8 +792,8 @@
     </footer>
 
     <!-- Dashboard JS -->
-    <script src="/static/js/charts.js?v=20260313a"></script>
-    <script src="/static/js/map.js?v=20260312p"></script>
-    <script src="/static/js/app.js?v=20260312p"></script>
+    <script src="/static/js/charts.js?v=20260313b"></script>
+    <script src="/static/js/map.js?v=20260313b"></script>
+    <script src="/static/js/app.js?v=20260313b"></script>
 </body>
 </html>
