@@ -31,7 +31,7 @@
     <script src="https://cdn.jsdelivr.net/npm/nouislider@15.8.1/dist/nouislider.min.js"></script>
 
     <!-- Dashboard CSS -->
-    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260311c">
+    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260313a">
 </head>
 <body>
 
@@ -491,44 +491,54 @@
             </div>
 
             <!-- Geospatial Attack Map: Iran & Israel -->
-            <div class="chart-row">
-                <div class="chart-card full-width">
-                    <div class="chart-header">
-                        <h3>Geospatial Attack Map — Iran & Israel Theaters</h3>
-                        <div class="chart-header-right">
-                            <div class="iran-map-controls">
-                                <select id="iranMapEventTypeFilter" class="iran-map-filter-select">
-                                    <option value="all">All Event Types</option>
-                                    <option value="Battles">Battles</option>
-                                    <option value="Explosions/Remote violence">Explosions</option>
-                                    <option value="Strategic developments">Strategic Dev.</option>
-                                    <option value="Protests">Protests</option>
-                                    <option value="Riots">Riots</option>
-                                    <option value="Violence against civilians">Violence vs Civilians</option>
-                                </select>
-                                <label class="map-toggle"><input type="checkbox" id="toggleIranEvents" checked> <span>Iran ACLED</span></label>
-                                <label class="map-toggle"><input type="checkbox" id="toggleIsraelEvents" checked> <span>Israel</span></label>
-                                <label class="map-toggle"><input type="checkbox" id="toggleCuratedEvents" checked> <span>Curated</span></label>
-                                <label class="map-toggle"><input type="checkbox" id="toggleIranHeatmap" checked> <span>Heatmap</span></label>
+            <div class="iran-map-layout chart-card">
+                <!-- Title bar lives OUTSIDE the overflow-hidden grid so its tooltip isn't clipped -->
+                <div class="iran-map-title-bar">
+                    <h3>GEOSPATIAL THREAT MATRIX // IRAN-ISRAEL THEATER</h3>
+                    <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Multi-source intelligence overlay. ACLED conflict events, curated OSINT timeline, and auto-discovered events plotted by geolocation. Marker size scales with fatalities; color by event type. Covers Iran nuclear sites, Strait of Hormuz, Israel defense corridor, and proxy theaters.</span></div>
+                </div>
+                <!-- Inner grid: overflow hidden clips all Leaflet z-indexes -->
+                <div class="iran-map-grid">
+                    <div class="map-container">
+                        <div id="iranIsraelMap"></div>
+                        <div class="time-slider-container">
+                            <div class="slider-label">
+                                <span id="iranSliderStartDate">--</span>
+                                <span class="slider-title">Event Timeline</span>
+                                <span id="iranSliderEndDate">--</span>
                             </div>
-                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">ACLED-sourced conflict events plotted by coordinates. Iran: protests, battles, explosions, strategic developments. Israel: Houthi missile interceptions and attacks. Curated: major timeline events with verified locations. Marker size scales with fatalities; color by event type.</span></div>
+                            <div id="iranTimeSlider"></div>
                         </div>
                     </div>
-                    <div id="iranIsraelMap" style="height:520px;border-radius:8px;background:#0d1b2a"></div>
-                    <div class="iran-map-legend">
-                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#C43D3D"></span>Battles / Explosions</span>
-                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#3D6B99"></span>Strategic Dev.</span>
-                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#E07B4C"></span>Protests / Riots</span>
-                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#7B68AE"></span>Violence vs Civilians</span>
-                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#D4A843;border:2px solid #fff;width:12px;height:12px"></span>Curated Event</span>
+                    <div class="map-sidebar">
+                    <h3>Filters</h3>
+                    <div class="map-control-group">
+                        <label class="toggle-label"><input type="checkbox" id="toggleMilitary" checked> <span>Military / Battles</span></label>
+                        <label class="toggle-label"><input type="checkbox" id="toggleDiplomatic" checked> <span>Diplomatic</span></label>
+                        <label class="toggle-label"><input type="checkbox" id="toggleSanctions" checked> <span>Sanctions / Nuclear</span></label>
+                        <label class="toggle-label"><input type="checkbox" id="toggleProxy" checked> <span>Proxy / Oil Impact</span></label>
+                        <label class="toggle-label"><input type="checkbox" id="toggleIranHeatmap" checked> <span>Heatmap Overlay</span></label>
                     </div>
-                    <div class="iran-map-stats">
-                        <span>Iran Events: <strong id="iranMapStatIran">--</strong></span>
-                        <span>Israel Events: <strong id="iranMapStatIsrael">--</strong></span>
-                        <span>Curated Events: <strong id="iranMapStatCurated">--</strong></span>
-                        <span>Total Fatalities: <strong id="iranMapStatFatalities">--</strong></span>
+
+                    <h3>Situational Awareness</h3>
+                    <div class="stats-grid">
+                        <div class="stat-item"><div class="stat-value" id="iranMapStatIran">--</div><div class="stat-label">Military Ops</div></div>
+                        <div class="stat-item"><div class="stat-value" id="iranMapStatIsrael">--</div><div class="stat-label">Diplomatic</div></div>
+                        <div class="stat-item"><div class="stat-value" id="iranMapStatCurated">--</div><div class="stat-label">Total Events</div></div>
+                        <div class="stat-item"><div class="stat-value" id="iranMapStatFatalities">--</div><div class="stat-label">Confirmed KIA</div></div>
+                    </div>
+
+                    <h3>Classification</h3>
+                    <div class="map-legend">
+                        <div class="legend-item"><span class="legend-dot" style="background:#C43D3D;box-shadow:0 0 6px rgba(196,61,61,0.6)"></span> Battles / Explosions</div>
+                        <div class="legend-item"><span class="legend-dot" style="background:#3D6B99;box-shadow:0 0 6px rgba(61,107,153,0.6)"></span> Strategic Developments</div>
+                        <div class="legend-item"><span class="legend-dot" style="background:#7B68AE;box-shadow:0 0 6px rgba(123,104,174,0.6)"></span> Violence vs Civilians</div>
+                        <div class="legend-item"><span class="legend-dot" style="background:#D4A843;border:2px solid rgba(255,255,255,0.5);box-shadow:0 0 8px rgba(212,168,67,0.6)"></span> Curated Intel</div>
+                        <div class="legend-item"><span class="legend-dot" style="background:#4ECDC4;border:2px solid rgba(255,255,255,0.5);box-shadow:0 0 8px rgba(78,205,196,0.6)"></span> OSINT — ACLED</div>
+                        <div class="legend-item"><span class="legend-dot" style="background:#3498DB;border:2px solid rgba(255,255,255,0.5);box-shadow:0 0 8px rgba(52,152,219,0.6)"></span> OSINT — News</div>
                     </div>
                 </div>
+                </div><!-- /.iran-map-grid -->
             </div>
 
             <!-- Row 2: Event Type Breakdown + Impact Analysis -->
@@ -732,8 +742,8 @@
     </footer>
 
     <!-- Dashboard JS -->
-    <script src="/static/js/charts.js?v=20260311c"></script>
-    <script src="/static/js/map.js?v=20260311c"></script>
-    <script src="/static/js/app.js?v=20260311c"></script>
+    <script src="/static/js/charts.js?v=20260313a"></script>
+    <script src="/static/js/map.js?v=20260312p"></script>
+    <script src="/static/js/app.js?v=20260312p"></script>
 </body>
 </html>

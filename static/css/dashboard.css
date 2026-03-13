@@ -1242,23 +1242,119 @@ tbody tr:hover { background: rgba(201, 169, 110, 0.04); }
     #map { height: 500px; }
 }
 
-/* Iran/Israel geospatial map */
-.iran-map-controls {
-    display: inline-flex;
+/* Iran/Israel geospatial map — Palantir tactical theme */
+/* Iran Map — sidebar layout override */
+.iran-map-layout {
+    position: relative;
+    z-index: auto;
+    margin-bottom: 24px;
+    border: 1px solid rgba(0,212,255,0.15);
+    box-shadow: 0 0 20px rgba(0,212,255,0.06), inset 0 0 20px rgba(0,0,0,0.3);
+}
+
+/* Inner grid wrapper clips all Leaflet z-indexes physically */
+.iran-map-grid {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    height: 720px;
+    overflow: hidden;
+    border-radius: 0 0 var(--radius) var(--radius);
+    isolation: isolate;
+}
+
+/* Hard clip on the Leaflet map div */
+.iran-map-layout #iranIsraelMap {
+    flex: 1;
+    min-height: 0;
+    border-radius: 0;
+    background: #070d15;
+    overflow: hidden;
+}
+
+/* Sidebar inside the grid — dark tactical styling */
+.iran-map-grid .map-sidebar {
+    padding: 16px;
+    overflow-y: auto;
+    border-left: 1px solid rgba(0,212,255,0.12);
+    background: #0a1018;
+    color: #c0cad8;
+}
+.iran-map-grid .map-sidebar h3 {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #00d4ff;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(0,212,255,0.15);
+}
+.iran-map-grid .map-sidebar .toggle-label {
+    color: #8899aa;
+    font-size: 11px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+}
+.iran-map-grid .map-sidebar .toggle-label input[type="checkbox"] {
+    accent-color: #00d4ff;
+}
+.iran-map-grid .map-sidebar .stat-value {
+    color: #00d4ff;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-weight: 700;
+    font-size: 18px;
+}
+.iran-map-grid .map-sidebar .stat-label {
+    color: #5a6a7a;
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+.iran-map-grid .map-sidebar .legend-item {
+    color: #8899aa;
+    font-size: 11px;
+}
+
+.iran-map-title-bar {
+    display: flex;
     align-items: center;
-    gap: 12px;
-    margin-right: 8px;
+    justify-content: space-between;
+    padding: 12px 20px;
+    background: linear-gradient(180deg, #0d1520 0%, #0a1018 100%);
+    border-bottom: 1px solid rgba(0,212,255,0.12);
+}
+
+.iran-map-title-bar h3 {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: #00d4ff;
+    margin: 0;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+/* Tooltip pops DOWN (not up) since the title bar is at the top of its card */
+.iran-map-title-bar .chart-info-tooltip {
+    bottom: auto;
+    top: calc(100% + 8px);
+}
+.iran-map-title-bar .chart-info-tooltip::after {
+    top: auto;
+    bottom: 100%;
+    border-top-color: transparent;
+    border-bottom-color: var(--navy);
 }
 
 .iran-map-filter-select {
+    width: 100%;
     font-family: 'Inter', sans-serif;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 500;
-    padding: 4px 8px;
+    padding: 8px 10px;
     border: 1px solid var(--border);
     border-radius: 6px;
-    background: var(--bg-card);
-    color: var(--text-primary);
+    background: var(--bg);
+    color: var(--text);
     cursor: pointer;
     outline: none;
 }
@@ -1266,52 +1362,108 @@ tbody tr:hover { background: rgba(201, 169, 110, 0.04); }
     border-color: var(--gold);
 }
 
-.map-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--text-light);
-    cursor: pointer;
+/* Time slider — tactical theme */
+.time-slider-container {
+    background: rgba(10,16,24,0.95);
+    border-top: 1px solid rgba(0,212,255,0.1);
 }
-
-.map-toggle input[type="checkbox"] {
-    accent-color: var(--gold);
-    cursor: pointer;
+.time-slider-container .slider-label {
+    color: #5a6a7a;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
 }
-
-.iran-map-legend {
-    display: flex;
-    gap: 20px;
-    justify-content: center;
-    padding: 12px 0 0;
-    flex-wrap: wrap;
+.time-slider-container .slider-title {
+    color: #00d4ff;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-size: 9px;
 }
-
-.iran-map-stats {
-    display: flex;
-    gap: 24px;
-    justify-content: center;
-    padding: 8px 0 0;
-    flex-wrap: wrap;
-    font-size: 12px;
-    color: var(--text-light);
+#iranTimeSlider { height: 4px; }
+#iranTimeSlider .noUi-connect { background: #00d4ff; box-shadow: 0 0 6px rgba(0,212,255,0.5); }
+#iranTimeSlider .noUi-handle {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 2px solid #00d4ff;
+    background: #0a1018;
+    box-shadow: 0 0 8px rgba(0,212,255,0.4);
+    top: -6px; right: -7px;
+    cursor: grab;
 }
+#iranTimeSlider .noUi-handle::before,
+#iranTimeSlider .noUi-handle::after { display: none; }
+#iranTimeSlider .noUi-target { background: rgba(0,212,255,0.1); border: none; box-shadow: none; }
 
-.iran-map-stats strong {
-    color: var(--gold);
-    font-weight: 700;
-}
-
-/* Curated event pulse marker */
+/* Curated event pulse marker — glowing tactical dots */
 .curated-pulse {
     width: 16px;
     height: 16px;
-    background: #D4A843;
-    border: 2px solid #fff;
+    background: radial-gradient(circle, #ffcc00 30%, #D4A843 100%);
+    border: 2px solid rgba(255,255,255,0.6);
     border-radius: 50%;
-    box-shadow: 0 0 8px rgba(212,168,67,0.6);
+    box-shadow: 0 0 12px rgba(212,168,67,0.8), 0 0 24px rgba(212,168,67,0.3);
+    animation: palantir-pulse 2s ease-in-out infinite;
+}
+.acled-promoted-pulse {
+    width: 14px;
+    height: 14px;
+    background: radial-gradient(circle, #66fff2 30%, #4ECDC4 100%);
+    border: 2px solid rgba(255,255,255,0.5);
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(78,205,196,0.8), 0 0 20px rgba(78,205,196,0.3);
+    animation: palantir-pulse 2.5s ease-in-out infinite;
+}
+.news-auto-pulse {
+    width: 14px;
+    height: 14px;
+    background: radial-gradient(circle, #5dade2 30%, #3498DB 100%);
+    border: 2px solid rgba(255,255,255,0.5);
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(52,152,219,0.8), 0 0 20px rgba(52,152,219,0.3);
+    animation: palantir-pulse 3s ease-in-out infinite;
+}
+@keyframes palantir-pulse {
+    0%, 100% { box-shadow: 0 0 10px rgba(0,212,255,0.4), 0 0 20px rgba(0,212,255,0.15); transform: scale(1); }
+    50% { box-shadow: 0 0 16px rgba(0,212,255,0.6), 0 0 30px rgba(0,212,255,0.25); transform: scale(1.15); }
+}
+
+/* Leaflet popup overrides for dark tactical popups */
+.iran-map-layout .leaflet-popup-content-wrapper {
+    background: rgba(10,16,24,0.95);
+    color: #c0cad8;
+    border: 1px solid rgba(0,212,255,0.2);
+    border-radius: 4px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.6), 0 0 10px rgba(0,212,255,0.1);
+}
+.iran-map-layout .leaflet-popup-tip {
+    background: rgba(10,16,24,0.95);
+    border: 1px solid rgba(0,212,255,0.2);
+    border-top: none;
+    border-right: none;
+}
+.iran-map-layout .leaflet-popup-close-button {
+    color: #5a6a7a;
+}
+.iran-map-layout .leaflet-popup-close-button:hover {
+    color: #00d4ff;
+}
+
+/* Leaflet controls — dark tactical */
+.iran-map-layout .leaflet-control-zoom a {
+    background: rgba(10,16,24,0.9);
+    color: #00d4ff;
+    border-color: rgba(0,212,255,0.15);
+}
+.iran-map-layout .leaflet-control-zoom a:hover {
+    background: rgba(0,212,255,0.15);
+}
+.iran-map-layout .leaflet-control-attribution {
+    background: rgba(10,16,24,0.7) !important;
+    color: #3a4a5a !important;
+    font-size: 9px;
+}
+.iran-map-layout .leaflet-control-attribution a {
+    color: #5a6a7a !important;
 }
 
 /* Maritime Traffic tab */
@@ -1450,6 +1602,9 @@ tbody tr:hover { background: rgba(201, 169, 110, 0.04); }
     .maritime-kpi-row { grid-template-columns: repeat(2, 1fr); }
     .maritime-embed-container { grid-template-columns: 1fr; }
     .chokepoint-scenarios { grid-template-columns: 1fr; }
+    .iran-map-grid { grid-template-columns: 1fr; height: auto; overflow: visible; }
+    .iran-map-grid .map-container { min-height: 450px; }
+    .iran-map-grid .map-sidebar { border-left: none; border-top: 1px solid var(--border); padding: 16px; }
 }
 
 @media (max-width: 768px) {
@@ -1458,5 +1613,5 @@ tbody tr:hover { background: rgba(201, 169, 110, 0.04); }
     .tab-nav { overflow-x: auto; }
     .container { padding: 0 16px; }
     .data-controls { flex-direction: column; align-items: stretch; }
-    .iran-map-controls { flex-wrap: wrap; gap: 8px; }
+    .iran-map-grid #iranIsraelMap { min-height: 350px; }
 }

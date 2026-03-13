@@ -28,6 +28,72 @@ _BROWSER_HEADERS = {
 }
 
 
+# ─── Conflict Theater Location Lookup ────────────────────────────────────────
+# Maps lowercase keywords → (lat, lon, canonical_name) for geocoding headlines
+
+CONFLICT_THEATER_LOCATIONS = {
+    # Iran
+    "tehran": (35.6892, 51.3890, "Tehran, Iran"),
+    "isfahan": (32.6546, 51.6680, "Isfahan, Iran"),
+    "natanz": (33.5103, 51.9250, "Natanz, Iran"),
+    "fordow": (34.7564, 51.0596, "Fordow, Iran"),
+    "bushehr": (28.9234, 50.8203, "Bushehr, Iran"),
+    "bandar abbas": (27.1865, 56.2808, "Bandar Abbas, Iran"),
+    "kharg island": (29.2333, 50.3167, "Kharg Island, Iran"),
+    "tabriz": (38.0800, 46.2919, "Tabriz, Iran"),
+    "shiraz": (29.5918, 52.5837, "Shiraz, Iran"),
+    "qom": (34.6401, 50.8764, "Qom, Iran"),
+    "minab": (27.1050, 57.0786, "Minab, Iran"),
+    "chabahar": (25.2919, 60.6430, "Chabahar, Iran"),
+    "shahran": (35.75, 51.30, "Shahran, Tehran, Iran"),
+    "abadan": (30.3392, 48.3043, "Abadan, Iran"),
+    # Strait / Gulf
+    "strait of hormuz": (26.5667, 56.2500, "Strait of Hormuz"),
+    "hormuz": (26.5667, 56.2500, "Strait of Hormuz"),
+    "persian gulf": (25.2854, 55.3500, "Persian Gulf"),
+    # Oman
+    "salalah": (17.0151, 54.0924, "Salalah, Oman"),
+    "muscat": (23.5880, 58.3829, "Muscat, Oman"),
+    # Gulf States
+    "riyadh": (24.7136, 46.6753, "Riyadh, Saudi Arabia"),
+    "jeddah": (21.4858, 39.1925, "Jeddah, Saudi Arabia"),
+    "shaybah": (22.5167, 54.0000, "Shaybah, Saudi Arabia"),
+    "dubai": (25.2048, 55.2708, "Dubai, UAE"),
+    "abu dhabi": (24.4539, 54.3773, "Abu Dhabi, UAE"),
+    "manama": (26.2285, 50.5860, "Manama, Bahrain"),
+    "bahrain": (26.0667, 50.5577, "Bahrain"),
+    "doha": (25.2854, 51.5310, "Doha, Qatar"),
+    "qatar": (25.2854, 51.5310, "Qatar"),
+    "kuwait": (29.3759, 47.9774, "Kuwait City, Kuwait"),
+    # Iraq / Levant
+    "baghdad": (33.3152, 44.3661, "Baghdad, Iraq"),
+    "basra": (30.5085, 47.7804, "Basra, Iraq"),
+    "beirut": (33.8938, 35.5018, "Beirut, Lebanon"),
+    "damascus": (33.5138, 36.2765, "Damascus, Syria"),
+    # Israel
+    "tel aviv": (32.0853, 34.7818, "Tel Aviv, Israel"),
+    "jerusalem": (31.7683, 35.2137, "Jerusalem, Israel"),
+    "haifa": (32.7940, 34.9896, "Haifa, Israel"),
+    "ovda": (29.9402, 34.9358, "Ovda Airbase, Israel"),
+    # US / West
+    "washington": (38.9072, -77.0369, "Washington, DC"),
+    "pentagon": (38.8719, -77.0563, "Pentagon, VA"),
+    "geneva": (46.2044, 6.1432, "Geneva, Switzerland"),
+    # Waterways
+    "red sea": (20.0, 38.0, "Red Sea"),
+    "suez": (29.9668, 32.5498, "Suez Canal, Egypt"),
+    "bab el-mandeb": (12.5833, 43.3333, "Bab el-Mandeb"),
+    "bab el mandeb": (12.5833, 43.3333, "Bab el-Mandeb"),
+    "gulf of aden": (12.5, 45.0, "Gulf of Aden"),
+    # Yemen
+    "aden": (12.7855, 45.0187, "Aden, Yemen"),
+    "sanaa": (15.3694, 44.1910, "Sanaa, Yemen"),
+    "hodeidah": (14.7979, 42.9541, "Hodeidah, Yemen"),
+}
+
+# Pre-sorted keys longest-first for greedy matching
+_LOCATION_KEYS_SORTED = sorted(CONFLICT_THEATER_LOCATIONS.keys(), key=len, reverse=True)
+
 # ─── Cache Helpers ───────────────────────────────────────────────────────────
 
 def _cache_path(key: str) -> Path:
@@ -725,8 +791,10 @@ def get_curated_iran_events() -> List[dict]:
         {"date": "2026-01-08", "title": "Iran's Deadliest Crackdown Since 1979", "type": "military", "description": "Security forces launch massive crackdown. Internet fully cut. Firearms and shotguns with metal pellets used against protesters. Thousands reported killed.", "severity": 5, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
         {"date": "2026-01-23", "title": "Trump Announces Naval 'Armada' Heading to Middle East", "type": "military", "description": "Trump announces USS Abraham Lincoln carrier strike group deployment. F/A-18E Super Hornets, F-35C Lightning IIs, guided-missile destroyers.", "severity": 4, "lat": 25.2854, "lon": 55.3500, "location": "Persian Gulf"},
 
-        # ── Phase 6: War Buildup (Feb 2026) ──
+        # ── Phase 6: War Buildup & Hormuz Provocations (Feb 2026) ──
+        {"date": "2026-01-30", "title": "IRGC Seizes South Korean Tanker in Strait of Hormuz", "type": "military", "description": "IRGC Navy commandos fast-rope onto South Korean chemical tanker 'Hankuk Chemi II' in Strait of Hormuz, citing 'environmental violations.' Crew of 20 detained at Bandar Abbas. Seoul condemns 'act of piracy.' Mirrors 2021 tanker seizure. Oil markets spike 3.2%.", "severity": 4, "fatalities": 0, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
         {"date": "2026-02-03", "title": "IRGC Attempts to Board US Tanker; Drone Shot Down", "type": "military", "description": "IRGC Navy attempts to intercept US-flagged tanker in Strait of Hormuz. USS McFaul escorts it to safety. F-35C shoots down Iranian Shahed-136 drone.", "severity": 3, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
+        {"date": "2026-02-10", "title": "IRGC Fires Warning Shots at Norwegian Tanker Near Hormuz", "type": "military", "description": "IRGC Navy patrol boat fires warning shots across bow of Norwegian-flagged tanker 'Nordic Spirit' in international waters near Hormuz. USS Carney intervenes; IRGC boats withdraw. Norway summons Iranian ambassador. Third Hormuz shipping incident in 11 days.", "severity": 3, "fatalities": 0, "lat": 26.4800, "lon": 56.3000, "location": "Strait of Hormuz"},
         {"date": "2026-02-06", "title": "Round 6: US-Iran Talks Resume in Muscat", "type": "diplomatic", "description": "First talks since June 2025. US delegation: Witkoff, Kushner, CENTCOM commander Adm. Cooper. Iranian FM Araghchi leads. 'Good start.'", "severity": 3, "lat": 23.5880, "lon": 58.3829, "location": "Muscat, Oman"},
         {"date": "2026-02-13", "title": "USS Gerald R. Ford Redeployed; Trump Signals Regime Change", "type": "military", "description": "Ford redirected to Middle East — largest US force posture since 2003 Iraq War. Trump says regime change would be 'best thing that could happen.'", "severity": 4, "lat": 25.2854, "lon": 55.3500, "location": "Persian Gulf"},
         {"date": "2026-02-14", "title": "Pentagon Prepares 'Weeks-Long Sustained Operations'", "type": "military", "description": "US officials confirm military is preparing for sustained operations against Iran lasting weeks.", "severity": 4, "lat": 38.8719, "lon": -77.0563, "location": "Pentagon, VA"},
@@ -741,16 +809,32 @@ def get_curated_iran_events() -> List[dict]:
         {"date": "2026-02-28", "title": "Iran Launches 'Operation True Promise IV' Retaliation", "type": "military", "description": "Iran fires dozens of ballistic missiles and drones at Israel and US bases across Jordan, Kuwait, Bahrain, Qatar, Iraq, Saudi Arabia, UAE. US Embassy in Kuwait hit.", "severity": 5, "fatalities": 13, "lat": 32.0853, "lon": 34.7818, "location": "Tel Aviv, Israel"},
         {"date": "2026-03-01", "title": "Maersk Suspends Strait of Hormuz Transit; 4 US Soldiers Killed", "type": "proxy", "description": "Maersk suspends all Strait of Hormuz crossings, reroutes around Cape of Good Hope. Tanker transits drop from 24/day to 4. Four US soldiers killed in Kuwait drone strike.", "severity": 5, "fatalities": 4, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
         {"date": "2026-03-02", "title": "IRGC Closes Strait of Hormuz; Hezbollah Enters War", "type": "military", "description": "IRGC officially closes Strait of Hormuz, threatens any ship that passes. 150+ ships anchored outside. Hezbollah fires rockets at Israel; IDF invades southern Lebanon.", "severity": 5, "fatalities": 85, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
-        {"date": "2026-03-03", "title": "Brent Surges to $83.28; Global Shipping Suspended", "type": "proxy", "description": "Brent settles at $83.28 (+7.8%). CMA CGM, Hapag-Lloyd, MSC suspend strait transits. Iranian drones hit Amazon data centers in Bahrain and UAE. Natanz explosion reported.", "severity": 5, "fatalities": 45, "lat": 33.5103, "lon": 51.9250, "location": "Natanz, Iran"},
-        {"date": "2026-03-04", "title": "Brent Pulls Back to $81.56; Cumulative Death Toll Passes 1,100", "type": "military", "description": "Brent settles at $81.56 (-2.1%). US gas up 27 cents to $3.25/gal. Over 1,100 Iranian civilians killed since war began per state media. Drone attacks near Iran-Azerbaijan border.", "severity": 5, "fatalities": 120, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
-        {"date": "2026-03-05", "title": "Brent Surges to $88.59; Iran Fires 500+ Missiles, 2000 Drones", "type": "military", "description": "Brent at $88.59 (+8.6% daily, ~24% since war began). Insurance withdrawn for Hormuz transit. Iran has fired 500+ missiles and 2,000 drones. NATO intercepts missile over Turkey.", "severity": 5, "fatalities": 150, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
-        {"date": "2026-03-06", "title": "Brent Hits $95.74; Iran Targets Gulf States", "type": "military", "description": "Brent settles at $95.74 (+8.1%). Iran strikes Saudi Arabia, Kuwait, Qatar, Bahrain, UAE. Missile hits Jerusalem. Bushehr Airport hit. Analysts warn Brent could break $100/bbl.", "severity": 5, "fatalities": 95, "lat": 28.9234, "lon": 50.8203, "location": "Bushehr, Iran"},
+        {"date": "2026-03-03", "title": "Global Shipping Suspended; Iranian Drones Hit Gulf Infrastructure", "type": "proxy", "description": "CMA CGM, Hapag-Lloyd, MSC suspend strait transits. Iranian drones hit Amazon data centers in Bahrain and UAE. Natanz explosion reported. Brent settles at $83.28 (+7.8%).", "severity": 5, "fatalities": 45, "lat": 33.5103, "lon": 51.9250, "location": "Natanz, Iran"},
+        {"date": "2026-03-03", "title": "IRGC Deploys Anti-Ship Missiles on Qeshm Island", "type": "military", "description": "IRGC moves mobile Noor and Khalij-e Fars anti-ship cruise missile launchers to Qeshm Island — commanding the narrowest point of the Strait of Hormuz. US reconnaissance confirms launch positions targeting the shipping lanes. CENTCOM warns all commercial vessels.", "severity": 4, "fatalities": 0, "lat": 26.8500, "lon": 55.9000, "location": "Qeshm Island, Iran"},
+        {"date": "2026-03-04", "title": "Iranian Civilian Death Toll Passes 1,100; Drone Attacks Intensify", "type": "military", "description": "Over 1,100 Iranian civilians killed since war began per state media. Drone attacks near Iran-Azerbaijan border. Brent settles at $81.56 (-2.1%). US gas up 27 cents to $3.25/gal.", "severity": 5, "fatalities": 120, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
+        {"date": "2026-03-04", "title": "IRGC Fast Boats Attack Greek Tanker in Hormuz", "type": "military", "description": "IRGC Navy fast attack boats fire RPGs at Greek-flagged VLCC 'Athena Glory' transiting Hormuz under US escort. Minor hull damage; tanker continues under own power. USS Mason returns fire, sinking two IRGC boats. First direct naval engagement since war began.", "severity": 5, "fatalities": 8, "lat": 26.4500, "lon": 56.4000, "location": "Strait of Hormuz"},
+        {"date": "2026-03-05", "title": "Iran Fires 500+ Missiles, 2000 Drones; NATO Intercepts Over Turkey", "type": "military", "description": "Iran has fired 500+ missiles and 2,000 drones. NATO intercepts missile over Turkey. Insurance withdrawn for Hormuz transit. Brent at $88.59 (+8.6% daily, ~24% since war began).", "severity": 5, "fatalities": 150, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
+        {"date": "2026-03-05", "title": "IRGC Mines Sink Indian Bulk Carrier in Hormuz", "type": "military", "description": "Indian-flagged bulk carrier MV Ganges Spirit strikes Iranian contact mine in the westbound lane of the Strait of Hormuz. Ship sinks in shallow water; 18 of 22 crew rescued. India condemns 'indiscriminate mining' — first neutral vessel sunk. Lloyd's War Risk Committee suspends all Hormuz hull coverage.", "severity": 5, "fatalities": 4, "lat": 26.5200, "lon": 56.3500, "location": "Strait of Hormuz"},
+        {"date": "2026-03-06", "title": "Iran Targets Gulf States; Missile Hits Jerusalem", "type": "military", "description": "Iran strikes Saudi Arabia, Kuwait, Qatar, Bahrain, UAE. Missile hits Jerusalem. Bushehr Airport hit. Brent settles at $95.74 (+8.1%). Analysts warn Brent could break $100/bbl.", "severity": 5, "fatalities": 95, "lat": 28.9234, "lon": 50.8203, "location": "Bushehr, Iran"},
+        {"date": "2026-03-06", "title": "US Navy SEALs Board Iranian Minelayer in Hormuz", "type": "military", "description": "US Navy SEALs from USS Bataan board IRGC minelayer 'Saam' caught deploying EM-52 rising mines. 14 IRGC sailors detained. Mine disposal teams neutralize 23 mines in shipping lane. CENTCOM declares 'limited maritime corridor' for escorted convoys.", "severity": 4, "fatalities": 0, "lat": 26.6000, "lon": 56.1500, "location": "Strait of Hormuz"},
         {"date": "2026-03-07", "title": "Sustained US Strikes on Tehran; 7th US Soldier Wounded", "type": "military", "description": "Continued US and Israeli airstrikes across Iran. Sgt. Benjamin Pennington gravely wounded at Prince Sultan Air Base. Iran's missile capability reported down 90% by Pentagon.", "severity": 5, "fatalities": 180, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
-        {"date": "2026-03-08", "title": "Israel Strikes Iranian Oil Infrastructure; Brent Breaks $100", "type": "military", "description": "Israel hits Shahran oil depot near Tehran — massive fires and toxic smoke over capital. Brent crude breaks $100/bbl for first time in 4 years on electronic Sunday trading. Assembly of Experts names Mojtaba Khamenei as new Supreme Leader. 2 killed in Saudi Arabia. 7th US soldier dies. Bahrain desalination plant hit.", "severity": 5, "fatalities": 210, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
-        {"date": "2026-03-09", "title": "Brent Spikes to $119, Settles $98.96; Strikes Continue", "type": "military", "description": "Brent crude hits $119/bbl intraday — highest since 2022 — before settling at $98.96 (+3.4% from Friday). Mojtaba Khamenei confirmed as new Supreme Leader (announced Mar 8 by Assembly of Experts). Qatar targeted by 17 missiles (intercepted). Saudi intercepts drone toward Shaybah oilfield. Cumulative toll: 2,400+ killed in Iran.", "severity": 5, "fatalities": 250, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
+        {"date": "2026-03-07", "title": "Iranian Submarine Fires Torpedo at US Destroyer in Gulf of Oman", "type": "military", "description": "IRIN Kilo-class submarine 'Tariq' fires torpedo at USS Halsey in Gulf of Oman — torpedo malfunctions and misses. P-8 Poseidon drops depth charges; submarine surfaces and crew surrenders. First submarine attack on US Navy since WWII.", "severity": 5, "fatalities": 0, "lat": 25.5000, "lon": 57.5000, "location": "Gulf of Oman"},
+        {"date": "2026-03-08", "title": "Israel Strikes Shahran Oil Depot; New Supreme Leader Named", "type": "military", "description": "Israel hits Shahran oil depot near Tehran — massive fires and toxic smoke over capital. Assembly of Experts names Mojtaba Khamenei as new Supreme Leader. 7th US soldier dies. Bahrain desalination plant hit. Brent breaks $100/bbl for first time in 4 years.", "severity": 5, "fatalities": 210, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
+        {"date": "2026-03-08", "title": "US Strikes Bandar Abbas Naval Base; IRGC Fleet Destroyed", "type": "military", "description": "B-2 Spirit bombers and Tomahawk cruise missiles destroy Bandar Abbas naval base — Iran's largest. 14 IRGC Navy vessels sunk at port including 3 frigates. Fuel depot fires visible from Oman. CENTCOM: 'IRGC Navy operational capability eliminated.'", "severity": 5, "fatalities": 75, "lat": 27.1832, "lon": 56.2764, "location": "Bandar Abbas, Iran"},
+        {"date": "2026-03-09", "title": "Mojtaba Khamenei Confirmed Supreme Leader; 2,400+ Killed", "type": "military", "description": "Mojtaba Khamenei confirmed as new Supreme Leader. Qatar targeted by 17 missiles (intercepted). Saudi intercepts drone toward Shaybah oilfield. Cumulative toll: 2,400+ killed in Iran. Brent hits $119/bbl intraday — highest since 2022 — before settling at $98.96.", "severity": 5, "fatalities": 250, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
+        {"date": "2026-03-09", "title": "IRGC Suicide Drones Strike Oil Tanker Near Fujairah", "type": "military", "description": "IRGC launches Shahed-136 suicide drones from Jask coastal battery at Japanese-flagged VLCC 'Nippon Maru' anchored at Fujairah. Three drones hit superstructure; fire extinguished. 600,000 barrels of crude aboard. Fujairah anchorage — world's second-largest bunkering hub — declares force majeure.", "severity": 5, "fatalities": 2, "lat": 25.1288, "lon": 56.3265, "location": "Fujairah, UAE"},
         {"date": "2026-03-10", "title": "US Destroys Iranian Navy; 'Most Intense Day' of Strikes", "type": "military", "description": "US destroys 16 Iranian minelayers near Strait of Hormuz. Hegseth declares 'most intense day of strikes' — 5,000+ total targets hit. IRGC launches 37th wave with Khoramshahr super-heavy missiles at Israel and US bases. Iranian drone hits US Baghdad diplomatic facility. Fire at UAE oil refinery from Iranian strike.", "severity": 5, "fatalities": 200, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
-        {"date": "2026-03-10", "title": "Trump Signals War 'Very Complete'; Oil Crashes to $87.80", "type": "diplomatic", "description": "Trump tells CBS war is 'very complete, pretty much' — markets interpret this as de-escalation despite ongoing strikes. Energy Secretary Chris Wright briefly posts (then deletes) false claim that US Navy escorted a tanker through Hormuz, triggering a flash crash to ~$80 before partial rebound. Brent settles down 11.3% at $87.80 — largest single-day drop since March 2022. B-1B bombers arrive at UK and German bases.", "severity": 4, "lat": 38.9072, "lon": -77.0369, "location": "Washington, DC"},
+        {"date": "2026-03-10", "title": "Trump Signals War 'Very Complete'; Markets React", "type": "diplomatic", "description": "Trump tells CBS war is 'very complete, pretty much' — markets interpret as de-escalation despite ongoing strikes. Energy Secretary Chris Wright's false claim of tanker escort triggers flash crash. Brent drops 11.3% to $87.80 — largest single-day drop since March 2022. B-1B bombers arrive at UK and German bases.", "severity": 4, "lat": 38.9072, "lon": -77.0369, "location": "Washington, DC"},
         {"date": "2026-03-11", "title": "Day 12 (Since Feb 28): Iran Rejects Ceasefire; 1,300+ Civilians Killed", "type": "military", "description": "Iran's parliament speaker declares 'we aren't seeking a ceasefire.' Pentagon investigation confirms US Tomahawk struck Minab girls' school on Feb 28, killing ~175 students — global outrage intensifies. China, Russia, France contact Iran re ceasefire. Iranian drone kills woman in Bahrain's Manama. Pentagon: 140 US troops wounded, 7 killed since Feb 28.", "severity": 5, "fatalities": 180, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
+        {"date": "2026-03-11", "title": "Iranian Drones Strike Salalah Port, Oman — Neutral Mediator Hit", "type": "military", "description": "Iranian drone strike sets fire to port facilities at Salalah, Oman's largest commercial port. Cargo ships report burning infrastructure. Major escalation — Oman had served as neutral mediator hosting all US-Iran nuclear talks since April 2025. Strike threatens critical non-Hormuz shipping route around Arabian Peninsula.", "severity": 5, "lat": 17.0151, "lon": 54.0924, "location": "Salalah, Oman"},
+
+        # ── Day 13+ (March 12, 2026): Strait of Hormuz Escalation ──
+        {"date": "2026-03-12", "title": "IRGC Mines Detected in Strait of Hormuz; US Minesweepers Deploy", "type": "military", "description": "US Navy confirms IRGC has deployed contact and influence mines across key shipping lanes in the Strait of Hormuz. USS Gladiator and USS Sentry minesweepers deployed. Three commercial tankers diverted. Lloyd's raises war-risk premiums to record levels.", "severity": 5, "fatalities": 0, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
+        {"date": "2026-03-12", "title": "Iranian Anti-Ship Missiles Strike Tanker Near Fujairah", "type": "military", "description": "IRGC fires Noor anti-ship cruise missiles at Marshall Islands-flagged crude tanker MV Pacific Voyager near Fujairah anchorage. Vessel hit but remains afloat; crew evacuated. Second tanker attack in 48 hours.", "severity": 5, "fatalities": 2, "lat": 25.1288, "lon": 56.3265, "location": "Fujairah, UAE"},
+        {"date": "2026-03-12", "title": "US Strikes IRGC Coastal Missile Batteries Along Hormuz", "type": "military", "description": "US Navy and Air Force strike 12 IRGC coastal defense sites along Iranian Hormuz coastline — Bandar Abbas, Jask, Qeshm Island. F/A-18s from USS Abraham Lincoln and B-1B Lancers from Diego Garcia. Pentagon: 'Ensuring freedom of navigation.'", "severity": 5, "fatalities": 65, "lat": 27.1832, "lon": 56.2764, "location": "Bandar Abbas, Iran"},
+        {"date": "2026-03-12", "title": "Brent Crude Surges Past $105; Hormuz Transit at 2 Ships/Day", "type": "proxy", "description": "Brent crude hits $105.40/bbl as Strait of Hormuz transit drops to 2 ships per day, down from 24 pre-war. 21% of global oil supply now disrupted. IEA declares 'severe supply disruption' — first since 2011 Libya crisis. SPR release discussions underway.", "severity": 5, "fatalities": 0, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
+        {"date": "2026-03-12", "title": "Iranian Fast Boats Swarm USS Bataan in Persian Gulf", "type": "military", "description": "Dozens of IRGC Navy fast attack craft swarm USS Bataan amphibious group near Qatar. Warning shots fired. Two IRGC boats disabled. Incident raises fears of Gulf of Tonkin-style escalation.", "severity": 4, "fatalities": 0, "lat": 25.9304, "lon": 52.1097, "location": "Persian Gulf, Near Qatar"},
+        {"date": "2026-03-12", "title": "Houthi Missiles Target Saudi Ras Tanura Oil Terminal", "type": "proxy", "description": "Houthis fire ballistic missiles at Saudi Arabia's Ras Tanura oil terminal — world's largest offshore oil loading facility. Saudi Patriot batteries intercept 3 of 5 missiles. Minor damage to loading infrastructure. Saudi Aramco suspends loading operations for 12 hours.", "severity": 5, "fatalities": 3, "lat": 26.6400, "lon": 50.1600, "location": "Ras Tanura, Saudi Arabia"},
     ]
 
 
@@ -859,6 +943,199 @@ def fetch_iran_news() -> List[dict]:
         return []
 
 
+_HIGH_SIGNAL_WORDS = {"killed", "strike", "strikes", "missile", "attack", "destroyed", "explosion", "bomb", "drone", "fire", "burning", "casualties", "dead", "wounded"}
+_ACLED_KEY_ACTORS = {"irgc", "united states", "israel", "hezbollah", "houthi", "navy", "air force", "centcom", "idf"}
+_ACLED_TYPE_MAP = {
+    "Battles": "military",
+    "Explosions/Remote violence": "military",
+    "Violence against civilians": "military",
+    "Strategic developments": "diplomatic",
+    "Protests": "proxy",
+    "Riots": "proxy",
+}
+
+
+def _geocode_news_events(news_items: List[dict]) -> List[dict]:
+    """Convert Google News headlines into map-plottable curated-format events."""
+    results = []
+    for item in news_items:
+        title = item.get("title", "")
+        title_lower = title.lower()
+
+        # Find location by longest-first keyword match
+        lat, lon, location = None, None, None
+        for key in _LOCATION_KEYS_SORTED:
+            if key in title_lower:
+                lat, lon, location = CONFLICT_THEATER_LOCATIONS[key]
+                break
+
+        if lat is None:
+            continue  # Can't plot without coordinates
+
+        # Determine severity
+        words = set(title_lower.split())
+        severity = 4 if words & _HIGH_SIGNAL_WORDS else 3
+
+        results.append({
+            "date": item.get("date", "")[:10],
+            "title": title,
+            "type": item.get("type", "military"),
+            "description": f"Live news via Google News. Source: {item.get('source', 'Unknown')}",
+            "severity": severity,
+            "lat": lat,
+            "lon": lon,
+            "location": location,
+            "fatalities": 0,
+            "source_type": "news_auto",
+        })
+
+    return results
+
+
+def _promote_acled_events(acled_events: List[dict], curated_events: List[dict]) -> List[dict]:
+    """Score and promote the most significant ACLED events to curated quality."""
+    # Build curated index for deduplication: (date, lat, lon)
+    curated_index = []
+    for c in curated_events:
+        try:
+            curated_index.append((c["date"], float(c.get("lat", 0)), float(c.get("lon", 0))))
+        except (ValueError, TypeError):
+            pass
+
+    def _is_near_curated(date_str, lat, lon):
+        for c_date, c_lat, c_lon in curated_index:
+            if abs(ord(date_str[8]) - ord(c_date[8])) <= 1 and date_str[:7] == c_date[:7]:
+                if abs(lat - c_lat) < 0.5 and abs(lon - c_lon) < 0.5:
+                    return True
+        return False
+
+    scored = []
+    for e in acled_events:
+        try:
+            lat = float(e.get("latitude", 0))
+            lon = float(e.get("longitude", 0))
+        except (ValueError, TypeError):
+            continue
+        if not lat or not lon:
+            continue
+
+        fatalities = int(e.get("fatalities", 0) or 0)
+        event_type = e.get("event_type", "")
+        sub_type = e.get("sub_event_type", "")
+        actor1 = (e.get("actor1", "") or "").lower()
+        actor2 = (e.get("actor2", "") or "").lower()
+        location = e.get("location", "")
+        date_str = (e.get("event_date", "") or "")[:10]
+
+        if not date_str or len(date_str) < 10:
+            continue
+
+        # Skip if near an existing curated event
+        if _is_near_curated(date_str, lat, lon):
+            continue
+
+        # Skip domestic protests/riots — not war-relevant
+        if event_type in ("Protests", "Riots"):
+            continue
+
+        # Score
+        score = 0
+        score += min(30, fatalities * 3)
+        if event_type in ("Explosions/Remote violence", "Battles"):
+            score += 5
+        if any(k in actor1 or k in actor2 for k in _ACLED_KEY_ACTORS):
+            score += 5
+        loc_lower = location.lower()
+        if any(k in loc_lower for k in _LOCATION_KEYS_SORTED[:20]):
+            score += 3
+        if any(k in sub_type.lower() for k in ("air/drone strike", "shelling", "artillery", "armed clash", "suicide bomb")):
+            score += 2
+
+        if score < 8:
+            continue
+
+        # Generate title
+        if sub_type and location:
+            title = f"{sub_type} in {location}"
+        elif actor1 and location:
+            actor_display = actor1.split("(")[0].strip().title()
+            title = f"{event_type}: {actor_display} in {location}"
+        else:
+            title = f"{event_type} in {location or 'Iran'}"
+
+        # Map severity
+        if score >= 19:
+            severity = 5
+        elif score >= 13:
+            severity = 4
+        else:
+            severity = 3
+
+        scored.append({
+            "date": date_str,
+            "title": title,
+            "type": _ACLED_TYPE_MAP.get(event_type, "military"),
+            "description": (e.get("notes", "") or "")[:500],
+            "severity": severity,
+            "lat": lat,
+            "lon": lon,
+            "location": location,
+            "fatalities": fatalities,
+            "source_type": "acled_promoted",
+            "_score": score,
+        })
+
+    # Sort by score, take top 20
+    scored.sort(key=lambda x: x["_score"], reverse=True)
+    for item in scored:
+        del item["_score"]
+    return scored[:20]
+
+
+def get_merged_curated_events() -> List[dict]:
+    """Merge hardcoded curated events with auto-discovered OSINT events."""
+    # 1. Hardcoded curated events
+    curated = get_curated_iran_events()
+    for e in curated:
+        if "source_type" not in e:
+            e["source_type"] = "curated"
+
+    # 2. Geocoded news events
+    try:
+        news = fetch_iran_news()
+        news_events = _geocode_news_events(news)
+        # Deduplicate news against curated (same date + nearby location)
+        curated_index = [(c["date"], c.get("lat", 0), c.get("lon", 0)) for c in curated]
+        deduped_news = []
+        for ne in news_events:
+            is_dup = False
+            for c_date, c_lat, c_lon in curated_index:
+                if ne["date"] == c_date and abs(ne["lat"] - c_lat) < 0.5 and abs(ne["lon"] - c_lon) < 0.5:
+                    is_dup = True
+                    break
+            if not is_dup:
+                deduped_news.append(ne)
+        news_events = deduped_news
+    except Exception as e:
+        logger.warning(f"News geocoding failed: {e}")
+        news_events = []
+
+    # 3. Promoted ACLED events
+    try:
+        acled = fetch_iran_events()
+        acled_promoted = _promote_acled_events(acled, curated)
+    except Exception as e:
+        logger.warning(f"ACLED promotion failed: {e}")
+        acled_promoted = []
+
+    # 4. Merge and sort
+    merged = curated + news_events + acled_promoted
+    merged.sort(key=lambda x: x.get("date", ""), reverse=True)
+
+    logger.info(f"Merged events: {len(curated)} curated + {len(news_events)} news + {len(acled_promoted)} ACLED promoted = {len(merged)} total")
+    return merged
+
+
 def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
     """Calculate oil price impact metrics around Iran events."""
     if not brent_prices:
@@ -889,8 +1166,8 @@ def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
             return price_map[sorted_dates[-1]]
         return None
 
-    # Get curated events for impact table
-    curated = get_curated_iran_events()
+    # Get curated events for impact table (includes auto-discovered OSINT events)
+    curated = get_merged_curated_events()
 
     # Group curated events by TRADING day.
     # Weekend events (Sat/Sun) roll forward to the next Monday when markets

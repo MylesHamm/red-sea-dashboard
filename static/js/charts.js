@@ -1295,6 +1295,8 @@ let iranIsraelMap = null;
 let iranIsraelHeatLayer = null;
 let iranIsraelMarkerGroup = null;
 let _iranMapData = { iran: [], israel: [], curated: [] };
+let _iranTimeSlider = null;
+let _iranTimeRange = null;
 
 const IRAN_MAP_EVENT_COLORS = {
     'Battles': '#C43D3D',
@@ -1322,34 +1324,44 @@ function initIranIsraelMap() {
     }).addTo(iranIsraelMap);
 
     iranIsraelHeatLayer = L.heatLayer([], {
-        radius: 20,
-        blur: 15,
-        maxZoom: 10,
-        gradient: { 0.2: '#3D6B99', 0.4: '#D4A843', 0.6: '#E07B4C', 0.8: '#C43D3D', 1.0: '#8B0000' },
+        radius: 25,
+        blur: 20,
+        maxZoom: 17,
+        minOpacity: 0.25,
+        gradient: { 0.1: '#0a2463', 0.3: '#00d4ff33', 0.5: '#00d4ff', 0.7: '#ffcc00', 0.85: '#ff4444', 1.0: '#ff0000' },
     });
 
     iranIsraelMarkerGroup = L.layerGroup().addTo(iranIsraelMap);
 
-    // Key locations labels
+    // Key locations labels — tactical overlay
     const labels = [
-        { pos: [26.5667, 56.2500], text: 'Strait of Hormuz', color: '#C9A96E' },
-        { pos: [33.7225, 51.7275], text: 'Natanz', color: '#7B68AE' },
-        { pos: [34.7564, 51.0596], text: 'Fordow', color: '#7B68AE' },
-        { pos: [32.6546, 51.6680], text: 'Isfahan', color: '#7B68AE' },
+        { pos: [26.5667, 56.2500], text: 'STRAIT OF HORMUZ', color: '#00d4ff' },
+        { pos: [33.7225, 51.7275], text: 'NATANZ', color: '#ff6b6b' },
+        { pos: [34.7564, 51.0596], text: 'FORDOW', color: '#ff6b6b' },
+        { pos: [32.6546, 51.6680], text: 'ISFAHAN', color: '#ff6b6b' },
+        { pos: [35.6892, 51.3890], text: 'TEHRAN', color: '#ffcc00' },
+        { pos: [28.9684, 50.8385], text: 'BUSHEHR', color: '#ff6b6b' },
+        { pos: [27.1865, 56.2808], text: 'BANDAR ABBAS', color: '#C9A96E' },
+        { pos: [29.0611, 50.8253], text: 'KHARG ISLAND', color: '#C9A96E' },
+        { pos: [32.0853, 34.7818], text: 'TEL AVIV', color: '#3D6B99' },
+        { pos: [33.8938, 35.5018], text: 'BEIRUT', color: '#7B68AE' },
+        { pos: [12.8, 43.3], text: 'BAB EL-MANDEB', color: '#00d4ff' },
     ];
     labels.forEach(l => {
         L.marker(l.pos, {
             icon: L.divIcon({
                 className: 'chokepoint-label',
-                html: `<div style="background:rgba(27,42,74,0.9);color:${l.color};padding:3px 6px;border-radius:4px;font-size:10px;font-weight:600;white-space:nowrap;font-family:Inter,sans-serif">${l.text}</div>`,
-                iconSize: [100, 18],
-                iconAnchor: [50, 9],
+                html: `<div style="background:rgba(7,13,21,0.85);color:${l.color};padding:2px 6px;border:1px solid ${l.color}33;border-radius:2px;font-size:9px;font-weight:700;white-space:nowrap;font-family:'SF Mono','Fira Code',Consolas,monospace;position:relative;z-index:650;pointer-events:none;letter-spacing:1.5px">${l.text}</div>`,
+                iconSize: [120, 16],
+                iconAnchor: [60, 8],
             }),
+            zIndexOffset: 1000,
+            interactive: false,
         }).addTo(iranIsraelMap);
     });
 
-    // Setup toggle controls
-    ['toggleIranEvents', 'toggleIsraelEvents', 'toggleCuratedEvents', 'toggleIranHeatmap'].forEach(id => {
+    // Setup toggle controls — filter by event type
+    ['toggleMilitary', 'toggleDiplomatic', 'toggleSanctions', 'toggleProxy', 'toggleIranHeatmap'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('change', () => updateIranIsraelMapLayers());
     });
@@ -1362,7 +1374,9 @@ function initIranIsraelMap() {
 function loadIranIsraelMap(iranEvents, israelEvents, curatedEvents) {
     if (!iranIsraelMap) initIranIsraelMap();
 
-    _iranMapData.iran = (iranEvents || []).filter(e => e.latitude && e.longitude).map(e => ({
+    // Filter to war-relevant events only (exclude domestic protests/riots)
+    const WAR_TYPES = new Set(['Battles', 'Explosions/Remote violence', 'Strategic developments', 'Violence against civilians']);
+    _iranMapData.iran = (iranEvents || []).filter(e => e.latitude && e.longitude && WAR_TYPES.has(e.event_type)).map(e => ({
         lat: parseFloat(e.latitude),
         lng: parseFloat(e.longitude),
         date: (e.event_date || '').substring(0, 10),
@@ -1399,95 +1413,169 @@ function loadIranIsraelMap(iranEvents, israelEvents, curatedEvents) {
         location: e.location || '',
         fatalities: e.fatalities || 0,
         source: 'curated',
+        source_type: e.source_type || 'curated',
     }));
 
+    setupIranTimeSlider();
     updateIranIsraelMapLayers();
 }
+
+function setupIranTimeSlider() {
+    const sliderEl = document.getElementById('iranTimeSlider');
+    if (!sliderEl || _iranTimeSlider) return;
+
+    const allDates = [
+        ..._iranMapData.iran.map(e => e.date),
+        ..._iranMapData.israel.map(e => e.date),
+        ..._iranMapData.curated.map(e => e.date),
+    ].filter(Boolean).sort();
+
+    if (allDates.length < 2) return;
+
+    const minTs = new Date(allDates[0]).getTime();
+    const maxTs = new Date(allDates[allDates.length - 1]).getTime();
+    _iranTimeRange = [minTs, maxTs];
+
+    const fmtDate = ts => {
+        const d = new Date(ts);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    };
+
+    noUiSlider.create(sliderEl, {
+        start: [minTs, maxTs],
+        connect: true,
+        range: { min: minTs, max: maxTs },
+        step: 86400000,
+    });
+    _iranTimeSlider = sliderEl.noUiSlider;
+
+    const startLabel = document.getElementById('iranSliderStartDate');
+    const endLabel = document.getElementById('iranSliderEndDate');
+
+    _iranTimeSlider.on('update', (values) => {
+        const s = parseInt(values[0]), e = parseInt(values[1]);
+        if (startLabel) startLabel.textContent = fmtDate(s);
+        if (endLabel) endLabel.textContent = fmtDate(e);
+    });
+
+    _iranTimeSlider.on('change', (values) => {
+        _iranTimeRange = [parseInt(values[0]), parseInt(values[1])];
+        updateIranIsraelMapLayers();
+    });
+}
+
+// Map curated event types to filter categories
+const _typeCategory = (type) => {
+    const t = (type || '').toLowerCase();
+    if (t === 'military' || t === 'battles' || t === 'explosions/remote violence' || t === 'violence against civilians') return 'military';
+    if (t === 'diplomatic' || t === 'strategic developments') return 'diplomatic';
+    if (t === 'sanctions' || t === 'nuclear') return 'sanctions';
+    if (t === 'proxy') return 'proxy';
+    return 'military'; // default
+};
 
 function updateIranIsraelMapLayers() {
     if (!iranIsraelMap) return;
 
-    const showIran = document.getElementById('toggleIranEvents')?.checked ?? true;
-    const showIsrael = document.getElementById('toggleIsraelEvents')?.checked ?? true;
-    const showCurated = document.getElementById('toggleCuratedEvents')?.checked ?? true;
+    const showMilitary = document.getElementById('toggleMilitary')?.checked ?? true;
+    const showDiplomatic = document.getElementById('toggleDiplomatic')?.checked ?? true;
+    const showSanctions = document.getElementById('toggleSanctions')?.checked ?? true;
+    const showProxy = document.getElementById('toggleProxy')?.checked ?? true;
     const showHeatmap = document.getElementById('toggleIranHeatmap')?.checked ?? true;
-    const eventTypeFilter = document.getElementById('iranMapEventTypeFilter')?.value || 'all';
+
+    const categoryVisible = { military: showMilitary, diplomatic: showDiplomatic, sanctions: showSanctions, proxy: showProxy };
+    const passesTypeFilter = (type) => categoryVisible[_typeCategory(type)] ?? true;
+
+    // Time range filter
+    const inTimeRange = (dateStr) => {
+        if (!_iranTimeRange || !dateStr) return true;
+        const ts = new Date(dateStr).getTime();
+        return ts >= _iranTimeRange[0] && ts <= _iranTimeRange[1];
+    };
 
     iranIsraelMarkerGroup.clearLayers();
 
     let allPoints = [];
 
-    // Iran ACLED events
-    if (showIran) {
-        _iranMapData.iran.filter(e => eventTypeFilter === 'all' || e.type === eventTypeFilter).forEach(e => {
-            const color = IRAN_MAP_EVENT_COLORS[e.type] || '#636E72';
-            const radius = Math.max(4, Math.min(10, 4 + e.fatalities * 0.5));
-            const marker = L.circleMarker([e.lat, e.lng], {
-                radius: radius,
-                fillColor: color,
-                color: 'rgba(255,255,255,0.4)',
-                weight: 1,
-                fillOpacity: 0.7,
-            });
-            marker.bindPopup(_buildMapPopup(e, 'Iran ACLED'));
-            iranIsraelMarkerGroup.addLayer(marker);
-            allPoints.push([e.lat, e.lng, 0.5]);
+    // ACLED events (Iran + Israel merged) — glowing tactical markers
+    [..._iranMapData.iran, ..._iranMapData.israel].filter(e => passesTypeFilter(e.type) && inTimeRange(e.date)).forEach(e => {
+        const color = IRAN_MAP_EVENT_COLORS[e.type] || '#636E72';
+        const radius = Math.max(4, Math.min(12, 4 + e.fatalities * 0.5));
+        const marker = L.circleMarker([e.lat, e.lng], {
+            radius: radius,
+            fillColor: color,
+            color: color,
+            weight: 1.5,
+            fillOpacity: 0.55,
+            opacity: 0.8,
         });
-    }
-
-    // Israel events
-    if (showIsrael) {
-        _iranMapData.israel.filter(e => eventTypeFilter === 'all' || e.type === eventTypeFilter).forEach(e => {
-            const color = IRAN_MAP_EVENT_COLORS[e.type] || '#636E72';
-            const radius = Math.max(5, Math.min(10, 5 + e.fatalities * 0.5));
-            const marker = L.circleMarker([e.lat, e.lng], {
-                radius: radius,
+        // Outer glow ring for high-fatality events
+        if (e.fatalities >= 3) {
+            const glow = L.circleMarker([e.lat, e.lng], {
+                radius: radius + 4,
                 fillColor: color,
-                color: 'rgba(255,255,255,0.6)',
-                weight: 1.5,
-                fillOpacity: 0.8,
+                color: color,
+                weight: 0,
+                fillOpacity: 0.15,
+                interactive: false,
             });
-            marker.bindPopup(_buildMapPopup(e, 'Israel'));
-            iranIsraelMarkerGroup.addLayer(marker);
-            allPoints.push([e.lat, e.lng, 0.7]);
-        });
-    }
+            iranIsraelMarkerGroup.addLayer(glow);
+        }
+        marker.bindPopup(_buildMapPopup(e, e.source === 'israel' ? 'Israel ACLED' : 'Iran ACLED'));
+        iranIsraelMarkerGroup.addLayer(marker);
+        allPoints.push([e.lat, e.lng, Math.min(1.0, 0.4 + e.fatalities * 0.1)]);
+    });
 
-    // Curated major events (special markers)
-    if (showCurated) {
-        _iranMapData.curated.forEach(e => {
-            const marker = L.marker([e.lat, e.lng], {
-                icon: L.divIcon({
-                    className: 'curated-pulse-wrap',
-                    html: `<div class="curated-pulse" title="${e.title}"></div>`,
-                    iconSize: [16, 16],
-                    iconAnchor: [8, 8],
-                }),
-            });
-            marker.bindPopup(`
-                <div style="font-family:Inter,sans-serif;max-width:320px">
-                    <div style="font-weight:700;font-size:13px;margin-bottom:4px;color:#D4A843">${e.date}</div>
-                    <div style="font-weight:600;font-size:12px;margin-bottom:6px;color:#1B2A4A">${e.title}</div>
-                    <div style="font-size:11px;margin-bottom:4px">
-                        <span style="color:#636E72">Type:</span>
-                        <span style="text-transform:capitalize;font-weight:500">${e.type}</span>
-                    </div>
-                    <div style="font-size:11px;margin-bottom:4px">
-                        <span style="color:#636E72">Location:</span> ${e.location}
-                    </div>
-                    <div style="font-size:11px;margin-bottom:4px">
-                        <span style="color:#636E72">Severity:</span> ${'&#9733;'.repeat(e.severity)}
-                    </div>${e.fatalities ? `
-                    <div style="font-size:11px;margin-bottom:4px">
-                        <span style="color:#636E72">Fatalities:</span> <strong style="color:#C43D3D">${e.fatalities.toLocaleString()}</strong>
-                    </div>` : ''}
-                    <div style="font-size:11px;color:#636E72;margin-top:6px;line-height:1.4">${e.description}</div>
+    // Curated + auto-discovered events (special markers)
+    _iranMapData.curated.filter(e => passesTypeFilter(e.type) && inTimeRange(e.date)).forEach(e => {
+        const srcType = e.source_type || 'curated';
+        const pulseClass = srcType === 'acled_promoted' ? 'acled-promoted-pulse'
+                         : srcType === 'news_auto' ? 'news-auto-pulse'
+                         : 'curated-pulse';
+        const dotSize = srcType === 'curated' ? 16 : 14;
+        const dateColor = srcType === 'acled_promoted' ? '#4ECDC4'
+                        : srcType === 'news_auto' ? '#3498DB'
+                        : '#D4A843';
+        const sourceBadge = srcType === 'acled_promoted'
+            ? '<div style="font-size:9px;color:#fff;background:#4ECDC4;display:inline-block;padding:1px 5px;border-radius:3px;margin-bottom:6px">OSINT — ACLED</div>'
+            : srcType === 'news_auto'
+            ? '<div style="font-size:9px;color:#fff;background:#3498DB;display:inline-block;padding:1px 5px;border-radius:3px;margin-bottom:6px">OSINT — News</div>'
+            : '';
+        const marker = L.marker([e.lat, e.lng], {
+            icon: L.divIcon({
+                className: 'curated-pulse-wrap',
+                html: `<div class="${pulseClass}" title="${e.title}"></div>`,
+                iconSize: [dotSize, dotSize],
+                iconAnchor: [dotSize/2, dotSize/2],
+            }),
+        });
+        marker.bindPopup(`
+            <div style="font-family:'SF Mono','Fira Code',Consolas,monospace;max-width:320px">
+                <div style="font-weight:700;font-size:12px;margin-bottom:4px;color:${dateColor};letter-spacing:1px">${e.date}</div>
+                ${sourceBadge}
+                <div style="font-weight:600;font-size:12px;margin-bottom:6px;color:#e0e8f0">${e.title}</div>
+                <div style="font-size:10px;margin-bottom:4px">
+                    <span style="color:#5a6a7a">TYPE</span>
+                    <span style="text-transform:uppercase;font-weight:500;color:#c0cad8;margin-left:6px">${e.type}</span>
                 </div>
-            `, { maxWidth: 340 });
-            iranIsraelMarkerGroup.addLayer(marker);
-            allPoints.push([e.lat, e.lng, 1.0]);
-        });
-    }
+                <div style="font-size:10px;margin-bottom:4px">
+                    <span style="color:#5a6a7a">LOC</span>
+                    <span style="color:#c0cad8;margin-left:6px">${e.location}</span>
+                </div>
+                <div style="font-size:10px;margin-bottom:4px">
+                    <span style="color:#5a6a7a">SEV</span>
+                    <span style="color:#ffcc00;margin-left:6px">${'&#9733;'.repeat(e.severity)}</span>
+                </div>${e.fatalities ? `
+                <div style="font-size:10px;margin-bottom:4px">
+                    <span style="color:#5a6a7a">KIA</span>
+                    <strong style="color:#ff4444;margin-left:6px">${e.fatalities.toLocaleString()}</strong>
+                </div>` : ''}
+                <div style="font-size:10px;color:#5a6a7a;margin-top:6px;line-height:1.4">${e.description}</div>
+            </div>
+        `, { maxWidth: 340 });
+        iranIsraelMarkerGroup.addLayer(marker);
+        allPoints.push([e.lat, e.lng, srcType === 'curated' ? 1.0 : 0.7]);
+    });
 
     // Heatmap
     if (showHeatmap && iranIsraelHeatLayer) {
@@ -1497,34 +1585,32 @@ function updateIranIsraelMapLayers() {
         iranIsraelMap.removeLayer(iranIsraelHeatLayer);
     }
 
-    // Update stats (respect event type filter)
+    // Update stats — count by type category
     const el = (id, val) => { const elem = document.getElementById(id); if (elem) elem.textContent = val; };
-    const filterFn = e => eventTypeFilter === 'all' || e.type === eventTypeFilter;
-    const iranFiltered = _iranMapData.iran.filter(filterFn);
-    const israelFiltered = _iranMapData.israel.filter(filterFn);
-    el('iranMapStatIran', showIran ? iranFiltered.length.toLocaleString() : '0');
-    el('iranMapStatIsrael', showIsrael ? israelFiltered.length.toLocaleString() : '0');
-    el('iranMapStatCurated', showCurated ? _iranMapData.curated.length.toLocaleString() : '0');
-
-    let totalFatalities = 0;
-    if (showIran) totalFatalities += iranFiltered.reduce((s, e) => s + e.fatalities, 0);
-    if (showIsrael) totalFatalities += israelFiltered.reduce((s, e) => s + e.fatalities, 0);
-    if (showCurated) totalFatalities += _iranMapData.curated.reduce((s, e) => s + (e.fatalities || 0), 0);
+    const allEvts = [..._iranMapData.iran, ..._iranMapData.israel, ..._iranMapData.curated];
+    const visibleEvts = allEvts.filter(e => passesTypeFilter(e.type) && inTimeRange(e.date));
+    const militaryCount = visibleEvts.filter(e => _typeCategory(e.type) === 'military').length;
+    const diplomaticCount = visibleEvts.filter(e => _typeCategory(e.type) === 'diplomatic').length;
+    el('iranMapStatIran', militaryCount.toLocaleString());
+    el('iranMapStatIsrael', diplomaticCount.toLocaleString());
+    el('iranMapStatCurated', visibleEvts.length.toLocaleString());
+    const totalFatalities = visibleEvts.reduce((s, e) => s + (e.fatalities || 0), 0);
     el('iranMapStatFatalities', totalFatalities.toLocaleString());
 }
 
 function _buildMapPopup(e, label) {
     const notesShort = (e.notes || '').substring(0, 200);
+    const badgeColor = e.source === 'israel' ? '#3D6B99' : '#C43D3D';
     return `
-        <div style="font-family:Inter,sans-serif;max-width:300px">
-            <div style="font-weight:700;font-size:13px;margin-bottom:4px;color:#1B2A4A">${e.date}</div>
-            <div style="font-size:10px;color:#fff;background:${e.source === 'israel' ? '#3D6B99' : '#C43D3D'};display:inline-block;padding:2px 6px;border-radius:3px;margin-bottom:6px">${label}</div>
-            <div style="font-size:12px;margin-bottom:4px"><span style="color:#636E72">Type:</span> ${e.type}</div>
-            <div style="font-size:12px;margin-bottom:4px"><span style="color:#636E72">Sub-type:</span> ${e.subType || 'N/A'}</div>
-            <div style="font-size:12px;margin-bottom:4px"><span style="color:#636E72">Actor:</span> ${e.actor || 'N/A'}</div>
-            <div style="font-size:12px;margin-bottom:4px"><span style="color:#636E72">Location:</span> ${e.location}</div>
-            <div style="font-size:12px;margin-bottom:4px"><span style="color:#636E72">Fatalities:</span> ${e.fatalities}</div>
-            <div style="font-size:11px;color:#636E72;margin-top:6px;line-height:1.4">${notesShort}${(e.notes || '').length > 200 ? '...' : ''}</div>
+        <div style="font-family:'SF Mono','Fira Code',Consolas,monospace;max-width:300px">
+            <div style="font-weight:700;font-size:11px;margin-bottom:4px;color:#00d4ff;letter-spacing:1px">${e.date}</div>
+            <div style="font-size:9px;color:#fff;background:${badgeColor};display:inline-block;padding:2px 6px;border-radius:2px;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">${label}</div>
+            <div style="font-size:10px;margin-bottom:3px"><span style="color:#5a6a7a">TYPE</span> <span style="color:#c0cad8;margin-left:4px">${e.type}</span></div>
+            <div style="font-size:10px;margin-bottom:3px"><span style="color:#5a6a7a">SUB</span> <span style="color:#c0cad8;margin-left:4px">${e.subType || 'N/A'}</span></div>
+            <div style="font-size:10px;margin-bottom:3px"><span style="color:#5a6a7a">ACTOR</span> <span style="color:#c0cad8;margin-left:4px">${e.actor || 'N/A'}</span></div>
+            <div style="font-size:10px;margin-bottom:3px"><span style="color:#5a6a7a">LOC</span> <span style="color:#c0cad8;margin-left:4px">${e.location}</span></div>
+            <div style="font-size:10px;margin-bottom:3px"><span style="color:#5a6a7a">KIA</span> <strong style="color:${e.fatalities > 0 ? '#ff4444' : '#c0cad8'};margin-left:4px">${e.fatalities}</strong></div>
+            <div style="font-size:9px;color:#4a5a6a;margin-top:6px;line-height:1.4">${notesShort}${(e.notes || '').length > 200 ? '...' : ''}</div>
         </div>
     `;
 }

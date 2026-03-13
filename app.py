@@ -14,7 +14,19 @@ import data_service
 
 app = FastAPI(title="Red Sea Crisis Intelligence Dashboard")
 
-# Serve static files (HTML, CSS, JS)
+# Serve static files (HTML, CSS, JS) with no-cache headers
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class NoCacheStaticMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/static"):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
+app.add_middleware(NoCacheStaticMiddleware)
 app.mount("/static", StaticFiles(directory=config.BASE_DIR / "static"), name="static")
 
 
@@ -78,7 +90,7 @@ def get_hypothesis():
 def get_iran_events():
     """Iran-related ACLED events + curated major events + live news."""
     acled_events = data_service.fetch_iran_events()
-    curated = data_service.get_curated_iran_events()
+    curated = data_service.get_merged_curated_events()
     news = data_service.fetch_iran_news()
     result = {"count": len(acled_events), "data": acled_events, "curated": curated, "news": news}
     err = data_service.get_iran_fetch_error()
@@ -100,19 +112,22 @@ def get_iran_impact():
 # ─── Data Refresh ─────────────────────────────────────────────────────────────
 
 def _do_refresh():
-    """Background task: clear caches and re-fetch ACLED data."""
+    """Background task: clear ALL caches and re-fetch data."""
     import json
     data_service._acled_token = None
 
-    # Clear caches
-    for name in ["acled_events.json", "iran_events.json"]:
-        p = config.CACHE_DIR / name
-        if p.exists():
-            p.unlink()
+    # Clear ALL caches — not just ACLED
+    for cache_file in config.CACHE_DIR.glob("*.json"):
+        try:
+            cache_file.unlink()
+        except Exception:
+            pass
 
-    # Re-fetch (will update in-memory caches)
+    # Re-fetch core data (will rebuild caches)
     events = data_service.fetch_acled_events()
     iran = data_service.fetch_iran_events()
+    data_service.fetch_brent_prices()
+    data_service.fetch_iran_news()
 
     # Update JSON fallbacks if we got real API data
     if len(events) > 1000:
@@ -144,4 +159,14 @@ if __name__ == "__main__":
     print(f"  ─────────────────────────────────────")
     print(f"  Open in browser: http://localhost:{config.PORT}")
     print(f"  Press Ctrl+C to stop\n")
-    uvicorn.run(app, host=config.HOST, port=config.PORT)
+    try:
+        uvicorn.run(
+            "app:app",
+            host=config.HOST,
+            port=config.PORT,
+            reload=True,
+            reload_dirs=[str(config.BASE_DIR)],
+        )
+    except (PermissionError, OSError):
+        # Fallback: reload not supported in this environment (e.g. /tmp on macOS)
+        uvicorn.run(app, host=config.HOST, port=config.PORT)
