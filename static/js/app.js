@@ -698,7 +698,7 @@ function getMaritimeEmbedUrl(region) {
     };
     const c = configs[region];
     // maptype:3 = dark satellite, vtypes:1 = tankers only
-    return `https://www.marinetraffic.com/en/ais/embed/zoom:${c.zoom}/centery:${c.centery}/centerx:${c.centerx}/maptype:3/shownames:true/mmsi:0/shipid:0/fleet:/fleet_id:/vtypes:1/showmenu:false/remember:false`;
+    return `https://www.marinetraffic.com/en/ais/embed/zoom:${c.zoom}/centery:${c.centery}/centerx:${c.centerx}/maptype:3/shownames:true/mmsi:0/shipid:0/fleet:/fleet_id:/vtypes:1/showmenu:true/remember:true`;
 }
 
 function initMaritimeEmbeds() {

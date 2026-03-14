@@ -455,6 +455,10 @@ body {
     width: 100%;
 }
 
+.iran-event-timeline-card {
+    margin-bottom: 32px;
+}
+
 .chart-header {
     display: flex;
     align-items: center;

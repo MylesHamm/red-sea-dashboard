@@ -642,7 +642,8 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
     const prices = filtered.map(d => d.price);
 
     // Build event lookup by date for scatter overlay + tooltip afterBody
-    const eventPoints = (curatedEvents || []).filter(ev => ev.date >= cutoff).map(ev => {
+    // Only use hand-curated events (not auto-discovered news headlines)
+    const eventPoints = (curatedEvents || []).filter(ev => ev.date >= cutoff && (!ev.source_type || ev.source_type === 'curated')).map(ev => {
         const idx = dates.indexOf(ev.date);
         const closestPrice = idx >= 0 ? prices[idx] : null;
         return {
@@ -939,7 +940,7 @@ function createIranEventTypeChart(iranEvents) {
     if (!ctx || !iranEvents || !iranEvents.length) return;
 
     const typeCounts = {};
-    iranEvents.forEach(e => {
+    iranEvents.filter(e => (e.event_type || '').toLowerCase() !== 'protests').forEach(e => {
         const t = e.event_type || 'Unknown';
         typeCounts[t] = (typeCounts[t] || 0) + 1;
     });

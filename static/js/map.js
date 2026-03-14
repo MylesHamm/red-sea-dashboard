@@ -18,7 +18,7 @@ const MARITIME_TANKER = /\b(?:oil[- ]?tanker|chemical[- ]?tanker|fuel[- ]?tanker
 const MARITIME_LOCATION = /red sea|gulf of aden|bab el.mandeb|strait of hormuz|arabian sea|indian ocean|south red sea/i;
 // Filter to only maritime/shipping-relevant events (exclude land-based Yemen civil conflict)
 const MARITIME_EVENT = /\b(vessel|ship|tanker|maritime|navy|destroyer|frigate|warship|anti-ship|drone.?boat|hijack|boarding|piracy|naval|USS |HMS |USNS |MV |MT |IMO:|missile.*launch|intercept(?:ed|ion)|shot down|drone|ballistic|cruise missile|one-way attack|houthi.*fire|fire.*houthi|sea mine)\b/i;
-const MARITIME_LOC = /red sea|gulf of aden|bab el.mandeb|strait|arabian sea|indian ocean|mediterranean|south red sea|north red sea|west arabian/i;
+const MARITIME_LOC = /red sea|gulf of aden|bab el.mandeb|south red sea|north red sea|west arabian/i;
 
 // Strict ship/vessel keywords — the thesis counts attacks on vessels, not land targets
 const SHIP_KEYWORDS = /\b(vessel|ship|tanker|cargo|bulk.?carrier|container.?ship|MV |MT |HMS |USS |USNS |warship|destroyer|frigate|corvette|naval|navy|maritime|hijack|boarding|piracy|sea.?mine)\b/i;
@@ -26,14 +26,26 @@ const SHIP_KEYWORDS = /\b(vessel|ship|tanker|cargo|bulk.?carrier|container.?ship
 function isMaritimeRelevant(event) {
     const loc = event.location || '';
     const notes = event.notes || '';
+    const lat = parseFloat(event.latitude);
+    const lon = parseFloat(event.longitude);
 
-    // Thesis scope: only events involving actual ships/vessels in maritime zones.
-    // This is the independent variable (weekly attack frequency) in H1/H2/H3.
-    const inMaritimeZone = MARITIME_LOC.test(loc) || MARITIME_LOC.test(notes);
+    // Geographic bounds: Red Sea / Gulf of Aden / Bab el-Mandeb / Arabian Sea theater
+    // Two zones: Southern (Gulf of Aden + Arabian Sea) and Northern (Red Sea up to Suez)
+    // Excludes Persian Gulf (lat>20 AND lon>45), Strait of Hormuz, Mediterranean
+    const hasCoords = !isNaN(lat) && !isNaN(lon);
+    const inSouthernZone = hasCoords && lat >= 10.0 && lat <= 20.0 && lon >= 36.0 && lon <= 62.0;
+    const inNorthernRedSea = hasCoords && lat > 20.0 && lat <= 30.5 && lon >= 32.0 && lon <= 44.0;
+    const inGeoBounds = inSouthernZone || inNorthernRedSea;
+
+    // Must involve an actual ship/vessel
     const involvesShip = SHIP_KEYWORDS.test(notes);
 
-    // Must be in a maritime zone AND involve an actual ship/vessel
-    return inMaritimeZone && involvesShip;
+    // Exclude protests — not part of thesis analysis
+    const eventType = (event.event_type || '').toLowerCase();
+    if (eventType === 'protests') return false;
+
+    // Geographic bounds required (text-only matching too error-prone for out-of-theater events)
+    return inGeoBounds && involvesShip;
 }
 
 const CHOKEPOINT_LAT_MIN = 12.4;

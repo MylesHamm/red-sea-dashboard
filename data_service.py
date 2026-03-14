@@ -165,7 +165,7 @@ _MARITIME_KEYWORDS = [
     "houthi", "ansar allah", "red sea", "bab el-mandeb", "bab al-mandab",
     "gulf of aden", "maritime", "shipping", "vessel", "tanker", "cargo ship",
     "oil tanker", "commercial ship", "merchant vessel", "container ship",
-    "strait of hormuz", "suez canal", "usns", "uss ",
+    "suez canal", "usns", "uss ",
     "piracy", "hijack", "sea route", "waterway", "blockade",
     "coast guard", "naval blockade", "naval operation",
 ]
