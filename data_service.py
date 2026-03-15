@@ -330,9 +330,9 @@ def _load_acled_fallback() -> List[dict]:
 _thesis_events_cache: Optional[List[dict]] = None
 
 def load_thesis_events() -> List[dict]:
-    """Load the exact 361 events analyzed in the thesis from thesis_events.csv.
-    These are the curated ACLED events used in the econometric analysis —
-    NOT the full live ACLED feed which includes unrelated Yemen civil conflict."""
+    """Load the thesis events from thesis_events.csv (374 events).
+    Original 361 events from the econometric analysis + 13 additional
+    tanker-targeting attacks identified in the broader ACLED data."""
     global _thesis_events_cache
     if _thesis_events_cache is not None:
         return _thesis_events_cache
