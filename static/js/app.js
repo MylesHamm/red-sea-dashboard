@@ -603,13 +603,21 @@ document.querySelectorAll('#dataTable th[data-sort]').forEach(th => {
 });
 
 // Filter buttons
-document.getElementById('applyFilters')?.addEventListener('click', applyTableFilters);
+document.getElementById('applyFilters')?.addEventListener('click', () => { applyTableFilters(); _updateStatusBar(); });
 document.getElementById('resetFilters')?.addEventListener('click', () => {
     document.getElementById('searchInput').value = '';
     document.getElementById('eventTypeFilter').value = '';
     document.getElementById('dataStartDate').value = '2023-10-01';
     document.getElementById('dataEndDate').value = '2026-12-31';
     applyTableFilters();
+    _updateStatusBar();
+});
+
+// Update status bar on any filter interaction across the dashboard
+['iranMapEventTypeFilter', 'filterTankers', 'timeSlider', 'iranTimeSlider', 'eventTypeFilter', 'searchInput', 'dataStartDate', 'dataEndDate'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => setTimeout(_updateStatusBar, 100));
+    if (el) el.addEventListener('input', () => setTimeout(_updateStatusBar, 100));
 });
 
 // Export CSV
@@ -1034,11 +1042,37 @@ function _updateStatusBar() {
         if (updated) freshEl.textContent = updated.textContent;
     }
 
-    // Filter count
+    // Filter count — all active filters across the dashboard
     const filterEl = document.getElementById('statusFilters');
     if (filterEl) {
         let count = 0;
+        // Overview crossfilter (donut chart click)
+        if (typeof activeFilter !== 'undefined' && activeFilter) count++;
+        // Iran crossfilter (donut chart click)
         if (typeof iranFilter !== 'undefined' && iranFilter) count++;
+        // Iran map event type dropdown
+        const iranTypeF = document.getElementById('iranMapEventTypeFilter');
+        if (iranTypeF && iranTypeF.value && iranTypeF.value !== 'all') count++;
+        // Iran time slider (if not at full range)
+        const iranSlider = document.getElementById('iranTimeSlider');
+        if (iranSlider && iranSlider.value && parseInt(iranSlider.value) < parseInt(iranSlider.max || 100)) count++;
+        // Red Sea tanker-only checkbox
+        const tankerF = document.getElementById('filterTankers');
+        if (tankerF && tankerF.checked) count++;
+        // Red Sea time slider (if not at full range)
+        const redSeaSlider = document.getElementById('timeSlider');
+        if (redSeaSlider && redSeaSlider.value && parseInt(redSeaSlider.value) < parseInt(redSeaSlider.max || 100)) count++;
+        // Data Explorer search
+        const searchF = document.getElementById('searchInput');
+        if (searchF && searchF.value.trim()) count++;
+        // Data Explorer event type
+        const typeF = document.getElementById('eventTypeFilter');
+        if (typeF && typeF.value) count++;
+        // Data Explorer date range (non-default)
+        const startF = document.getElementById('dataStartDate');
+        if (startF && startF.value && startF.value !== '2023-10-01') count++;
+        const endF = document.getElementById('dataEndDate');
+        if (endF && endF.value && endF.value !== '2026-12-31') count++;
         filterEl.textContent = count;
     }
 }

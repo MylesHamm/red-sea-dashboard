@@ -132,6 +132,7 @@ function setCrossfilter(type, value) {
     }
     // Trigger re-render of overview charts with filter
     if (typeof renderOverviewFiltered === 'function') renderOverviewFiltered();
+    if (typeof _updateStatusBar === 'function') _updateStatusBar();
 }
 
 function clearCrossfilter() {
@@ -139,6 +140,7 @@ function clearCrossfilter() {
     const bar = document.getElementById('crossfilterBar');
     if (bar) bar.style.display = 'none';
     if (typeof renderOverviewFiltered === 'function') renderOverviewFiltered();
+    if (typeof _updateStatusBar === 'function') _updateStatusBar();
 }
 
 // Wire up clear button
@@ -623,6 +625,7 @@ function setIranFilter(value) {
         bar.style.display = 'flex';
     }
     if (typeof renderCurrentEventsFiltered === 'function') renderCurrentEventsFiltered();
+    if (typeof _updateStatusBar === 'function') _updateStatusBar();
 }
 
 function clearIranFilter() {
@@ -630,6 +633,7 @@ function clearIranFilter() {
     const bar = document.getElementById('iranCrossfilterBar');
     if (bar) bar.style.display = 'none';
     if (typeof renderCurrentEventsFiltered === 'function') renderCurrentEventsFiltered();
+    if (typeof _updateStatusBar === 'function') _updateStatusBar();
 }
 
 document.getElementById('iranCrossfilterClear')?.addEventListener('click', clearIranFilter);
