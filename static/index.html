@@ -31,7 +31,7 @@
     <script src="https://cdn.jsdelivr.net/npm/nouislider@15.8.1/dist/nouislider.min.js"></script>
 
     <!-- Dashboard CSS -->
-    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260313f">
+    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260315a">
 </head>
 <body>
 
@@ -59,9 +59,10 @@
             <button class="tab-btn" data-tab="geospatial">Geospatial Intelligence</button>
             <button class="tab-btn" data-tab="econometric">Econometric Analysis</button>
             <button class="tab-btn" data-tab="controls">Control Variables</button>
-            <button class="tab-btn" data-tab="data">Data Explorer</button>
             <button class="tab-btn" data-tab="currentevents">US-Iran Tensions</button>
             <button class="tab-btn" data-tab="maritime">Maritime Traffic</button>
+            <button class="tab-btn" data-tab="data">Data Explorer</button>
+            <button class="tab-btn" data-tab="conclusion">Conclusion</button>
             <button class="tab-btn" data-tab="sources">Sources</button>
         </nav>
     </header>
@@ -717,7 +718,146 @@
         </div>
     </section>
 
-    <!-- ═══ TAB 8: SOURCES & METHODOLOGY ═══ -->
+    <!-- ═══ TAB 8: CONCLUSION ═══ -->
+    <section class="tab-content" id="tab-conclusion">
+        <div class="container">
+
+            <!-- HYPOTHESIS VERDICTS -->
+            <div class="conclusion-section">
+                <h2 class="section-header">HYPOTHESIS VERDICTS</h2>
+                <div class="verdict-grid">
+                    <div class="verdict-card">
+                        <div class="verdict-status" style="background:rgba(196,61,61,0.15);color:#C43D3D;border:1px solid rgba(196,61,61,0.3)">NOT SUPPORTED</div>
+                        <h3>H1: Fear Premium</h3>
+                        <p class="verdict-stat">&beta; = -0.1029, p &lt; 0.001</p>
+                        <p>Each additional weekly attack associated with decreased volatility of 0.103 units (~16% reduction at sample mean), contradicting fear premium theory.</p>
+                    </div>
+                    <div class="verdict-card">
+                        <div class="verdict-status" style="background:rgba(46,125,91,0.15);color:#2E7D5B;border:1px solid rgba(46,125,91,0.3)">SUPPORTED</div>
+                        <h3>H2: Temporal Decay</h3>
+                        <p class="verdict-stat">~90 trading day adaptation threshold identified</p>
+                        <p>Three distinct campaign phases with sharply differentiated volatility profiles. Market sensitivity to frequency variations diminished materially after threshold.</p>
+                    </div>
+                    <div class="verdict-card">
+                        <div class="verdict-status" style="background:rgba(46,125,91,0.15);color:#2E7D5B;border:1px solid rgba(46,125,91,0.3)">SUPPORTED</div>
+                        <h3>H3: Intensity Threshold</h3>
+                        <p class="verdict-stat">~3.5 attacks/week saturation point</p>
+                        <p>Attacks beyond threshold produced diminishing marginal volatility effects. Additional incidents carried reduced information content for market pricing.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KEY FINDING -->
+            <div class="conclusion-section">
+                <h2 class="section-header">KEY FINDING</h2>
+                <div class="chart-card full-width" style="margin-bottom:20px">
+                    <div class="chart-header">
+                        <h3>INVERSE RELATIONSHIP: ATTACK FREQUENCY vs. VOLATILITY</h3>
+                    </div>
+                    <p style="padding:0 24px 16px;color:var(--text-secondary);line-height:1.7">Increased Houthi attack frequency correlates with decreased rather than increased Brent crude oil price volatility, reflecting market adaptation to persistent threats rather than reactive panic to discrete events.</p>
+                </div>
+                <div class="mechanism-grid">
+                    <div class="mechanism-card">
+                        <h4>MARKET HABITUATION</h4>
+                        <p>Markets incorporate ongoing attack risks into baseline pricing models after ~90 trading days.</p>
+                    </div>
+                    <div class="mechanism-card">
+                        <h4>LOGISTICS DECOUPLING</h4>
+                        <p>Cape of Good Hope rerouting isolates Red Sea disruptions from spot prices; costs manifest in freight rates and insurance, not crude volatility.</p>
+                    </div>
+                    <div class="mechanism-card">
+                        <h4>REVERSE CAUSATION</h4>
+                        <p>Houthis may concentrate attacks during market stability periods; attacks decrease during turbulence when other factors drive volatility.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CAMPAIGN PHASES -->
+            <div class="conclusion-section">
+                <h2 class="section-header">CAMPAIGN PHASES</h2>
+                <div class="phase-grid">
+                    <div class="phase-card">
+                        <div class="phase-number">Phase 1</div>
+                        <div class="phase-title">Escalation</div>
+                        <div class="phase-dates">Oct 2023 &ndash; Jan 2024</div>
+                        <p>43 attacks, coastal clustering, peak 47/week on Jan 15, 2024.</p>
+                    </div>
+                    <div class="phase-card">
+                        <div class="phase-number">Phase 2</div>
+                        <div class="phase-title">Peak Campaign</div>
+                        <div class="phase-dates">Feb &ndash; Jun 2024</div>
+                        <p>218 attacks, maximum operational tempo, southern Red Sea concentration.</p>
+                    </div>
+                    <div class="phase-card">
+                        <div class="phase-number">Phase 3</div>
+                        <div class="phase-title">Sustained Ops</div>
+                        <div class="phase-dates">Jul &ndash; Dec 2024</div>
+                        <p>84 attacks, geographic expansion into Gulf of Aden, stabilized 8&ndash;12/week.</p>
+                    </div>
+                    <div class="phase-card">
+                        <div class="phase-number">Phase 4</div>
+                        <div class="phase-title">Adaptation</div>
+                        <div class="phase-dates">Jan &ndash; Oct 2025</div>
+                        <p>17 attacks, dramatic reduction, market adaptation solidified.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- IMPLICATIONS FOR PRACTICE -->
+            <div class="conclusion-section">
+                <h2 class="section-header">IMPLICATIONS FOR PRACTICE</h2>
+                <div class="implications-grid">
+                    <div class="implication-card">
+                        <h4>TRADING DESKS</h4>
+                        <p>Use market adaptation metrics not incident counts. Key indicators: % traffic rerouting, insurance premium changes, carrier announcement frequency, trading days since campaign onset.</p>
+                    </div>
+                    <div class="implication-card">
+                        <h4>RISK MANAGEMENT</h4>
+                        <p>Incorporate adaptation-state classifier. Shock phase (0&ndash;90 days) vs adapted state. GARCH modeling superior to event-count approaches.</p>
+                    </div>
+                    <div class="implication-card">
+                        <h4>GOVERNMENT ANALYSTS</h4>
+                        <p>Attack frequency alone provides incomplete threat picture. Integrate logistics data, carrier behavior, market adaptation indicators.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LIMITATIONS -->
+            <div class="conclusion-section">
+                <h2 class="section-header">LIMITATIONS</h2>
+                <ul class="limitations-list">
+                    <li>Temporal scope: 24-month window may not capture full adaptation cycle</li>
+                    <li>Data constraints: ACLED prioritizes lethal incidents, may underreport near-misses</li>
+                    <li>Model constraints: GARCH(1,1) cannot capture asymmetric volatility (leverage effect)</li>
+                    <li>External validity: Findings may be context-specific to Houthi campaign</li>
+                    <li>Uncontrolled confounders: macro shocks, regional tensions occur contemporaneously</li>
+                </ul>
+            </div>
+
+            <!-- FUTURE RESEARCH -->
+            <div class="conclusion-section">
+                <h2 class="section-header">FUTURE RESEARCH</h2>
+                <ol class="research-list">
+                    <li>Comparative chokepoint analysis (Hormuz, Malacca)</li>
+                    <li>Attack type disaggregation (missiles vs drones vs mines vs seizures)</li>
+                    <li>Freight rate analysis as alternative dependent variable</li>
+                    <li>Machine learning for nonlinear thresholds</li>
+                    <li>Game theory modeling of adversary strategic timing</li>
+                </ol>
+            </div>
+
+            <!-- FINAL ASSESSMENT -->
+            <div class="conclusion-section">
+                <h2 class="section-header">FINAL ASSESSMENT</h2>
+                <div class="final-assessment">
+                    <p>The Houthi Red Sea maritime campaign demonstrates that sustained sub-state disruptions affect oil markets through mechanisms fundamentally different from conventional geopolitical shocks. Raw incident counts provide misleading volatility indicators during sustained campaigns. Effective business intelligence requires tracking market adaptation indicators: routing decisions, insurance adjustments, and temporal distance from campaign initiation. The adaptive volatility framework provides empirically grounded alternatives that better match observed market behavior.</p>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- ═══ TAB 9: SOURCES & METHODOLOGY ═══ -->
     <section class="tab-content" id="tab-sources">
         <div class="container">
             <h2 style="font-size:18px;font-weight:700;color:var(--navy);margin-bottom:20px">Data Sources & Methodology</h2>
@@ -792,8 +932,8 @@
     </footer>
 
     <!-- Dashboard JS -->
-    <script src="/static/js/charts.js?v=20260313f"></script>
-    <script src="/static/js/map.js?v=20260313f"></script>
-    <script src="/static/js/app.js?v=20260313f"></script>
+    <script src="/static/js/charts.js?v=20260315a"></script>
+    <script src="/static/js/map.js?v=20260315a"></script>
+    <script src="/static/js/app.js?v=20260315a"></script>
 </body>
 </html>

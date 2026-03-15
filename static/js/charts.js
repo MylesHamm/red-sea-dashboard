@@ -3,22 +3,22 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const COLORS = {
-    brent: '#3D6B99',
-    brentBg: 'rgba(61, 107, 153, 0.08)',
-    attacks: '#C43D3D',
-    attacksBg: 'rgba(196, 61, 61, 0.25)',
-    volatility: '#D4A843',
-    volatilityBg: 'rgba(212, 168, 67, 0.08)',
-    positive: '#2E7D5B',
-    negative: '#C43D3D',
-    dxy: '#7B68AE',
-    dxyBg: 'rgba(123, 104, 174, 0.08)',
-    ovx: '#E07B4C',
-    ovxBg: 'rgba(224, 123, 76, 0.08)',
-    navy: '#1B2A4A',
-    gold: '#C9A96E',
-    gray: '#B2BEC3',
-    gridLine: 'rgba(0,0,0,0.06)',
+    brent: '#4A90D9',
+    brentBg: 'rgba(74, 144, 217, 0.15)',
+    attacks: '#E05555',
+    attacksBg: 'rgba(224, 85, 85, 0.30)',
+    volatility: '#F0C050',
+    volatilityBg: 'rgba(240, 192, 80, 0.12)',
+    positive: '#3ECF8E',
+    negative: '#E05555',
+    dxy: '#9B8EC4',
+    dxyBg: 'rgba(155, 142, 196, 0.12)',
+    ovx: '#F09060',
+    ovxBg: 'rgba(240, 144, 96, 0.12)',
+    navy: '#0d1420',
+    gold: '#D4B870',
+    gray: '#8892a0',
+    gridLine: 'rgba(0, 212, 255, 0.08)',
 };
 
 const CHART_DEFAULTS = {
@@ -28,6 +28,7 @@ const CHART_DEFAULTS = {
         legend: {
             position: 'top',
             labels: {
+                color: '#8892a0',
                 font: { family: 'Inter', size: 11, weight: '500' },
                 padding: 16,
                 usePointStyle: true,
@@ -35,22 +36,30 @@ const CHART_DEFAULTS = {
             }
         },
         tooltip: {
-            backgroundColor: 'rgba(27, 42, 74, 0.95)',
+            backgroundColor: '#0d1420',
+            borderColor: 'rgba(0, 212, 255, 0.3)',
+            borderWidth: 1,
+            titleColor: '#00d4ff',
+            bodyColor: '#e0e6ed',
             titleFont: { family: 'Inter', size: 12, weight: '600' },
             bodyFont: { family: 'Inter', size: 11 },
             padding: 12,
             cornerRadius: 6,
             displayColors: true,
-        }
+        },
+        // Transparent plugin background (no white card behind charts)
+        _darkBg: { backgroundColor: 'transparent' },
     },
     scales: {
         x: {
-            grid: { color: COLORS.gridLine },
-            ticks: { font: { family: 'Inter', size: 10 }, maxTicksLimit: 12 }
+            grid: { color: 'rgba(0, 212, 255, 0.08)' },
+            ticks: { color: '#8892a0', font: { family: 'Inter', size: 10 }, maxTicksLimit: 12 },
+            title: { color: '#8892a0' },
         },
         y: {
-            grid: { color: COLORS.gridLine },
-            ticks: { font: { family: 'Inter', size: 10 } }
+            grid: { color: 'rgba(0, 212, 255, 0.08)' },
+            ticks: { color: '#8892a0', font: { family: 'Inter', size: 10 } },
+            title: { color: '#8892a0' },
         }
     }
 };
@@ -96,7 +105,7 @@ const crosshairPlugin = {
                 ctx.save();
                 ctx.beginPath();
                 ctx.setLineDash([4, 4]);
-                ctx.strokeStyle = 'rgba(201, 169, 110, 0.6)';
+                ctx.strokeStyle = 'rgba(0, 212, 255, 0.4)';
                 ctx.lineWidth = 1;
                 ctx.moveTo(x, yScale.top);
                 ctx.lineTo(x, yScale.bottom);
@@ -168,8 +177,8 @@ function createPriceAttackChart(timeseries) {
     let attackBorders = attacks.map(() => COLORS.attacks);
     if (activeFilter && activeFilter.type === 'eventType' && timeseries._eventDates) {
         const matchDates = new Set(timeseries._eventDates[activeFilter.value] || []);
-        attackColors = dates.map(d => matchDates.has(d) ? 'rgba(196, 61, 61, 0.7)' : 'rgba(196, 61, 61, 0.08)');
-        attackBorders = dates.map(d => matchDates.has(d) ? COLORS.attacks : 'rgba(196, 61, 61, 0.15)');
+        attackColors = dates.map(d => matchDates.has(d) ? 'rgba(224, 85, 85, 0.7)' : 'rgba(224, 85, 85, 0.08)');
+        attackBorders = dates.map(d => matchDates.has(d) ? COLORS.attacks : 'rgba(224, 85, 85, 0.15)');
     }
 
     chartInstances['priceAttackChart'] = new Chart(ctx, {
@@ -288,7 +297,7 @@ function createEventTypesChart(events) {
             datasets: [{
                 data: sorted.map(s => s[1]),
                 backgroundColor: bgColors,
-                borderColor: '#fff',
+                borderColor: '#0d1420',
                 borderWidth: 2,
             }]
         },
@@ -594,11 +603,11 @@ function createSprChart(timeseries) {
 /* ─── Tab 6: Current Events (US-Iran) ───────────────────────────────────── */
 
 const IRAN_TYPE_COLORS = {
-    military: '#C43D3D',
-    diplomatic: '#3D6B99',
-    sanctions: '#E07B4C',
-    nuclear: '#7B68AE',
-    proxy: '#C9A96E',
+    military: '#E05555',
+    diplomatic: '#4A90D9',
+    sanctions: '#F09060',
+    nuclear: '#9B8EC4',
+    proxy: '#D4B870',
 };
 
 // ─── Iran Crossfilter State ─────────────────────────────────────────────────
@@ -960,7 +969,7 @@ function createIranEventTypeChart(iranEvents) {
             datasets: [{
                 data: sorted.map(s => s[1]),
                 backgroundColor: bgColors,
-                borderColor: '#fff',
+                borderColor: '#0d1420',
                 borderWidth: 2,
             }]
         },
@@ -995,7 +1004,7 @@ function createIranImpactChart(impactByType) {
     if (!types.length) return;
 
     const horizons = ['T+1', 'T+3', 'T+5', 'T+7'];
-    const horizonColors = ['rgba(61,107,153,0.7)', 'rgba(196,61,61,0.7)', 'rgba(212,168,67,0.7)', 'rgba(123,104,174,0.7)'];
+    const horizonColors = ['rgba(74,144,217,0.7)', 'rgba(224,85,85,0.7)', 'rgba(240,192,80,0.7)', 'rgba(155,142,196,0.7)'];
 
     const datasets = horizons.map((h, i) => ({
         label: h,
@@ -1073,36 +1082,36 @@ function createCorrelationChart(correlation) {
     const offsetX = 120;
     const offsetY = 10;
 
-    // Clear canvas with white background
-    context.fillStyle = '#FFFFFF';
+    // Clear canvas with dark background
+    context.fillStyle = 'transparent';
     context.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Draw cells — diverging colormap: Crimson (-1) → White (0) → Navy (+1)
+    // Draw cells — diverging colormap: Crimson (-1) → Dark (0) → Cyan (+1)
     data.forEach(d => {
         const val = d.v;
         let r, g, b;
         if (val >= 0) {
-            // White (255,255,255) → Navy (27,42,74)
-            r = Math.round(255 - val * (255 - 27));
-            g = Math.round(255 - val * (255 - 42));
-            b = Math.round(255 - val * (255 - 74));
+            // Dark base (20,30,48) → Cyan (0,212,255)
+            r = Math.round(20 + val * (0 - 20));
+            g = Math.round(30 + val * (212 - 30));
+            b = Math.round(48 + val * (255 - 48));
         } else {
-            // White (255,255,255) → Crimson (196,61,61)
+            // Dark base (20,30,48) → Crimson (224,85,85)
             const abs = Math.abs(val);
-            r = Math.round(255 - abs * (255 - 196));
-            g = Math.round(255 - abs * (255 - 61));
-            b = Math.round(255 - abs * (255 - 61));
+            r = Math.round(20 + abs * (224 - 20));
+            g = Math.round(30 + abs * (85 - 30));
+            b = Math.round(48 + abs * (85 - 48));
         }
 
         context.fillStyle = `rgb(${r},${g},${b})`;
         context.fillRect(offsetX + d.x * cellW, offsetY + d.y * cellH, cellW - 1, cellH - 1);
 
         // Cell border for definition
-        context.strokeStyle = 'rgba(200,200,200,0.3)';
+        context.strokeStyle = 'rgba(0, 212, 255, 0.1)';
         context.strokeRect(offsetX + d.x * cellW, offsetY + d.y * cellH, cellW - 1, cellH - 1);
 
         // Value text
-        context.fillStyle = Math.abs(val) > 0.4 ? '#fff' : '#1B2A4A';
+        context.fillStyle = Math.abs(val) > 0.4 ? '#e0e6ed' : '#c0c8d4';
         context.font = 'bold 11px Inter, sans-serif';
         context.textAlign = 'center';
         context.textBaseline = 'middle';
@@ -1110,7 +1119,7 @@ function createCorrelationChart(correlation) {
     });
 
     // Y-axis labels
-    context.fillStyle = '#636E72';
+    context.fillStyle = '#8892a0';
     context.font = '10px Inter';
     context.textAlign = 'right';
     context.textBaseline = 'middle';
@@ -1125,7 +1134,7 @@ function createCorrelationChart(correlation) {
         context.translate(offsetX + j * cellW + cellW / 2, offsetY + n * cellH + 8);
         context.rotate(-Math.PI / 4);
         context.textAlign = 'right';
-        context.fillStyle = '#636E72';
+        context.fillStyle = '#8892a0';
         context.font = '10px Inter';
         context.fillText(label, 0, 0);
         context.restore();
@@ -1219,25 +1228,29 @@ function createSuezTransitChart() {
                     grid: { display: false },
                     ticks: {
                         font: { size: 10, family: 'Inter' },
-                        color: '#636E72',
+                        color: '#8892a0',
                         maxTicksLimit: 12,
                     },
                 },
                 y: {
                     beginAtZero: false,
                     min: 500,
-                    title: { display: true, text: 'Vessel Transits', font: { size: 11, family: 'Inter' }, color: '#636E72' },
+                    title: { display: true, text: 'Vessel Transits', font: { size: 11, family: 'Inter' }, color: '#8892a0' },
                     grid: { color: COLORS.gridLine },
                     ticks: {
                         font: { size: 10, family: 'Inter' },
-                        color: '#636E72',
+                        color: '#8892a0',
                     },
                 },
             },
             plugins: {
                 ...CHART_DEFAULTS.plugins,
                 tooltip: {
-                    backgroundColor: 'rgba(27, 42, 74, 0.95)',
+                    backgroundColor: '#0d1420',
+                    borderColor: 'rgba(0, 212, 255, 0.3)',
+                    borderWidth: 1,
+                    titleColor: '#00d4ff',
+                    bodyColor: '#e0e6ed',
                     titleFont: { family: 'Inter', weight: '600' },
                     bodyFont: { family: 'Inter' },
                     callbacks: {

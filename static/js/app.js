@@ -69,6 +69,9 @@ function switchTab(tab) {
         // Defer chart creation until canvas is visible (avoids 0px sizing)
         setTimeout(() => createSuezTransitChart(), 150);
     }
+
+    // Conclusion tab — static content, no special initialization needed
+    // (show/hide handled by the generic tab-switching logic above)
 }
 
 // ─── Data Fetching ──────────────────────────────────────────────────────────
@@ -666,14 +669,43 @@ function renderCuratedTimeline(events) {
         `;
     }).join('');
 
-    // Click to fly to location on map
-    container.querySelectorAll('.curated-timeline-item').forEach(el => {
+    // Click to fly to location on map and open a detail popup
+    container.querySelectorAll('.curated-timeline-item').forEach((el, idx) => {
         el.addEventListener('click', () => {
             const lat = parseFloat(el.dataset.lat);
             const lon = parseFloat(el.dataset.lon);
             if (!isNaN(lat) && !isNaN(lon) && typeof iranIsraelMap !== 'undefined' && iranIsraelMap) {
                 document.querySelector('.iran-map-layout')?.scrollIntoView({ behavior: 'smooth' });
-                setTimeout(() => iranIsraelMap.flyTo([lat, lon], 8, { duration: 1.2 }), 300);
+                setTimeout(() => {
+                    iranIsraelMap.flyTo([lat, lon], 8, { duration: 1.2 });
+
+                    // Build and open popup with full event details
+                    const ev = sorted[idx];
+                    if (ev) {
+                        const fatLine = ev.fatalities
+                            ? `<div style="margin-top:6px;font-size:11px;color:#ff4444;">FATALITIES: ${Number(ev.fatalities).toLocaleString()}</div>`
+                            : '';
+                        const popupHtml = `
+                            <div class="tactical-popup">
+                                <div style="color:#00d4ff;font-family:monospace;font-weight:700;margin-bottom:4px;">${ev.title}</div>
+                                <div style="color:#8892a0;font-size:11px;margin-bottom:6px;">${ev.date} &middot; ${ev.location || ''}</div>
+                                <div style="color:#c0c8d4;font-size:12px;line-height:1.5;">${ev.description || ''}</div>
+                                ${fatLine}
+                                <div style="margin-top:8px;font-size:11px;">
+                                    <span style="color:#ffcc00;">TYPE: ${(ev.type || '').toUpperCase()}</span> &middot;
+                                    <span style="color:#ff6b6b;">SEVERITY: ${ev.severity || 0}/5</span>
+                                </div>
+                            </div>
+                        `;
+                        // Delay popup slightly so flyTo animation starts first
+                        setTimeout(() => {
+                            L.popup({ maxWidth: 360, className: 'dark-tactical-popup' })
+                                .setLatLng([lat, lon])
+                                .setContent(popupHtml)
+                                .openOn(iranIsraelMap);
+                        }, 600);
+                    }
+                }, 300);
             }
         });
     });
@@ -786,4 +818,217 @@ document.getElementById('refreshDataBtn')?.addEventListener('click', async () =>
 
 document.addEventListener('DOMContentLoaded', () => {
     loadAllData();
+
+    // Restore last active tab from session
+    const savedTab = localStorage.getItem('activeTab');
+    if (savedTab) switchTab(savedTab);
+
+    // Build status bar
+    _initStatusBar();
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PALANTIR FUNCTIONALITY ENHANCEMENTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── 1. Session Persistence ─────────────────────────────────────────────────
+
+const _origSwitchTab = switchTab;
+switchTab = function(tab) {
+    _origSwitchTab(tab);
+    localStorage.setItem('activeTab', tab);
+
+    // Fade-in animation for tab content
+    const content = document.getElementById(`tab-${tab}`);
+    if (content) {
+        content.style.opacity = '0';
+        content.style.transform = 'translateY(6px)';
+        requestAnimationFrame(() => {
+            content.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+            content.style.opacity = '1';
+            content.style.transform = 'translateY(0)';
+        });
+    }
+};
+
+// ─── 2. Keyboard Navigation ─────────────────────────────────────────────────
+
+document.addEventListener('keydown', (e) => {
+    // Don't intercept when typing in inputs
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+
+    const tabs = Array.from(document.querySelectorAll('.tab-btn')).map(b => b.dataset.tab);
+    const idx = tabs.indexOf(currentTab);
+
+    switch (e.key) {
+        case 'ArrowRight':
+            if (idx < tabs.length - 1) switchTab(tabs[idx + 1]);
+            e.preventDefault();
+            break;
+        case 'ArrowLeft':
+            if (idx > 0) switchTab(tabs[idx - 1]);
+            e.preventDefault();
+            break;
+        case 'r':
+            if (!e.ctrlKey && !e.metaKey) {
+                document.getElementById('refreshBtn')?.click();
+                e.preventDefault();
+            }
+            break;
+        case 'Escape':
+            // Clear active crossfilter
+            if (typeof clearIranFilter === 'function') clearIranFilter();
+            break;
+        case '/':
+            const search = document.querySelector('#dataSearch');
+            if (search) {
+                switchTab('data');
+                setTimeout(() => search.focus(), 200);
+                e.preventDefault();
+            }
+            break;
+        case 'f':
+            if (!e.ctrlKey && !e.metaKey) _toggleFullscreenChart(e);
+            break;
+    }
+});
+
+// ─── 3. Chart Fullscreen ────────────────────────────────────────────────────
+
+function _toggleFullscreenChart(e) {
+    // Find closest chart card that might be "focused" (hovered)
+    const hovered = document.querySelector('.chart-card:hover, .iran-map-grid:hover');
+    if (!hovered) return;
+
+    if (hovered.classList.contains('chart-fullscreen')) {
+        hovered.classList.remove('chart-fullscreen');
+        document.body.classList.remove('has-fullscreen');
+    } else {
+        hovered.classList.add('chart-fullscreen');
+        document.body.classList.add('has-fullscreen');
+        // Resize charts inside
+        Object.values(chartInstances || {}).forEach(c => c?.resize?.());
+    }
+    e.preventDefault();
+}
+
+// Close fullscreen on Escape (backup)
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        document.querySelectorAll('.chart-fullscreen').forEach(el => el.classList.remove('chart-fullscreen'));
+        document.body.classList.remove('has-fullscreen');
+    }
+});
+
+// Double-click to fullscreen
+document.addEventListener('dblclick', (e) => {
+    const card = e.target.closest('.chart-card');
+    if (!card) return;
+    card.classList.toggle('chart-fullscreen');
+    document.body.classList.toggle('has-fullscreen', document.querySelector('.chart-fullscreen'));
+    Object.values(chartInstances || {}).forEach(c => c?.resize?.());
+});
+
+// ─── 4. Status Bar ──────────────────────────────────────────────────────────
+
+function _initStatusBar() {
+    const bar = document.createElement('div');
+    bar.id = 'statusBar';
+    bar.className = 'status-bar';
+    bar.innerHTML = `
+        <div class="status-item">
+            <span class="status-pulse"></span>
+            <span id="statusConnection">CONNECTED</span>
+        </div>
+        <div class="status-item">
+            <span id="statusEvents">—</span> EVENTS LOADED
+        </div>
+        <div class="status-item">
+            <span id="statusFreshness">—</span>
+        </div>
+        <div class="status-item">
+            FILTERS: <span id="statusFilters">0</span> ACTIVE
+        </div>
+        <div class="status-item status-keys">
+            <kbd>←</kbd><kbd>→</kbd> TABS &nbsp; <kbd>F</kbd> FULLSCREEN &nbsp; <kbd>R</kbd> REFRESH &nbsp; <kbd>/</kbd> SEARCH &nbsp; <kbd>ESC</kbd> CLEAR
+        </div>
+    `;
+    document.body.appendChild(bar);
+
+    // Update freshness timer
+    setInterval(_updateStatusBar, 10000);
+}
+
+function _updateStatusBar() {
+    // Events count
+    const evtEl = document.getElementById('statusEvents');
+    if (evtEl && eventsData) evtEl.textContent = eventsData.length?.toLocaleString() || '—';
+
+    // Data freshness
+    const freshEl = document.getElementById('statusFreshness');
+    if (freshEl) {
+        const updated = document.querySelector('.data-status span:last-child');
+        if (updated) freshEl.textContent = updated.textContent;
+    }
+
+    // Filter count
+    const filterEl = document.getElementById('statusFilters');
+    if (filterEl) {
+        let count = 0;
+        if (typeof iranFilter !== 'undefined' && iranFilter) count++;
+        filterEl.textContent = count;
+    }
+}
+
+// ─── 5. Live Pulse Animation ────────────────────────────────────────────────
+
+// Add pulse to live badges after DOM loads
+setTimeout(() => {
+    document.querySelectorAll('.chart-badge').forEach(badge => {
+        if (badge.textContent.trim().toLowerCase().includes('live')) {
+            const pulse = document.createElement('span');
+            pulse.className = 'live-pulse-dot';
+            badge.prepend(pulse);
+        }
+    });
+}, 2000);
+
+// ─── 6. Map Coordinate Readout ──────────────────────────────────────────────
+
+function _addCoordinateReadout(mapInstance, containerId) {
+    const container = document.getElementById(containerId);
+    if (!container || !mapInstance) return;
+
+    const readout = document.createElement('div');
+    readout.className = 'coord-readout';
+    readout.innerHTML = '<span class="coord-lat">—</span> <span class="coord-lon">—</span>';
+    container.closest('.map-container, .iran-map-grid')?.appendChild(readout);
+
+    mapInstance.on('mousemove', (e) => {
+        readout.querySelector('.coord-lat').textContent = `${e.latlng.lat.toFixed(4)}°N`;
+        readout.querySelector('.coord-lon').textContent = `${e.latlng.lng.toFixed(4)}°E`;
+    });
+}
+
+// Hook into map initialization
+const _origInitMap = typeof initMap !== 'undefined' ? initMap : null;
+if (_origInitMap) {
+    initMap = function() {
+        _origInitMap();
+        setTimeout(() => {
+            if (typeof map !== 'undefined' && map) _addCoordinateReadout(map, 'map');
+        }, 500);
+    };
+}
+
+// Hook into Iran map
+const _origLoadIran = typeof loadIranIsraelMap !== 'undefined' ? loadIranIsraelMap : null;
+if (_origLoadIran) {
+    loadIranIsraelMap = function(...args) {
+        const result = _origLoadIran(...args);
+        setTimeout(() => {
+            if (typeof iranIsraelMap !== 'undefined' && iranIsraelMap) _addCoordinateReadout(iranIsraelMap, 'iranIsraelMap');
+        }, 500);
+        return result;
+    };
+}
