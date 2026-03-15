@@ -335,6 +335,25 @@ function renderCurrentEvents() {
     renderNewsFeed(iranEventsData.news || []);
 }
 
+// ─── News Sentiment & Priority ──────────────────────────────────────────────
+
+const _NEG_WORDS = /\b(strike|attack|killed|destroyed|threat|sanctions|missile|casualties|escalation|war|bomb|shot|dead|seized|blockade|crackdown)\b/i;
+const _POS_WORDS = /\b(ceasefire|peace|agreement|diplomatic|talks|de-escalation|cooperation|deal|negotiate|resolution)\b/i;
+const _PRIORITY_WORDS = /\b(Houthi|tanker|Hormuz|IRGC|strike|blockade|nuclear|uranium|carrier|Navy)\b/i;
+
+function _newsSentiment(title) {
+    if (!title) return 'neutral';
+    const neg = (title.match(_NEG_WORDS) || []).length;
+    const pos = (title.match(_POS_WORDS) || []).length;
+    if (neg > pos) return 'negative';
+    if (pos > neg) return 'positive';
+    return 'neutral';
+}
+
+function _isPriorityNews(title) {
+    return _PRIORITY_WORDS.test(title || '');
+}
+
 // ─── Live Intelligence Feed ──────────────────────────────────────────────────
 
 function renderNewsFeed(news) {
@@ -362,13 +381,18 @@ function renderNewsFeed(news) {
                     <span class="news-date-count">${articles.length} article${articles.length !== 1 ? 's' : ''}</span>
                 </div>
                 <div class="news-articles">
-                    ${articles.map(a => `
+                    ${articles.map(a => {
+                        const sent = _newsSentiment(a.title);
+                        const priority = _isPriorityNews(a.title);
+                        return `
                         <a href="${a.url || '#'}" target="_blank" rel="noopener" class="news-article">
+                            <span class="sentiment-dot sentiment-${sent}"></span>
                             <span class="news-article-type type-${a.type}">${a.type}</span>
+                            ${priority ? '<span class="priority-flag">PRIORITY</span>' : ''}
                             <span class="news-article-title">${a.title}</span>
                             <span class="news-article-source">${a.source || ''}</span>
-                        </a>
-                    `).join('')}
+                        </a>`;
+                    }).join('')}
                 </div>
             </div>
         `;
@@ -508,7 +532,7 @@ function renderTablePage() {
     const page = tableData.slice(start, end);
 
     tbody.innerHTML = page.map(e => `
-        <tr>
+        <tr class="data-row-clickable" data-lat="${e.latitude || ''}" data-lng="${e.longitude || ''}">
             <td>${(e.event_date || '').substring(0, 10)}</td>
             <td>${e.event_type || ''}</td>
             <td>${e.sub_event_type || ''}</td>
@@ -517,6 +541,11 @@ function renderTablePage() {
             <td>${e.fatalities || 0}</td>
         </tr>
     `).join('');
+
+    // Sort indicators
+    document.querySelectorAll('#dataTable th[data-sort] .sort-arrow').forEach(el => el.textContent = '↕');
+    const activeTh = document.querySelector(`#dataTable th[data-sort="${sortCol}"] .sort-arrow`);
+    if (activeTh) activeTh.textContent = sortAsc ? '▲' : '▼';
 
     // Pagination
     const totalPages = Math.ceil(tableData.length / tablePageSize);
@@ -542,7 +571,20 @@ function renderTablePage() {
     }
 
     const info = document.getElementById('tableInfo');
-    if (info) info.textContent = `Showing ${start + 1}–${Math.min(end, tableData.length)} of ${tableData.length} events`;
+    if (info) info.textContent = `Showing ${start + 1}–${Math.min(end, tableData.length)} of ${tableData.length} events (${(eventsData || []).length} total)`;
+
+    // Row click → fly to event on geospatial map
+    tbody.querySelectorAll('.data-row-clickable').forEach(row => {
+        row.addEventListener('click', () => {
+            const lat = parseFloat(row.dataset.lat);
+            const lng = parseFloat(row.dataset.lng);
+            if (isNaN(lat) || isNaN(lng)) return;
+            switchTab('geospatial');
+            setTimeout(() => {
+                if (typeof map !== 'undefined' && map) map.flyTo([lat, lng], 10, { duration: 1 });
+            }, 300);
+        });
+    });
 }
 
 function goToPage(p) {
@@ -597,7 +639,28 @@ document.getElementById('exportCsv')?.addEventListener('click', () => {
 
 function animateValue(id, value) {
     const el = document.getElementById(id);
-    if (el) el.textContent = value;
+    if (!el) return;
+    const text = String(value);
+    // Try to extract numeric part for counting animation
+    const match = text.match(/^(\$?~?)([\d,]+\.?\d*)(.*)/);
+    if (!match) { el.textContent = value; return; }
+    const prefix = match[1];
+    const target = parseFloat(match[2].replace(/,/g, ''));
+    const suffix = match[3];
+    const hasDecimal = match[2].includes('.');
+    const duration = 900;
+    const start = performance.now();
+    const startVal = parseFloat((el.textContent || '0').replace(/[^0-9.]/g, '')) || 0;
+    function tick(now) {
+        const elapsed = now - start;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const current = startVal + (target - startVal) * eased;
+        const formatted = hasDecimal ? current.toFixed(2) : Math.round(current).toLocaleString();
+        el.textContent = prefix + formatted + suffix;
+        if (progress < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
 }
 
 function updateStatus(state, text) {
