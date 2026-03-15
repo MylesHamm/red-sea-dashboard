@@ -1343,7 +1343,7 @@ function initIranIsraelMap() {
         { pos: [35.6892, 51.3890], text: 'TEHRAN', color: '#ffcc00' },
         { pos: [28.9684, 50.8385], text: 'BUSHEHR', color: '#ff6b6b' },
         { pos: [27.1865, 56.2808], text: 'BANDAR ABBAS', color: '#C9A96E' },
-        { pos: [29.0611, 50.8253], text: 'KHARG ISLAND', color: '#C9A96E' },
+        { pos: [29.2333, 50.3167], text: 'KHARG ISLAND', color: '#C9A96E' },
         { pos: [32.0853, 34.7818], text: 'TEL AVIV', color: '#3D6B99' },
         { pos: [33.8938, 35.5018], text: 'BEIRUT', color: '#7B68AE' },
         { pos: [12.8, 43.3], text: 'BAB EL-MANDEB', color: '#00d4ff' },
