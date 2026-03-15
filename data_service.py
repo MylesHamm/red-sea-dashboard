@@ -325,6 +325,55 @@ def _load_acled_fallback() -> List[dict]:
     return []
 
 
+# ─── Thesis Dataset (Curated 361 Events) ─────────────────────────────────────
+
+_thesis_events_cache: Optional[List[dict]] = None
+
+def load_thesis_events() -> List[dict]:
+    """Load the exact 361 events analyzed in the thesis from thesis_events.csv.
+    These are the curated ACLED events used in the econometric analysis —
+    NOT the full live ACLED feed which includes unrelated Yemen civil conflict."""
+    global _thesis_events_cache
+    if _thesis_events_cache is not None:
+        return _thesis_events_cache
+
+    csv_path = config.DATA_DIR / "thesis_events.csv"
+    if not csv_path.exists():
+        logger.warning("thesis_events.csv not found, falling back to ACLED")
+        return fetch_acled_events()
+
+    try:
+        df = pd.read_csv(csv_path)
+        col_map = {c: c.lower() for c in df.columns}
+        df.rename(columns=col_map, inplace=True)
+
+        records = []
+        for _, row in df.iterrows():
+            records.append({
+                "event_id_cnty": str(row.get("event_id_cnty", "")),
+                "event_date": str(row.get("event_date", "")),
+                "event_type": str(row.get("event_type", "")),
+                "sub_event_type": str(row.get("sub_event_type", "")),
+                "actor1": str(row.get("actor1", "")),
+                "actor2": str(row.get("actor2", "")),
+                "country": str(row.get("country", "")),
+                "location": str(row.get("location", "")),
+                "latitude": float(row.get("latitude", 0)) if pd.notna(row.get("latitude")) else None,
+                "longitude": float(row.get("longitude", 0)) if pd.notna(row.get("longitude")) else None,
+                "notes": str(row.get("notes", "")),
+                "fatalities": int(row.get("fatalities", 0)) if pd.notna(row.get("fatalities")) else 0,
+                "tags": str(row.get("tags", "")),
+                "source": str(row.get("source", "")),
+                "source_scale": str(row.get("source_scale", "")),
+            })
+        _thesis_events_cache = records
+        logger.info(f"Thesis dataset: loaded {len(records)} events from thesis_events.csv")
+        return records
+    except Exception as e:
+        logger.warning(f"Failed to load thesis_events.csv: {e}")
+        return fetch_acled_events()
+
+
 # ─── EIA API v2 (Brent Crude + SPR) ─────────────────────────────────────────
 
 def fetch_brent_prices() -> List[dict]:

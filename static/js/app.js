@@ -4,6 +4,7 @@
 
 let masterData = null;
 let eventsData = null;
+let thesisEventsData = null;  // The exact 361 events analyzed in the thesis
 let hypothesisData = null;
 let iranEventsData = null;
 let iranImpactData = null;
@@ -27,12 +28,13 @@ function switchTab(tab) {
     document.querySelector(`.tab-btn[data-tab="${tab}"]`)?.classList.add('active');
     document.getElementById(`tab-${tab}`)?.classList.add('active');
 
-    // Initialize map on first geospatial tab visit
+    // Initialize map on first geospatial tab visit — uses thesis dataset, not full ACLED
     if (tab === 'geospatial') {
         initMap();
         resizeMap();
-        if (eventsData && allMapEvents.length === 0) {
-            loadMapEvents(eventsData);
+        const mapSource = thesisEventsData || eventsData;
+        if (mapSource && allMapEvents.length === 0) {
+            loadMapEvents(mapSource, !!thesisEventsData);
         }
     }
 
@@ -87,9 +89,10 @@ async function loadAllData() {
 
     try {
         // Fetch master data and events in parallel
-        const [master, events, hypothesis, iranEvents, iranImpact] = await Promise.all([
+        const [master, events, thesisEvents, hypothesis, iranEvents, iranImpact] = await Promise.all([
             fetchJSON('/api/master'),
             fetchJSON('/api/events'),
+            fetchJSON('/api/thesis-events').catch(() => null),
             fetchJSON('/api/hypothesis'),
             fetchJSON('/api/iran-events').catch(() => ({ count: 0, data: [], curated: [] })),
             fetchJSON('/api/iran-impact').catch(() => ({ kpis: {}, impact_by_type: {}, event_table: [] })),
@@ -97,6 +100,8 @@ async function loadAllData() {
 
         masterData = master;
         eventsData = events.data || [];
+        // Thesis dataset: the exact events analyzed — used for geospatial map
+        thesisEventsData = (thesisEvents && thesisEvents.data) ? thesisEvents.data : eventsData;
         hypothesisData = hypothesis;
         iranEventsData = iranEvents;
         iranImpactData = iranImpact;
@@ -108,9 +113,9 @@ async function loadAllData() {
         renderCurrentEvents();
         renderMaritime();
 
-        // If map tab is active, load events
-        if (currentTab === 'geospatial' && eventsData.length) {
-            loadMapEvents(eventsData);
+        // If map tab is active, load thesis events (not the full ACLED feed)
+        if (currentTab === 'geospatial' && thesisEventsData.length) {
+            loadMapEvents(thesisEventsData, true);
         }
 
         updateStatus('live', `Live — ${eventsData.length} events loaded`);

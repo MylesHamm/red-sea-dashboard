@@ -151,8 +151,8 @@ function initMap() {
     setupMapControls();
 }
 
-function loadMapEvents(events) {
-    allMapEvents = events.filter(e => e.latitude && e.longitude && isMaritimeRelevant(e)).map(e => ({
+function loadMapEvents(events, skipFilter = false) {
+    allMapEvents = events.filter(e => e.latitude && e.longitude && (skipFilter || isMaritimeRelevant(e))).map(e => ({
         ...e,
         lat: parseFloat(e.latitude),
         lng: parseFloat(e.longitude),

@@ -45,6 +45,13 @@ def get_events():
     return {"count": len(events), "data": events}
 
 
+@app.get("/api/thesis-events")
+def get_thesis_events():
+    """The exact 361 events analyzed in the thesis — for geospatial map accuracy."""
+    events = data_service.load_thesis_events()
+    return {"count": len(events), "data": events}
+
+
 @app.get("/api/brent")
 def get_brent():
     """Live Brent crude prices from EIA API."""
