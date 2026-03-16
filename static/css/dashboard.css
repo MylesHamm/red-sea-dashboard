@@ -347,9 +347,17 @@ body {
     border-top-color: #111b2a;
 }
 
-.kpi-info:hover .kpi-info-tooltip {
+.kpi-info-tooltip.tooltip-visible {
     visibility: visible;
     opacity: 1;
+}
+
+/* Arrow flips to top when tooltip is below the icon */
+.kpi-info-tooltip.tooltip-below::after {
+    top: auto;
+    bottom: 100%;
+    border-top-color: transparent;
+    border-bottom-color: #111b2a;
 }
 
 /* ─── CHART INFO TOOLTIPS ──────────────────────────────────────────────── */
@@ -427,9 +435,17 @@ body {
     border-top-color: #111b2a;
 }
 
-.chart-info:hover .chart-info-tooltip {
+.chart-info-tooltip.tooltip-visible {
     visibility: visible;
     opacity: 1;
+}
+
+/* Arrow flips to top when tooltip is below the icon */
+.chart-info-tooltip.tooltip-below::after {
+    top: auto;
+    bottom: 100%;
+    border-top-color: transparent;
+    border-bottom-color: #111b2a;
 }
 
 /* ─── CROSSFILTER BAR ──────────────────────────────────────────────────── */

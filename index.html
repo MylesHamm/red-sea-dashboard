@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Red Sea Crisis Intelligence Dashboard</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
+
+    <!-- Leaflet.js -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Leaflet Heat -->
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
+    <!-- Leaflet MarkerCluster -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+    <!-- noUiSlider (time slider) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/nouislider@15.8.1/dist/nouislider.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/nouislider@15.8.1/dist/nouislider.min.js"></script>
+
+    <!-- Dashboard CSS -->
+    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260312h">
+</head>
+<body>
+
+    <!-- ═══ HEADER ═══ -->
+    <header class="header">
+        <div class="header-content">
+            <div class="header-left">
+                <h1>Red Sea Crisis Intelligence Dashboard</h1>
+                <p class="header-subtitle">Houthi Maritime Attacks & Brent Crude Oil Volatility Analysis</p>
+                <p class="header-meta">Myles Hamm &middot; Mercyhurst University &middot; Master's Thesis 2025–2026</p>
+            </div>
+            <div class="header-right">
+                <div class="status-indicator" id="statusIndicator">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Loading...</span>
+                </div>
+                <div class="last-updated" id="lastUpdated"></div>
+                <button class="refresh-btn" id="refreshDataBtn" title="Refresh ACLED data from API">Refresh Data</button>
+            </div>
+        </div>
+
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="overview">Executive Overview</button>
+            <button class="tab-btn" data-tab="geospatial">Geospatial Intelligence</button>
+            <button class="tab-btn" data-tab="econometric">Econometric Analysis</button>
+            <button class="tab-btn" data-tab="controls">Control Variables</button>
+            <button class="tab-btn" data-tab="data">Data Explorer</button>
+            <button class="tab-btn" data-tab="currentevents">US-Iran Tensions</button>
+            <button class="tab-btn" data-tab="maritime">Maritime Traffic</button>
+        </nav>
+    </header>
+
+    <!-- ═══ TAB 1: EXECUTIVE OVERVIEW ═══ -->
+    <section class="tab-content active" id="tab-overview">
+        <div class="container">
+            <!-- KPI Row -->
+            <div class="kpi-row">
+                <div class="kpi-card" data-accent="#3D6B99">
+                    <div class="kpi-label">Brent Crude Price</div>
+                    <div class="kpi-value" id="kpi-brent">--</div>
+                    <div class="kpi-change" id="kpi-brent-change"></div>
+                    <div class="kpi-sub">USD / barrel</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Current spot price of Brent crude oil, the global benchmark for petroleum pricing. Sourced live from the U.S. Energy Information Administration (EIA) API.</span></div>
+                </div>
+                <div class="kpi-card" data-accent="#C43D3D">
+                    <div class="kpi-label">Total ACLED Events</div>
+                    <div class="kpi-value" id="kpi-events">--</div>
+                    <div class="kpi-sub">Yemen conflict events</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Total conflict events in Yemen recorded by the Armed Conflict Location &amp; Event Data Project (ACLED) during the study period, Oct 2023 &ndash; present.</span></div>
+                </div>
+                <div class="kpi-card" data-accent="#D4A843">
+                    <div class="kpi-label">Peak Daily Volatility</div>
+                    <div class="kpi-value" id="kpi-volatility">--</div>
+                    <div class="kpi-sub">Maximum observed</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Highest single-day Brent crude price volatility observed during the study period, calculated as the absolute daily percentage change in closing price.</span></div>
+                </div>
+                <div class="kpi-card" data-accent="#C43D3D">
+                    <div class="kpi-label">Max Weekly Attacks</div>
+                    <div class="kpi-value" id="kpi-attacks">--</div>
+                    <div class="kpi-sub">Single week peak</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Highest number of Houthi maritime-related attacks recorded in a single week during the study period. This is the primary independent variable in the regression model.</span></div>
+                </div>
+                <div class="kpi-card" data-accent="#7B68AE">
+                    <div class="kpi-label">US Dollar Index (DXY)</div>
+                    <div class="kpi-value" id="kpi-dxy">--</div>
+                    <div class="kpi-sub">Latest reading</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">The US Dollar Index measures the value of the dollar against a basket of major currencies. Used as a control variable since oil is priced in USD. Sourced from Yahoo Finance.</span></div>
+                </div>
+                <div class="kpi-card" data-accent="#E07B4C">
+                    <div class="kpi-label">Oil Volatility (OVX)</div>
+                    <div class="kpi-value" id="kpi-ovx">--</div>
+                    <div class="kpi-sub">CBOE Crude Oil Volatility Index</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">The CBOE Crude Oil Volatility Index measures market expectations of 30-day oil price volatility. Used as a control variable to isolate Houthi-specific effects from general market fear.</span></div>
+                </div>
+            </div>
+
+            <!-- Global Crossfilter Bar -->
+            <div class="crossfilter-bar" id="crossfilterBar" style="display:none">
+                <span class="crossfilter-label">Active Filter:</span>
+                <span class="crossfilter-value" id="crossfilterValue"></span>
+                <button class="crossfilter-clear" id="crossfilterClear">Clear Filter</button>
+            </div>
+
+            <!-- Chart Row 1: Price vs Attacks -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Brent Crude Price vs Weekly Attack Frequency</h3>
+                        <div class="chart-header-right">
+                            <span class="chart-badge">Dual Axis</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Overlays Brent crude spot price (left axis) with weekly Houthi attack frequency (right axis) to visualize the relationship between conflict intensity and oil prices. Click the doughnut chart to crossfilter by event type.</span></div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper" style="height:400px">
+                        <canvas id="priceAttackChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart Row 2: Volatility + Monthly Events -->
+            <div class="chart-row two-col">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Daily Volatility Over Time</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Absolute daily percentage change in Brent crude closing price. Spikes indicate days of heightened market uncertainty, often coinciding with major attack events or geopolitical escalations.</span></div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="volatilityChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Event Type Distribution</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Breakdown of ACLED conflict events in Yemen by category. Click any segment to crossfilter — the price and volatility charts will highlight periods matching that event type.</span></div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="eventTypesChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ TAB 2: GEOSPATIAL INTELLIGENCE ═══ -->
+    <section class="tab-content" id="tab-geospatial">
+        <div class="container">
+            <div class="map-layout">
+                <!-- Map -->
+                <div class="map-container">
+                    <div id="map"></div>
+                    <!-- Time Slider -->
+                    <div class="time-slider-container">
+                        <div class="slider-label">
+                            <span id="sliderStartDate">Oct 2023</span>
+                            <span class="slider-title">Attack Timeline</span>
+                            <span id="sliderEndDate">Present</span>
+                        </div>
+                        <div id="timeSlider"></div>
+                    </div>
+                </div>
+                <!-- Side Panel -->
+                <div class="map-sidebar">
+                    <h3>Map Controls</h3>
+                    <div class="map-control-group">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="toggleHeatmap" checked>
+                            <span>Heatmap Layer</span>
+                        </label>
+                        <label class="toggle-label">
+                            <input type="checkbox" id="toggleMarkers" checked>
+                            <span>Attack Markers</span>
+                        </label>
+                        <label class="toggle-label">
+                            <input type="checkbox" id="toggleChokepoint" checked>
+                            <span>Chokepoint Zone</span>
+                        </label>
+                        <label class="toggle-label">
+                            <input type="checkbox" id="filterTankers">
+                            <span>Tanker Targets Only</span>
+                        </label>
+                    </div>
+
+                    <h3>Attack Statistics</h3>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-total">--</div>
+                            <div class="stat-label">Total Events</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-tanker">--</div>
+                            <div class="stat-label">Tanker Attacks</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-chokepoint">--</div>
+                            <div class="stat-label">Chokepoint Zone</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-fatalities">--</div>
+                            <div class="stat-label">Fatalities</div>
+                        </div>
+                    </div>
+
+                    <h3>Legend</h3>
+                    <div class="map-legend">
+                        <div class="legend-item">
+                            <span class="legend-dot" style="background:#C43D3D"></span>
+                            Tanker / Energy Target
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-dot" style="background:#3D6B99"></span>
+                            General Commercial
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-rect" style="background:rgba(212,168,67,0.2); border:1px solid #D4A843"></span>
+                            Bab el-Mandeb Zone
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ TAB 3: ECONOMETRIC ANALYSIS ═══ -->
+    <section class="tab-content" id="tab-econometric">
+        <div class="container">
+            <!-- Hypothesis Cards -->
+            <div class="hypothesis-row" id="hypothesisCards"></div>
+
+            <!-- GARCH Summary -->
+            <div class="chart-row two-col">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Model Comparison (R² Values)</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">R² measures the proportion of variance in Brent price explained by each hypothesis model. Higher R² indicates stronger explanatory power. All three models show relatively low R² values — suggesting that no single variable fully explains oil price variance, consistent with the multifactor nature of commodity markets.</span></div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="modelComparisonChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Average Brent Price Around Attack Events</h3>
+                        <div class="chart-header-right">
+                            <span class="chart-badge">Event Study</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Event study window showing average Brent price from 2 days before (T-2) to 5 days after (T+5) major attack events. The red bar marks the event day (T0). Reveals how oil prices respond in the days surrounding Houthi attacks.</span></div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="priceWindowChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scatter + GARCH -->
+            <div class="chart-row two-col">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Weekly Attacks vs Volatility</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Scatter plot of weekly attack frequency against daily price volatility. Each point represents a daily observation where at least one attack occurred that week. An upward trend would indicate that more frequent attacks are associated with higher price volatility.</span></div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="scatterChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card garch-card" id="garchSummary">
+                    <div class="chart-header">
+                        <h3>GARCH Model Summary</h3>
+                        <div class="chart-header-right">
+                            <span class="chart-badge">GJR-GARCH(1,1,1)</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Generalized Autoregressive Conditional Heteroskedasticity model with asymmetric leverage effects. Captures how oil price volatility clusters over time and responds differently to positive vs. negative shocks.</span></div>
+                        </div>
+                    </div>
+                    <div class="garch-details"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ TAB 4: CONTROL VARIABLES ═══ -->
+    <section class="tab-content" id="tab-controls">
+        <div class="container">
+            <!-- DXY + OVX -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>DXY (US Dollar Index) & OVX (Oil Volatility Index)</h3>
+                        <div class="chart-header-right">
+                            <span class="chart-badge">Dual Axis</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">DXY measures the US dollar's value against major currencies — a stronger dollar typically lowers oil prices. OVX measures implied 30-day crude oil volatility from options markets. Both serve as control variables in the regression model.</span></div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper" style="height:350px">
+                        <canvas id="dxyOvxChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Control variable charts -->
+            <div class="chart-row two-col">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>OPEC Decisions & Geopolitical Events</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Brent crude price with overlay markers for OPEC production decisions (gold), Russia-Ukraine escalations (purple), and Iran-Israel tensions (orange). These binary dummy variables control for non-Houthi geopolitical shocks in the regression model.</span></div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="geopoliticalChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>SPR Release Volume</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Changes in the U.S. Strategic Petroleum Reserve — negative values indicate government oil releases to stabilize prices. SPR releases act as a supply-side control variable, dampening price spikes independent of Houthi activity.</span></div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="sprChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Correlation Heatmap -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Correlation Matrix — All Variables</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Pairwise Pearson correlation coefficients between all model variables. Navy = strong positive correlation, crimson = strong negative correlation, white = no correlation. Helps identify multicollinearity and validate variable independence in the regression model.</span></div>
+                    </div>
+                    <div class="chart-wrapper" style="height:500px">
+                        <canvas id="correlationChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ TAB 5: DATA EXPLORER ═══ -->
+    <section class="tab-content" id="tab-data">
+        <div class="container">
+            <div class="data-controls">
+                <div class="filter-group">
+                    <label>Search Notes:</label>
+                    <input type="text" id="searchInput" placeholder="e.g. tanker, drone, missile...">
+                </div>
+                <div class="filter-group">
+                    <label>Event Type:</label>
+                    <select id="eventTypeFilter">
+                        <option value="">All Types</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Date Range:</label>
+                    <input type="date" id="dataStartDate" value="2023-10-01">
+                    <input type="date" id="dataEndDate" value="2026-12-31">
+                </div>
+                <button class="btn-primary" id="applyFilters">Apply</button>
+                <button class="btn-secondary" id="resetFilters">Reset</button>
+                <button class="btn-secondary" id="exportCsv">Export CSV</button>
+            </div>
+
+            <div class="table-container">
+                <table id="dataTable">
+                    <thead>
+                        <tr>
+                            <th data-sort="event_date">Date <span class="sort-arrow">↕</span></th>
+                            <th data-sort="event_type">Event Type <span class="sort-arrow">↕</span></th>
+                            <th data-sort="sub_event_type">Sub-Event <span class="sort-arrow">↕</span></th>
+                            <th data-sort="actor1">Actor <span class="sort-arrow">↕</span></th>
+                            <th data-sort="location">Location <span class="sort-arrow">↕</span></th>
+                            <th data-sort="fatalities">Fatalities <span class="sort-arrow">↕</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+                <div class="pagination" id="pagination"></div>
+                <div class="table-info" id="tableInfo"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ TAB 6: CURRENT EVENTS ═══ -->
+    <section class="tab-content" id="tab-currentevents">
+        <div class="container">
+            <!-- Iran Crossfilter Bar -->
+            <div class="crossfilter-bar" id="iranCrossfilterBar" style="display:none">
+                <span class="crossfilter-label">Filtering by:</span>
+                <span class="crossfilter-value" id="iranCrossfilterValue"></span>
+                <button class="crossfilter-clear" id="iranCrossfilterClear">Clear Filter</button>
+            </div>
+
+            <!-- KPI Row -->
+            <div class="kpi-row iran-kpi-row">
+                <div class="kpi-card" data-accent="#C43D3D">
+                    <div class="kpi-label">Total Iran Events</div>
+                    <div class="kpi-value" id="kpi-iran-total">--</div>
+                    <div class="kpi-sub">ACLED events since 2025</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Total conflict and political events in Iran recorded by ACLED from January 2025 to present, including protests, violence, and strategic developments.</span></div>
+                </div>
+                <div class="kpi-card" data-accent="#D4A843">
+                    <div class="kpi-label">Avg Price Move (3-Day)</div>
+                    <div class="kpi-value" id="kpi-iran-price-move">--</div>
+                    <div class="kpi-sub">USD absolute change</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Average absolute change in Brent crude price within 3 trading days following an Iran-related event. Measures the typical market reaction magnitude.</span></div>
+                </div>
+                <div class="kpi-card" data-accent="#E07B4C">
+                    <div class="kpi-label">Peak 3-Day Price Move</div>
+                    <div class="kpi-value" id="kpi-iran-vol-spike">--</div>
+                    <div class="kpi-sub">Largest absolute move (USD)</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">The single largest absolute Brent crude price change within 3 trading days of any Iran event. Indicates the most impactful event for oil markets.</span></div>
+                </div>
+                <div class="kpi-card" data-accent="#7B68AE">
+                    <div class="kpi-label">Events This Month</div>
+                    <div class="kpi-value" id="kpi-iran-month">--</div>
+                    <div class="kpi-sub">Current month activity</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Number of Iran-related conflict events recorded by ACLED in the current calendar month. Tracks the pace of recent activity.</span></div>
+                </div>
+            </div>
+
+            <!-- Timeline: Brent Price vs Iran Events -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Brent Crude Price vs US-Iran Events Timeline</h3>
+                        <div class="chart-header-right">
+                            <div class="iran-zoom-toggle">
+                                <button class="zoom-btn active" id="zoomWar">War Period</button>
+                                <button class="zoom-btn" id="zoomFull">Full Timeline</button>
+                            </div>
+                            <span class="chart-badge">Event Overlay</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Brent crude price overlaid with major US-Iran events. Toggle between zoomed war period (Jan-Mar 2026) and full timeline (2025-present). Color-coded by type: Military (red), Diplomatic (blue), Sanctions (orange), Nuclear (purple), Proxy (gold).</span></div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper" style="height:420px">
+                        <canvas id="iranPriceTimelineChart"></canvas>
+                    </div>
+                    <!-- Event type legend -->
+                    <div class="iran-event-legend">
+                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#C43D3D"></span>Military</span>
+                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#3D6B99"></span>Diplomatic</span>
+                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#E07B4C"></span>Sanctions</span>
+                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#7B68AE"></span>Nuclear</span>
+                        <span class="iran-legend-item"><span class="iran-legend-dot" style="background:#C9A96E"></span>Proxy</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Price Forecast -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Brent Crude Price Forecast — Scenario Analysis</h3>
+                        <div class="chart-header-right">
+                            <span class="chart-badge" style="background:rgba(196,61,61,0.12);color:#C43D3D">Forecast</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">30-day scenario-based price projection from the latest settlement price. Escalation: Hormuz remains closed, war widens to Gulf infrastructure (+30-50%). Sustained Conflict: partial blockade, insurance-driven disruption (+10-20%). Ceasefire: diplomatic breakthrough, Hormuz reopens (-10-20%). Based on historical precedents (1990 Gulf War, 1979 Iran Revolution, 2019 Aramco attack). Ranges update automatically with each new price.</span></div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper" style="height:400px">
+                        <canvas id="iranForecastChart"></canvas>
+                    </div>
+                    <div class="forecast-scenarios">
+                        <div class="forecast-scenario scenario-escalation">
+                            <div class="scenario-header"><span class="scenario-dot" style="background:#C43D3D"></span>Escalation</div>
+                            <div class="scenario-detail">Hormuz closed, war widens to Gulf infrastructure. Up to ~21 mbd at risk (~13-15 mbd net disruption after pipeline bypasses). Historical parallel: 1990 Gulf War (+100%).</div>
+                            <div class="scenario-target" id="scenarioTargetEsc">Target: --</div>
+                        </div>
+                        <div class="forecast-scenario scenario-sustained">
+                            <div class="scenario-header"><span class="scenario-dot" style="background:#E07B4C"></span>Sustained Conflict</div>
+                            <div class="scenario-detail">Partial Hormuz blockade, insurance premiums deter transits. SPR releases partially offset. Slow grind higher.</div>
+                            <div class="scenario-target" id="scenarioTargetSus">Target: --</div>
+                        </div>
+                        <div class="forecast-scenario scenario-ceasefire">
+                            <div class="scenario-header"><span class="scenario-dot" style="background:#2E7D5B"></span>Ceasefire / De-escalation</div>
+                            <div class="scenario-detail">Diplomatic breakthrough, Hormuz reopens. Risk premium unwinds but remains elevated vs pre-war levels.</div>
+                            <div class="scenario-target" id="scenarioTargetCease">Target: --</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Geospatial Attack Map: Iran & Israel -->
+            <div class="iran-map-layout chart-card">
+                <!-- Title bar lives OUTSIDE the overflow-hidden grid so its tooltip isn't clipped -->
+                <div class="iran-map-title-bar">
+                    <h3>Geospatial Attack Map — Iran & Israel Theaters</h3>
+                    <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">ACLED-sourced conflict events plotted by coordinates. Iran: protests, battles, explosions, strategic developments. Israel: Houthi missile interceptions and attacks. Curated: major timeline events with verified locations. Marker size scales with fatalities; color by event type.</span></div>
+                </div>
+                <!-- Inner grid: overflow hidden clips all Leaflet z-indexes -->
+                <div class="iran-map-grid">
+                    <div class="map-container">
+                        <div id="iranIsraelMap"></div>
+                        <div class="time-slider-container">
+                            <div class="slider-label">
+                                <span id="iranSliderStartDate">--</span>
+                                <span class="slider-title">Event Timeline</span>
+                                <span id="iranSliderEndDate">--</span>
+                            </div>
+                            <div id="iranTimeSlider"></div>
+                        </div>
+                    </div>
+                    <div class="map-sidebar">
+                    <h3>Map Controls</h3>
+                    <div class="map-control-group">
+                        <select id="iranMapEventTypeFilter" class="iran-map-filter-select">
+                            <option value="all">All Event Types</option>
+                            <option value="Battles">Battles</option>
+                            <option value="Explosions/Remote violence">Explosions</option>
+                            <option value="Strategic developments">Strategic Dev.</option>
+                            <option value="Protests">Protests</option>
+                            <option value="Riots">Riots</option>
+                            <option value="Violence against civilians">Violence vs Civilians</option>
+                        </select>
+                        <label class="toggle-label"><input type="checkbox" id="toggleIranEvents" checked> <span>Iran ACLED Events</span></label>
+                        <label class="toggle-label"><input type="checkbox" id="toggleIsraelEvents" checked> <span>Israel Events</span></label>
+                        <label class="toggle-label"><input type="checkbox" id="toggleCuratedEvents" checked> <span>Curated Events</span></label>
+                        <label class="toggle-label"><input type="checkbox" id="toggleIranHeatmap" checked> <span>Heatmap Layer</span></label>
+                    </div>
+
+                    <h3>Attack Statistics</h3>
+                    <div class="stats-grid">
+                        <div class="stat-item"><div class="stat-value" id="iranMapStatIran">--</div><div class="stat-label">Iran Events</div></div>
+                        <div class="stat-item"><div class="stat-value" id="iranMapStatIsrael">--</div><div class="stat-label">Israel Events</div></div>
+                        <div class="stat-item"><div class="stat-value" id="iranMapStatCurated">--</div><div class="stat-label">Curated Events</div></div>
+                        <div class="stat-item"><div class="stat-value" id="iranMapStatFatalities">--</div><div class="stat-label">Total Fatalities</div></div>
+                    </div>
+
+                    <h3>Legend</h3>
+                    <div class="map-legend">
+                        <div class="legend-item"><span class="legend-dot" style="background:#C43D3D"></span> Battles / Explosions</div>
+                        <div class="legend-item"><span class="legend-dot" style="background:#3D6B99"></span> Strategic Developments</div>
+                        <div class="legend-item"><span class="legend-dot" style="background:#E07B4C"></span> Protests / Riots</div>
+                        <div class="legend-item"><span class="legend-dot" style="background:#7B68AE"></span> Violence vs Civilians</div>
+                        <div class="legend-item"><span class="legend-dot" style="background:#D4A843; border:2px solid #fff"></span> Curated Event</div>
+                        <div class="legend-item"><span class="legend-dot" style="background:#4ECDC4; border:2px solid #fff"></span> OSINT — ACLED</div>
+                        <div class="legend-item"><span class="legend-dot" style="background:#3498DB; border:2px solid #fff"></span> OSINT — News</div>
+                    </div>
+                </div>
+                </div><!-- /.iran-map-grid -->
+            </div>
+
+            <!-- Row 2: Event Type Breakdown + Impact Analysis -->
+            <div class="chart-row two-col">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Iran Event Type Breakdown</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Distribution of ACLED-recorded events in Iran by category. Shows the mix of protests, armed clashes, explosions, and strategic developments driving the current crisis.</span></div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="iranEventTypeChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Avg Brent Price Impact by Event Type</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Average percentage change in Brent crude price at T+1, T+3, T+5, and T+7 trading days after curated US-Iran events, grouped by event type. Positive = price increase, negative = price decrease.</span></div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="iranImpactChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Event Impact Table -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Major US-Iran Events — Oil Price Impact</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Curated timeline of major US-Iran geopolitical events grouped by trading day. 'Before' is the previous trading day's close; 'After' is that day's settlement. Change % shows the single-day market response. Weekend events are grouped with the next trading day.</span></div>
+                    </div>
+                    <div class="table-container iran-table">
+                        <table id="iranEventTable">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Events</th>
+                                    <th>Severity</th>
+                                    <th>Brent Before</th>
+                                    <th>Brent After</th>
+                                    <th>Change %</th>
+                                </tr>
+                            </thead>
+                            <tbody id="iranTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live Intelligence Feed -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Live Intelligence Feed</h3>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span class="live-ais-badge">LIVE</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Auto-fetched headlines from major news sources (Google News RSS). Filtered for relevance to the Iran conflict, oil markets, and Strait of Hormuz. Updates every 30 minutes.</span></div>
+                        </div>
+                    </div>
+                    <div id="newsFeedContainer" class="news-feed-container">
+                        <p class="news-feed-loading">Loading headlines...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ TAB 7: MARITIME TRAFFIC ═══ -->
+    <section class="tab-content" id="tab-maritime">
+        <div class="container">
+
+            <!-- KPI Row -->
+            <div class="kpi-row maritime-kpi-row">
+                <div class="kpi-card" data-accent="#8B0000">
+                    <div class="kpi-label">Chokepoints at Risk</div>
+                    <div class="kpi-value" id="kpi-chokepoints">2</div>
+                    <div class="kpi-sub">Hormuz + Bab el-Mandeb simultaneous threat</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Both major Middle East oil chokepoints are under simultaneous threat — the most severe dual-chokepoint disruption since the 1980s Iran-Iraq Tanker War. The Strait of Hormuz faces direct disruption from the US-Iran war, while Houthi proxy forces (backed by Iran) continue attacking vessels in the Red Sea at Bab el-Mandeb.</span></div>
+                </div>
+                <div class="kpi-card" data-accent="#C43D3D">
+                    <div class="kpi-label">Oil Flow at Risk</div>
+                    <div class="kpi-value" id="kpi-oil-flow">~29 mbd</div>
+                    <div class="kpi-sub">Combined Hormuz (21) + Bab el-Mandeb (8.2)</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">The Strait of Hormuz carries ~21 million barrels/day and Bab el-Mandeb carries ~8.2 mbd. Together, nearly 30% of global oil supply (~29 mbd of ~100 mbd global consumption) is under direct threat from the US-Iran conflict and Iranian proxy operations. Source: U.S. EIA.</span></div>
+                </div>
+                <div class="kpi-card" data-accent="#D4A843">
+                    <div class="kpi-label">War Risk Premium</div>
+                    <div class="kpi-value" id="kpi-war-insurance">1-2%</div>
+                    <div class="kpi-sub">Of hull value per Persian Gulf transit</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">War risk insurance premiums for Persian Gulf and Red Sea transits have surged since the US-Iran war began. For a VLCC valued at $100M, this adds $1-2M per transit through the conflict zone. Premiums jumped further after Israel struck Iranian oil infrastructure on Mar 8. Source: Lloyd's / S&P Global.</span></div>
+                </div>
+                <div class="kpi-card" data-accent="#E07B4C">
+                    <div class="kpi-label">Suez Traffic Collapse</div>
+                    <div class="kpi-value" id="kpi-suez-drop">~60%</div>
+                    <div class="kpi-sub">Below 2023 levels (Houthi + war compound)</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Suez Canal transits dropped ~60% after Houthi attacks began (Nov 2023), then fell further as the US-Iran war escalated in Feb-Mar 2026. Carriers now face threats on both sides of the Arabian Peninsula. Source: UNCTAD / Suez Canal Authority.</span></div>
+                </div>
+            </div>
+
+            <!-- Live Ship Tracker -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Live Tanker Positions — War Zone Chokepoints</h3>
+                        <div class="chart-header-right">
+                            <div class="maritime-view-toggle">
+                                <button class="zoom-btn active" id="viewBoth">Both</button>
+                                <button class="zoom-btn" id="viewBab">Bab el-Mandeb</button>
+                                <button class="zoom-btn" id="viewHormuz">Hormuz</button>
+                            </div>
+                            <span class="chart-badge" style="background:rgba(46,125,91,0.12);color:#2E7D5B">Live AIS</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Real-time tanker positions transiting the chokepoints via AIS transponders. These are the high-value energy vessels at greatest risk from military operations. Red/green arrows indicate vessel heading. Data provided by MarineTraffic. Click a vessel for name, speed, destination, and draft.</span></div>
+                        </div>
+                    </div>
+                    <div class="maritime-embed-container" id="maritimeEmbedContainer">
+                        <div class="embed-placeholder" id="placeholderBab">
+                            <span style="font-size:24px">&#9875;</span>
+                            <span>Bab el-Mandeb — Red Sea</span>
+                            <span style="font-size:11px">Click tab to load live AIS data</span>
+                        </div>
+                        <div class="embed-placeholder" id="placeholderHormuz">
+                            <span style="font-size:24px">&#9875;</span>
+                            <span>Strait of Hormuz</span>
+                            <span style="font-size:11px">Click tab to load live AIS data</span>
+                        </div>
+                    </div>
+                    <div class="maritime-embed-legend">
+                        <span>Data provided by <a href="https://www.marinetraffic.com" target="_blank" rel="noopener">MarineTraffic</a></span>
+                        <span>&#x2022; Showing tankers only in the chokepoint kill zones</span>
+                        <span>&#x2022; Click a vessel for name, speed &amp; destination</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chokepoint Risk Assessment -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Chokepoint Risk Assessment — US-Iran War Theater</h3>
+                        <div class="chart-header-right">
+                            <span class="chart-badge" style="background:rgba(196,61,61,0.12);color:#C43D3D">Strategic</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Assessment of the two critical oil chokepoints under threat and the alternative Cape route. Oil flow volumes from the U.S. Energy Information Administration. Insurance and cost data from Lloyd's and S&P Global.</span></div>
+                        </div>
+                    </div>
+                    <div class="chokepoint-scenarios">
+                        <div class="chokepoint-card risk-critical">
+                            <div class="chokepoint-name">Strait of Hormuz — Primary War Theater</div>
+                            <div class="chokepoint-flow">~21 mbd</div>
+                            <div class="chokepoint-detail">The world's most critical oil chokepoint — ~21% of global petroleum flows through this 21-mile-wide passage controlled by Iran's IRGC Navy. Since US-Iran hostilities began (Feb 28, 2026), tankers run at maximum speed through the strait. Israel struck the Shahran oil depot near Tehran on Mar 8, and Iran has threatened to close Hormuz entirely. Brent surged from $77 to $99 in a week, spiking to $119 intraday.</div>
+                        </div>
+                        <div class="chokepoint-card risk-high">
+                            <div class="chokepoint-name">Bab el-Mandeb — Iranian Proxy Zone</div>
+                            <div class="chokepoint-flow">~8.2 mbd</div>
+                            <div class="chokepoint-detail">Iran's Houthi proxies have attacked 100+ commercial vessels here since Nov 2023. With the US-Iran war, Houthi operations have intensified as a second front — coordinated with IRGC to pressure both chokepoints simultaneously. Tankers still running the "cannonball run" at 15-16 kts. War risk insurance: 0.5-1.0% of hull value per transit.</div>
+                        </div>
+                        <div class="chokepoint-card risk-alt">
+                            <div class="chokepoint-name">Cape of Good Hope — The Only Safe Route</div>
+                            <div class="chokepoint-flow">+3,500 nm</div>
+                            <div class="chokepoint-detail">With both Middle East chokepoints under fire, the Cape route is now the only safe passage for oil tankers. Adds 10-14 sailing days and $200-400/TEU per voyage. ~50% of tankers already rerouted here from Houthi attacks; more are diverting from Hormuz since the war began. Vessel availability is tightening and freight rates are spiking.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cannonball Run Explainer -->
+            <div class="chart-row">
+                <div class="chart-card full-width maritime-explainer">
+                    <div class="explainer-subtitle">Thesis Connection — The US-Iran War &amp; Maritime Disruption</div>
+                    <div class="explainer-title">The "Cannonball Run" — How the War Moves Oil Prices Hour by Hour</div>
+                    <div class="explainer-body">
+                        <strong>Two chokepoints, one war:</strong> The US-Iran conflict has created a historically unprecedented situation — both the Strait of Hormuz (~21 mbd) and Bab el-Mandeb (~8.2 mbd) are under simultaneous threat. Iran controls Hormuz directly through the IRGC Navy, and wages a proxy campaign at Bab el-Mandeb through the Houthis. Together, nearly 30% of global oil supply is at risk.<br><br>
+                        <strong>The "cannonball run":</strong> Oil tankers transiting these danger zones accelerate to maximum speed (15-16 knots vs. the normal economic speed of ~12 knots) to minimize exposure time. In commodities trading, this is the "cannonball run." Since Operation Epic Fury (Feb 28, 2026), tankers in the Persian Gulf are running the gauntlet past Iranian naval assets while Houthi drones and missiles target vessels in the Red Sea.<br><br>
+                        <strong>Why it moves prices by the hour:</strong> Each transit now costs $0.5-2M in war risk insurance alone (for a $100M VLCC — higher for Hormuz, lower for Bab el-Mandeb). Faster transit burns more fuel. Crew demand hazard pay. Some tankers refuse to transit at all. This cascading disruption — insurance, fuel, labor, rerouting, vessel scarcity — compounds across thousands of daily voyages and is priced into Brent crude in real time. Notably, the thesis's H1 regression found that sustained attack frequency actually correlates with <em>decreased</em> volatility over time — a "new normal" effect where markets adapt to persistent disruption. The acute price shocks visible above occur at escalation points (war onset, chokepoint closure), not from cumulative attack counts.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Suez Canal Transit Volume Chart -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Suez Canal Transit Volume — Houthi &amp; War Impact</h3>
+                        <div class="chart-header-right">
+                            <span class="chart-badge">Monthly</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Approximate monthly vessel transits through the Suez Canal (all vessel types). First collapse from Houthi proxy attacks (Nov 2023), then a further decline as the US-Iran war (Feb 2026) compounded the disruption. Values are estimates based on published UNCTAD and Suez Canal Authority reports; exact figures may vary by source.</span></div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper" style="height:350px">
+                        <canvas id="suezTransitChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- ═══ FOOTER ═══ -->
+    <footer class="footer">
+        <p>Data Sources: ACLED &middot; U.S. Energy Information Administration &middot; Federal Reserve (FRED) &middot; Yahoo Finance</p>
+        <p>Myles Hamm — Master's Thesis — Mercyhurst University — 2025–2026</p>
+    </footer>
+
+    <!-- Dashboard JS -->
+    <script src="/static/js/charts.js?v=20260312h"></script>
+    <script src="/static/js/map.js?v=20260312h"></script>
+    <script src="/static/js/app.js?v=20260312h"></script>
+</body>
+</html>
