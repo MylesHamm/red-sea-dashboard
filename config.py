@@ -40,8 +40,8 @@ EIA_BASE_URL = "https://api.eia.gov/v2"
 
 # --- Cache TTL (seconds) ---
 CACHE_TTL_ACLED = 86400       # 24 hours
-CACHE_TTL_BRENT = 3600        # 1 hour
-CACHE_TTL_YFINANCE = 3600     # 1 hour
+CACHE_TTL_BRENT = 86400       # 24 hours (daily data)
+CACHE_TTL_YFINANCE = 86400    # 24 hours (daily data)
 CACHE_TTL_FRED = 86400 * 7    # 7 days (monthly data)
 
 # --- Server Settings ---

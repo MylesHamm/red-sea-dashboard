@@ -264,39 +264,42 @@ def fetch_acled_events() -> List[dict]:
             "limit": 5000,
         }
 
-        # Query 1: All Yemen events
-        yemen = _paginated_acled_fetch(token, {**base_params, "country": "Yemen"}, "Yemen")
-        n = _add_unique(yemen)
-        logger.info(f"ACLED Q1 Yemen: {n} unique events")
-
-        # Query 2: Houthi actor events globally (captures Red Sea / Indian Ocean attacks)
-        houthi = _paginated_acled_fetch(token, {
-            **base_params, "actor1": "Houthi", "actor1_where": "LIKE",
-        }, "Houthi-actor")
-        n = _add_unique(houthi)
-        logger.info(f"ACLED Q2 Houthi actor: {n} new unique events")
-
-        # Query 3: Ansar Allah actor events (alternate name)
-        ansar = _paginated_acled_fetch(token, {
-            **base_params, "actor1": "Ansar Allah", "actor1_where": "LIKE",
-        }, "AnsarAllah-actor")
-        n = _add_unique(ansar)
-        logger.info(f"ACLED Q3 Ansar Allah actor: {n} new unique events")
-
-        # Query 4: Red Sea regional countries — filtered for maritime relevance (parallel)
+        # All queries run in parallel for speed
         regional_countries = ["Saudi Arabia", "Djibouti", "Eritrea", "Oman", "Somalia", "Egypt", "Sudan", "Jordan", "Israel"]
+
+        def _fetch_yemen():
+            return "Yemen", _paginated_acled_fetch(token, {**base_params, "country": "Yemen"}, "Yemen"), False
+
+        def _fetch_houthi():
+            return "Houthi-actor", _paginated_acled_fetch(token, {
+                **base_params, "actor1": "Houthi", "actor1_where": "LIKE",
+            }, "Houthi-actor"), False
+
+        def _fetch_ansar():
+            return "AnsarAllah-actor", _paginated_acled_fetch(token, {
+                **base_params, "actor1": "Ansar Allah", "actor1_where": "LIKE",
+            }, "AnsarAllah-actor"), False
 
         def _fetch_regional(country):
             regional = _paginated_acled_fetch(token, {**base_params, "country": country}, country)
             maritime = [e for e in regional if _is_maritime_relevant(e)]
-            return country, regional, maritime
+            return country, maritime, True
 
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            futures = {pool.submit(_fetch_regional, c): c for c in regional_countries}
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            futures = [
+                pool.submit(_fetch_yemen),
+                pool.submit(_fetch_houthi),
+                pool.submit(_fetch_ansar),
+            ]
+            futures.extend(pool.submit(_fetch_regional, c) for c in regional_countries)
+
             for future in as_completed(futures):
-                country, regional, maritime = future.result()
-                n = _add_unique(maritime)
-                logger.info(f"ACLED Q4 {country}: {len(regional)} total, {len(maritime)} maritime, {n} new")
+                label, events_list, is_regional = future.result()
+                n = _add_unique(events_list)
+                if is_regional:
+                    logger.info(f"ACLED {label}: {len(events_list)} maritime, {n} new")
+                else:
+                    logger.info(f"ACLED {label}: {n} unique events")
 
         if all_events:
             _write_cache("acled_events", all_events)
@@ -478,10 +481,11 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
             if not df.empty:
                 if isinstance(df.columns, pd.MultiIndex):
                     df.columns = df.columns.get_level_values(0)
-                for idx, row in df.iterrows():
-                    d = idx.strftime("%Y-%m-%d")
-                    if pd.notna(row.get("Close")) and d > last_date:
-                        by_date[d] = {"date": d, "price": round(float(row["Close"]), 2)}
+                df_valid = df[df["Close"].notna()].copy()
+                df_valid["_date"] = df_valid.index.strftime("%Y-%m-%d")
+                df_valid = df_valid[df_valid["_date"] > last_date]
+                for d, price in zip(df_valid["_date"], df_valid["Close"]):
+                    by_date[d] = {"date": d, "price": round(float(price), 2)}
         except Exception as e:
             logger.warning(f"Brent yfinance failed: {e}")
 
@@ -503,10 +507,10 @@ def _load_brent_csv_fallback() -> List[dict]:
         date_col = df.columns[0]
         df.rename(columns={date_col: "Date"}, inplace=True)
         df["Date"] = pd.to_datetime(df["Date"])
+        df_valid = df[df["Brent_Price"].notna()].copy()
         records = [
-            {"date": row["Date"].strftime("%Y-%m-%d"), "price": float(row["Brent_Price"])}
-            for _, row in df.iterrows()
-            if pd.notna(row.get("Brent_Price"))
+            {"date": d.strftime("%Y-%m-%d"), "price": float(p)}
+            for d, p in zip(df_valid["Date"], df_valid["Brent_Price"])
         ]
         return records
     return []
@@ -569,10 +573,10 @@ def fetch_yfinance_series(ticker: str, cache_key: str) -> List[dict]:
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
 
+        df_valid = df[df["Close"].notna()].copy()
         records = [
-            {"date": idx.strftime("%Y-%m-%d"), "value": round(float(row["Close"]), 4)}
-            for idx, row in df.iterrows()
-            if pd.notna(row.get("Close"))
+            {"date": idx.strftime("%Y-%m-%d"), "value": round(float(close), 4)}
+            for idx, close in zip(df_valid.index, df_valid["Close"])
         ]
         if records:
             _write_cache(cache_key, records)

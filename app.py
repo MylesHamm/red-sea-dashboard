@@ -143,12 +143,15 @@ def _do_refresh():
         import json
         data_service._acled_token = None
 
-        # Clear caches
+        # Clear only API-driven caches (preserve master_dataset, thesis_events)
+        _api_caches = {"acled_events", "iran_events", "brent_prices", "iran_news",
+                       "spr_data", "dxy", "ovx", "china_pmi"}
         for cache_file in config.CACHE_DIR.glob("*.json"):
-            try:
-                cache_file.unlink()
-            except Exception:
-                pass
+            if cache_file.stem in _api_caches:
+                try:
+                    cache_file.unlink()
+                except Exception:
+                    pass
 
         # Re-fetch all data sources in parallel
         with data_service.ThreadPoolExecutor(max_workers=4) as pool:
