@@ -655,21 +655,37 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
     const prices = filtered.map(d => d.price);
 
     // Build event lookup by date for scatter overlay + tooltip afterBody
-    // Only use hand-curated events (not auto-discovered news headlines)
-    const eventPoints = (curatedEvents || []).filter(ev => ev.date >= cutoff && (!ev.source_type || ev.source_type === 'curated')).map(ev => {
+    // Include curated, promoted ACLED, and geocoded news events
+    const lastPrice = prices.length ? prices[prices.length - 1] : null;
+    const eventPoints = (curatedEvents || []).filter(ev => ev.date >= cutoff).map(ev => {
         const idx = dates.indexOf(ev.date);
-        const closestPrice = idx >= 0 ? prices[idx] : null;
+        // Use exact price if available, otherwise last known price (for today's events)
+        const closestPrice = idx >= 0 ? prices[idx] : lastPrice;
         return {
             date: ev.date,
             price: closestPrice,
             title: ev.title,
             type: ev.type,
-            severity: ev.severity,
+            severity: ev.severity || 3,
             description: ev.description || '',
+            source_type: ev.source_type || 'curated',
         };
     }).filter(p => p.price != null);
+
+    // Deduplicate: if multiple events on same date, keep highest severity (prefer curated)
     const eventByDate = {};
-    eventPoints.forEach(p => { eventByDate[p.date] = p; });
+    eventPoints.forEach(p => {
+        if (!eventByDate[p.date] || p.source_type === 'curated' || p.severity > (eventByDate[p.date].severity || 0)) {
+            eventByDate[p.date] = p;
+        }
+    });
+
+    // For events on dates beyond the price data, extend the dates/prices arrays
+    const extraDates = Object.keys(eventByDate).filter(d => !dates.includes(d)).sort();
+    for (const d of extraDates) {
+        dates.push(d);
+        prices.push(lastPrice);
+    }
 
     // Build scatter data aligned to the labels axis (null for non-event dates)
     const scatterData = dates.map(d => eventByDate[d] ? eventByDate[d].price : null);
