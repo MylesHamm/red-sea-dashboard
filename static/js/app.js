@@ -912,36 +912,55 @@ document.addEventListener('DOMContentLoaded', () => {
     // ─── Fixed-position tooltip positioning ─────────────────────────────────
     // .kpi-info-tooltip uses position:fixed so it escapes overflow:hidden parents.
     // We compute top/left from the icon's bounding rect on hover.
+    function _positionTooltip(icon, tip, alignRight) {
+        // Temporarily show off-screen to measure dimensions
+        tip.style.visibility = 'hidden';
+        tip.style.opacity = '0';
+        tip.style.display = 'block';
+        tip.style.left = '-9999px';
+        tip.style.top = '-9999px';
+
+        const tipH = tip.offsetHeight;
+        const tipW = tip.offsetWidth;
+        const r = icon.getBoundingClientRect();
+
+        // Horizontal: align left edge near icon, or right-align for chart tooltips
+        let left;
+        if (alignRight) {
+            left = r.right - tipW;
+        } else {
+            left = r.left - 40;
+        }
+        // Clamp to viewport
+        left = Math.max(8, Math.min(left, window.innerWidth - tipW - 8));
+
+        // Vertical: prefer above the icon
+        let top = r.top - tipH - 10;
+        if (top < 8) {
+            top = r.bottom + 10; // flip below
+        }
+
+        tip.style.left = left + 'px';
+        tip.style.top = top + 'px';
+        // Let CSS :hover rule handle visibility/opacity from here
+        tip.style.removeProperty('visibility');
+        tip.style.removeProperty('opacity');
+        tip.style.removeProperty('display');
+    }
+
     function initFixedTooltips() {
         document.querySelectorAll('.kpi-info').forEach(wrapper => {
             const icon = wrapper.querySelector('.kpi-info-icon');
             const tip = wrapper.querySelector('.kpi-info-tooltip');
             if (!icon || !tip) return;
-
-            icon.addEventListener('mouseenter', () => {
-                const r = icon.getBoundingClientRect();
-                tip.style.left = Math.max(8, r.left - 40) + 'px';
-                tip.style.top = (r.top - tip.offsetHeight - 10) + 'px';
-                // Flip below if clipped at top
-                if (r.top - tip.offsetHeight - 10 < 8) {
-                    tip.style.top = (r.bottom + 10) + 'px';
-                }
-            });
+            icon.addEventListener('mouseenter', () => _positionTooltip(icon, tip, false));
         });
 
         document.querySelectorAll('.chart-info').forEach(wrapper => {
             const icon = wrapper.querySelector('.chart-info-icon');
             const tip = wrapper.querySelector('.chart-info-tooltip');
             if (!icon || !tip) return;
-
-            icon.addEventListener('mouseenter', () => {
-                const r = icon.getBoundingClientRect();
-                tip.style.left = Math.max(8, r.right - tip.offsetWidth) + 'px';
-                tip.style.top = (r.top - tip.offsetHeight - 10) + 'px';
-                if (r.top - tip.offsetHeight - 10 < 8) {
-                    tip.style.top = (r.bottom + 10) + 'px';
-                }
-            });
+            icon.addEventListener('mouseenter', () => _positionTooltip(icon, tip, true));
         });
     }
     initFixedTooltips();
