@@ -1022,13 +1022,89 @@ _ACLED_TYPE_MAP = {
     "Riots": "proxy",
 }
 
+# Words that indicate a roundup/summary headline rather than a discrete event
+_ROUNDUP_WORDS = {"live updates", "live:", "latest:", "what we know", "what happened",
+                   "day of war", "here's what", "key developments", "live update",
+                   "minute by minute", "as it happened", "rolling coverage"}
+
+# High-credibility sources get a scoring boost
+_TIER1_SOURCES = {"reuters", "associated press", "ap news", "bbc", "the new york times",
+                  "the washington post", "the wall street journal", "al jazeera",
+                  "the guardian", "cnn", "abc news", "nbc news", "financial times"}
+
+# Words that indicate a major discrete event (strong signal)
+_MAJOR_EVENT_WORDS = {
+    "seize": 3, "seized": 3, "sinks": 4, "sunk": 4, "torpedoed": 4,
+    "invades": 4, "invasion": 4, "ceasefire": 4, "surrenders": 4,
+    "assassinated": 4, "killed": 3, "destroys": 3, "destroyed": 3,
+    "launches": 2, "fires": 2, "strikes": 2, "hits": 2, "shoots": 2,
+    "intercepts": 2, "blocks": 2, "closes": 3, "shuts": 2,
+    "deploys": 2, "mobilizes": 2, "evacuates": 2,
+    "sanctions": 2, "ultimatum": 3, "declares": 2, "threatens": 1,
+    "surges": 2, "crashes": 2, "spikes": 2, "plunges": 2,
+    "mined": 3, "mines": 2, "torpedo": 3, "boarding": 2,
+    "shoots down": 3, "shot down": 3,
+}
+
+
+def _score_news_headline(item: dict) -> int:
+    """Score a news headline for significance. Higher = more important."""
+    title = item.get("title", "")
+    title_lower = title.lower()
+    source = item.get("source", "").lower()
+    score = 0
+
+    # Reject roundup/summary headlines — these aren't discrete events
+    if any(rw in title_lower for rw in _ROUNDUP_WORDS):
+        return -1
+
+    # Major event keyword scoring
+    for word, pts in _MAJOR_EVENT_WORDS.items():
+        if word in title_lower:
+            score += pts
+
+    # High-signal words (general)
+    words = set(title_lower.split())
+    score += len(words & _HIGH_SIGNAL_WORDS) * 2
+
+    # Named key actors
+    for actor in _ACLED_KEY_ACTORS:
+        if actor in title_lower:
+            score += 1
+
+    # Specificity bonus: numbers in headline (casualties, counts, distances)
+    import re
+    if re.search(r'\b\d+\b', title):
+        score += 1
+
+    # Source credibility boost
+    if any(s in source for s in _TIER1_SOURCES):
+        score += 2
+
+    # Location specificity bonus (not just "Iran" — a specific place)
+    specific_locations = {"hormuz", "natanz", "isfahan", "fordow", "bushehr", "bandar abbas",
+                          "tehran", "qeshm", "fujairah", "ras tanura", "salalah", "jask"}
+    if any(loc in title_lower for loc in specific_locations):
+        score += 2
+
+    return score
+
 
 def _geocode_news_events(news_items: List[dict]) -> List[dict]:
-    """Convert Google News headlines into map-plottable curated-format events."""
-    results = []
+    """Convert significant Google News headlines into curated-quality timeline events.
+
+    Scores headlines for significance and promotes only the top 1-2 per day,
+    filtering out roundup articles and low-signal noise.
+    """
+    # Score and geocode all candidates
+    candidates = []
     for item in news_items:
         title = item.get("title", "")
         title_lower = title.lower()
+
+        score = _score_news_headline(item)
+        if score < 4:  # Minimum threshold — must be clearly significant
+            continue
 
         # Find location by longest-first keyword match
         lat, lon, location = None, None, None
@@ -1040,23 +1116,36 @@ def _geocode_news_events(news_items: List[dict]) -> List[dict]:
         if lat is None:
             continue  # Can't plot without coordinates
 
-        # Determine severity
-        words = set(title_lower.split())
-        severity = 4 if words & _HIGH_SIGNAL_WORDS else 3
+        severity = 5 if score >= 10 else (4 if score >= 6 else 3)
 
-        results.append({
+        candidates.append({
             "date": item.get("date", "")[:10],
             "title": title,
             "type": item.get("type", "military"),
-            "description": f"Live news via Google News. Source: {item.get('source', 'Unknown')}",
+            "description": f"Live news via {item.get('source', 'Unknown')}",
             "severity": severity,
             "lat": lat,
             "lon": lon,
             "location": location,
             "fatalities": 0,
             "source_type": "news_auto",
+            "_score": score,
         })
 
+    # Keep only top 2 per date (highest scoring)
+    from collections import defaultdict
+    by_date = defaultdict(list)
+    for c in candidates:
+        by_date[c["date"]].append(c)
+
+    results = []
+    for date, events in by_date.items():
+        events.sort(key=lambda x: x["_score"], reverse=True)
+        for ev in events[:2]:
+            del ev["_score"]
+            results.append(ev)
+
+    logger.info(f"News scoring: {len(news_items)} articles → {len(candidates)} significant → {len(results)} promoted")
     return results
 
 
