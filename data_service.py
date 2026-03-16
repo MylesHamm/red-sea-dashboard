@@ -12,6 +12,7 @@ from typing import Optional, List, Dict
 import pandas as pd
 import numpy as np
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import config
 
@@ -156,8 +157,36 @@ def _get_acled_token() -> str:
     return _acled_token
 
 
-_ACLED_FIELDS = "event_id_cnty|event_date|event_type|sub_event_type|actor1|actor2|country|location|latitude|longitude|notes|fatalities|tags|source|source_scale"
+_EVENT_COLUMNS = ["event_id_cnty", "event_date", "event_type", "sub_event_type",
+                   "actor1", "actor2", "country", "location", "latitude", "longitude",
+                   "notes", "fatalities", "tags", "source", "source_scale"]
+
+_ACLED_FIELDS = "|".join(_EVENT_COLUMNS)
 _ACLED_DATE_RANGE = "2023-10-01|2026-12-31"
+
+
+def _df_to_event_records(df: pd.DataFrame) -> List[dict]:
+    """Convert a DataFrame to a list of event dicts (vectorized, no iterrows)."""
+    col_map = {c: c.lower() for c in df.columns}
+    df = df.rename(columns=col_map)
+    str_cols = [c for c in _EVENT_COLUMNS if c not in ("latitude", "longitude", "fatalities")]
+    for c in str_cols:
+        if c in df.columns:
+            df[c] = df[c].fillna("").astype(str)
+    if "latitude" in df.columns:
+        df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
+    if "longitude" in df.columns:
+        df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
+    if "fatalities" in df.columns:
+        df["fatalities"] = pd.to_numeric(df["fatalities"], errors="coerce").fillna(0).astype(int)
+    records = df[[c for c in _EVENT_COLUMNS if c in df.columns]].to_dict("records")
+    # Replace NaN lat/lon with None for JSON
+    for r in records:
+        if "latitude" in r and (r["latitude"] is None or pd.isna(r["latitude"])):
+            r["latitude"] = None
+        if "longitude" in r and (r["longitude"] is None or pd.isna(r["longitude"])):
+            r["longitude"] = None
+    return records
 
 # Red Sea maritime keywords for filtering regional events.
 # Only very specific terms — avoids false matches from generic conflict words.
@@ -254,14 +283,20 @@ def fetch_acled_events() -> List[dict]:
         n = _add_unique(ansar)
         logger.info(f"ACLED Q3 Ansar Allah actor: {n} new unique events")
 
-        # Query 4: Red Sea regional countries — filtered for maritime relevance
-        for country in ["Saudi Arabia", "Djibouti", "Eritrea", "Oman", "Somalia", "Egypt", "Sudan", "Jordan", "Israel"]:
-            regional = _paginated_acled_fetch(token, {
-                **base_params, "country": country,
-            }, country)
+        # Query 4: Red Sea regional countries — filtered for maritime relevance (parallel)
+        regional_countries = ["Saudi Arabia", "Djibouti", "Eritrea", "Oman", "Somalia", "Egypt", "Sudan", "Jordan", "Israel"]
+
+        def _fetch_regional(country):
+            regional = _paginated_acled_fetch(token, {**base_params, "country": country}, country)
             maritime = [e for e in regional if _is_maritime_relevant(e)]
-            n = _add_unique(maritime)
-            logger.info(f"ACLED Q4 {country}: {len(regional)} total, {len(maritime)} maritime, {n} new")
+            return country, regional, maritime
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = {pool.submit(_fetch_regional, c): c for c in regional_countries}
+            for future in as_completed(futures):
+                country, regional, maritime = future.result()
+                n = _add_unique(maritime)
+                logger.info(f"ACLED Q4 {country}: {len(regional)} total, {len(maritime)} maritime, {n} new")
 
         if all_events:
             _write_cache("acled_events", all_events)
@@ -299,25 +334,7 @@ def _load_acled_fallback() -> List[dict]:
                 col_map = {c: c.lower() for c in df.columns}
                 df.rename(columns=col_map, inplace=True)
 
-                records = []
-                for _, row in df.iterrows():
-                    records.append({
-                        "event_id_cnty": str(row.get("event_id_cnty", "")),
-                        "event_date": str(row.get("event_date", "")),
-                        "event_type": str(row.get("event_type", "")),
-                        "sub_event_type": str(row.get("sub_event_type", "")),
-                        "actor1": str(row.get("actor1", "")),
-                        "actor2": str(row.get("actor2", "")),
-                        "country": str(row.get("country", "")),
-                        "location": str(row.get("location", "")),
-                        "latitude": float(row.get("latitude", 0)) if pd.notna(row.get("latitude")) else None,
-                        "longitude": float(row.get("longitude", 0)) if pd.notna(row.get("longitude")) else None,
-                        "notes": str(row.get("notes", "")),
-                        "fatalities": int(row.get("fatalities", 0)) if pd.notna(row.get("fatalities")) else 0,
-                        "tags": str(row.get("tags", "")),
-                        "source": str(row.get("source", "")),
-                        "source_scale": str(row.get("source_scale", "")),
-                    })
+                records = _df_to_event_records(df)
                 logger.info(f"ACLED CSV fallback: loaded {len(records)} events from {path.name}")
                 return records
             except Exception as e:
@@ -347,25 +364,7 @@ def load_thesis_events() -> List[dict]:
         col_map = {c: c.lower() for c in df.columns}
         df.rename(columns=col_map, inplace=True)
 
-        records = []
-        for _, row in df.iterrows():
-            records.append({
-                "event_id_cnty": str(row.get("event_id_cnty", "")),
-                "event_date": str(row.get("event_date", "")),
-                "event_type": str(row.get("event_type", "")),
-                "sub_event_type": str(row.get("sub_event_type", "")),
-                "actor1": str(row.get("actor1", "")),
-                "actor2": str(row.get("actor2", "")),
-                "country": str(row.get("country", "")),
-                "location": str(row.get("location", "")),
-                "latitude": float(row.get("latitude", 0)) if pd.notna(row.get("latitude")) else None,
-                "longitude": float(row.get("longitude", 0)) if pd.notna(row.get("longitude")) else None,
-                "notes": str(row.get("notes", "")),
-                "fatalities": int(row.get("fatalities", 0)) if pd.notna(row.get("fatalities")) else 0,
-                "tags": str(row.get("tags", "")),
-                "source": str(row.get("source", "")),
-                "source_scale": str(row.get("source_scale", "")),
-            })
+        records = _df_to_event_records(df)
         _thesis_events_cache = records
         logger.info(f"Thesis dataset: loaded {len(records)} events from thesis_events.csv")
         return records
@@ -622,7 +621,7 @@ def fetch_china_pmi() -> List[dict]:
 
 def load_master_dataset() -> dict:
     """Load the full myles_dataset_final.csv and return as structured JSON."""
-    cached = _read_cache("master_dataset", 300)  # 5 min cache
+    cached = _read_cache("master_dataset", 1800)  # 30 min cache
     if cached:
         return cached
 
@@ -636,25 +635,46 @@ def load_master_dataset() -> dict:
     df["Date"] = pd.to_datetime(df["Date"])
     df.sort_values("Date", inplace=True)
 
-    # Time series records
-    timeseries = []
-    for _, row in df.iterrows():
-        timeseries.append({
-            "date": row["Date"].strftime("%Y-%m-%d"),
-            "brent_price": round(float(row["Brent_Price"]), 2) if pd.notna(row.get("Brent_Price")) else None,
-            "daily_volatility": round(float(row["Daily_Volatility"]), 4) if pd.notna(row.get("Daily_Volatility")) else None,
-            "weekly_attacks": int(row["WeekleyAttackFrq"]) if pd.notna(row.get("WeekleyAttackFrq")) else 0,
-            "opec_dummy": int(row.get("OPEC_Dummy", 0)),
-            "russia_ukraine_dummy": int(row.get("RussiaUkraine_Dummy", 0)),
-            "opec_decision": int(row.get("OPEC_Decision", 0)),
-            "russia_ukraine_attacks": int(row.get("RussiaUkraine_Attacks", 0)),
-            "iran_israel_escalation": int(row.get("IranIsrael_Escalation", 0)),
-            "china_pmi": round(float(row["China_PMI"]), 2) if pd.notna(row.get("China_PMI")) and row.get("China_PMI") != 0 else None,
-            "baker_hughes_rigs": round(float(row["Baker_Hughes_Rigs"]), 1) if pd.notna(row.get("Baker_Hughes_Rigs")) and row.get("Baker_Hughes_Rigs") != 0 else None,
-            "spr_release_volume": round(float(row["SPR_Release_Volume"]), 4) if pd.notna(row.get("SPR_Release_Volume")) else None,
-            "dxy": round(float(row["DXY"]), 2) if pd.notna(row.get("DXY")) else None,
-            "ovx": round(float(row["OVX"]), 2) if pd.notna(row.get("OVX")) else None,
-        })
+    # Time series records — vectorized (avoids slow iterrows)
+    col_map = {
+        "Brent_Price": ("brent_price", 2, False),
+        "Daily_Volatility": ("daily_volatility", 4, False),
+        "DXY": ("dxy", 2, False),
+        "OVX": ("ovx", 2, False),
+        "SPR_Release_Volume": ("spr_release_volume", 4, False),
+        "China_PMI": ("china_pmi", 2, True),        # True = also exclude zeros
+        "Baker_Hughes_Rigs": ("baker_hughes_rigs", 1, True),
+    }
+    int_cols = {
+        "WeekleyAttackFrq": "weekly_attacks",
+        "OPEC_Dummy": "opec_dummy",
+        "RussiaUkraine_Dummy": "russia_ukraine_dummy",
+        "OPEC_Decision": "opec_decision",
+        "RussiaUkraine_Attacks": "russia_ukraine_attacks",
+        "IranIsrael_Escalation": "iran_israel_escalation",
+    }
+    ts = pd.DataFrame({"date": df["Date"].dt.strftime("%Y-%m-%d")})
+    for src, (dst, rnd, excl_zero) in col_map.items():
+        if src in df.columns:
+            vals = df[src].round(rnd)
+            if excl_zero:
+                vals = vals.where(df[src] != 0)
+            ts[dst] = vals
+        else:
+            ts[dst] = np.nan
+    for src, dst in int_cols.items():
+        ts[dst] = df[src].fillna(0).astype(int) if src in df.columns else 0
+
+    # Convert to list of dicts, replacing NaN/numpy types with JSON-safe Python types
+    def _clean(v):
+        if v is None:
+            return None
+        if isinstance(v, (np.floating, float)):
+            return None if np.isnan(v) else round(float(v), 6)
+        if isinstance(v, (np.integer, int)):
+            return int(v)
+        return v
+    timeseries = [{k: _clean(v) for k, v in row.items()} for row in ts.to_dict("records")]
 
     # KPIs
     valid_prices = df["Brent_Price"].dropna()
@@ -714,62 +734,58 @@ def fetch_iran_events() -> List[dict]:
 
     try:
         token = _get_acled_token()
-        all_events = []
+        iran_fields = "event_id_cnty|event_date|event_type|sub_event_type|actor1|actor2|location|latitude|longitude|notes|fatalities|tags"
 
-        # Query 1: Events in Iran
-        for page in range(1, 20):
+        def _fetch_iran_country():
+            results = []
+            for page in range(1, 20):
+                resp = requests.get(
+                    config.ACLED_DATA_URL,
+                    headers={**_BROWSER_HEADERS, "Authorization": f"Bearer {token}"},
+                    params={"_format": "json", "country": "Iran",
+                            "event_date": "2025-01-01|2026-12-31", "event_date_where": "BETWEEN",
+                            "fields": iran_fields, "limit": 5000, "page": page},
+                    timeout=60,
+                )
+                resp.raise_for_status()
+                batch = resp.json().get("data", [])
+                if not batch:
+                    break
+                results.extend(batch)
+                if len(batch) < 5000:
+                    break
+            logger.info(f"Iran events (country): {len(results)} events")
+            return results
+
+        def _fetch_iran_bilateral(actor1, actor2):
             resp = requests.get(
                 config.ACLED_DATA_URL,
                 headers={**_BROWSER_HEADERS, "Authorization": f"Bearer {token}"},
-                params={
-                    "_format": "json",
-                    "country": "Iran",
-                    "event_date": "2025-01-01|2026-12-31",
-                    "event_date_where": "BETWEEN",
-                    "fields": "event_id_cnty|event_date|event_type|sub_event_type|actor1|actor2|location|latitude|longitude|notes|fatalities|tags",
-                    "limit": 5000,
-                    "page": page,
-                },
-                timeout=60,
-            )
-            resp.raise_for_status()
-            events = resp.json().get("data", [])
-            if not events:
-                break
-            all_events.extend(events)
-            logger.info(f"Iran events (country): fetched page {page} ({len(events)} events)")
-            if len(events) < 5000:
-                break
-
-        # Query 2: US-Iran bilateral events globally (actor-based)
-        seen_ids = {e.get("event_id_cnty") for e in all_events}
-        for actor_pair in [
-            {"actor1": "United States", "actor2": "Iran"},
-            {"actor1": "Iran", "actor2": "United States"},
-        ]:
-            resp = requests.get(
-                config.ACLED_DATA_URL,
-                headers={**_BROWSER_HEADERS, "Authorization": f"Bearer {token}"},
-                params={
-                    "_format": "json",
-                    "actor1": actor_pair["actor1"],
-                    "actor1_where": "LIKE",
-                    "actor2": actor_pair["actor2"],
-                    "actor2_where": "LIKE",
-                    "event_date": "2025-01-01|2026-12-31",
-                    "event_date_where": "BETWEEN",
-                    "fields": "event_id_cnty|event_date|event_type|sub_event_type|actor1|actor2|location|latitude|longitude|notes|fatalities|tags",
-                    "limit": 5000,
-                },
+                params={"_format": "json", "actor1": actor1, "actor1_where": "LIKE",
+                        "actor2": actor2, "actor2_where": "LIKE",
+                        "event_date": "2025-01-01|2026-12-31", "event_date_where": "BETWEEN",
+                        "fields": iran_fields, "limit": 5000},
                 timeout=60,
             )
             resp.raise_for_status()
             bilateral = resp.json().get("data", [])
-            for e in bilateral:
-                if e.get("event_id_cnty") not in seen_ids:
+            logger.info(f"Iran bilateral ({actor1}→{actor2}): {len(bilateral)} events")
+            return bilateral
+
+        # Run all 3 queries in parallel
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            f_country = pool.submit(_fetch_iran_country)
+            f_us_iran = pool.submit(_fetch_iran_bilateral, "United States", "Iran")
+            f_iran_us = pool.submit(_fetch_iran_bilateral, "Iran", "United States")
+
+        all_events = []
+        seen_ids = set()
+        for batch in [f_country.result(), f_us_iran.result(), f_iran_us.result()]:
+            for e in batch:
+                eid = e.get("event_id_cnty")
+                if eid and eid not in seen_ids:
                     all_events.append(e)
-                    seen_ids.add(e.get("event_id_cnty"))
-            logger.info(f"Iran bilateral ({actor_pair['actor1']}→{actor_pair['actor2']}): {len(bilateral)} events")
+                    seen_ids.add(eid)
 
         _iran_fetch_error = None
         if all_events:
@@ -1343,33 +1359,33 @@ def get_hypothesis_results() -> dict:
         "h2": {
             "name": "H2: Tanker Specificity",
             "description": "Attacks specifically targeting oil tankers have a greater impact on volatility than general maritime attacks",
-            "coefficient": -0.1496,
-            "p_value": 0.0201,
-            "r_squared": 0.0056,
+            "coefficient": -0.2131,
+            "p_value": 0.009,
+            "r_squared": 0.0059,
             "supported": False,
-            "conclusion": "NOT SUPPORTED. While statistically significant (p=0.020), the negative coefficient and very low R² indicate tanker-specific attacks do not amplify volatility beyond the general attack effect."
+            "conclusion": "NOT SUPPORTED. While statistically significant (p=0.009), the negative coefficient indicates tanker-specific attacks are associated with decreased volatility — consistent with market adaptation rather than amplified fear."
         },
         "h3": {
             "name": "H3: Chokepoint Geography",
             "description": "Attacks at the Bab el-Mandeb strait chokepoint have a disproportionate impact on oil price volatility",
-            "coefficient": -0.0017,
-            "p_value": 0.8329,
-            "r_squared": 0.0001,
+            "coefficient": -0.0729,
+            "p_value": 0.287,
+            "r_squared": 0.0170,
             "supported": False,
-            "conclusion": "NOT SUPPORTED. The coefficient is neither statistically significant (p=0.833) nor economically meaningful (R²≈0), indicating chokepoint proximity alone does not drive differential market response."
+            "conclusion": "NOT SUPPORTED. The coefficient is not statistically significant (p=0.287), indicating chokepoint proximity alone does not drive differential market response, though the effect direction is consistent with the adaptation thesis."
         },
         "garch_summary": {
             "model": "GJR-GARCH(1,1,1)",
             "distribution": "Normal",
             "mean_model": "Constant",
-            "observations": 521,
-            "log_likelihood": -1185.2,
-            "aic": 2374,
-            "bic": 2384,
+            "observations": 731,
+            "log_likelihood": -1376.4,
+            "aic": 2763,
+            "bic": 2786,
         },
         "model_comparison": {
             "labels": ["H1 (Generic)", "H2 (Tanker)", "H3 (Chokepoint)"],
-            "r_squared": [0.11883, 0.00564, 0.00006],
+            "r_squared": [0.11883, 0.00593, 0.01695],
             "finding": "The market reacts most strongly to raw VOLUME of attacks (H1), but in the opposite direction expected — higher attack frequency correlates with lower volatility over time."
         }
     }

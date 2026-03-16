@@ -2,6 +2,9 @@
 Red Sea Crisis Intelligence Dashboard - FastAPI Backend
 Run: python app.py
 """
+import asyncio
+from functools import partial
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -11,6 +14,12 @@ from fastapi.background import BackgroundTasks
 
 import config
 import data_service
+
+
+def _run_sync(fn, *args):
+    """Run a blocking function in the default executor."""
+    loop = asyncio.get_event_loop()
+    return loop.run_in_executor(None, fn if not args else partial(fn, *args))
 
 app = FastAPI(title="Red Sea Crisis Intelligence Dashboard")
 
@@ -33,72 +42,74 @@ app.mount("/static", StaticFiles(directory=config.BASE_DIR / "static"), name="st
 # ─── API Endpoints ───────────────────────────────────────────────────────────
 
 @app.get("/api/master")
-def get_master_data():
+async def get_master_data():
     """Full master dataset: timeseries, KPIs, price windows, correlation."""
-    return data_service.load_master_dataset()
+    return await _run_sync(data_service.load_master_dataset)
 
 
 @app.get("/api/events")
-def get_events():
+async def get_events():
     """ACLED event data for map and table."""
-    events = data_service.fetch_acled_events()
+    events = await _run_sync(data_service.fetch_acled_events)
     return {"count": len(events), "data": events}
 
 
 @app.get("/api/thesis-events")
-def get_thesis_events():
+async def get_thesis_events():
     """The exact 361 events analyzed in the thesis — for geospatial map accuracy."""
-    events = data_service.load_thesis_events()
+    events = await _run_sync(data_service.load_thesis_events)
     return {"count": len(events), "data": events}
 
 
 @app.get("/api/brent")
-def get_brent():
+async def get_brent():
     """Live Brent crude prices from EIA API."""
-    prices = data_service.fetch_brent_prices()
+    prices = await _run_sync(data_service.fetch_brent_prices)
     return {"count": len(prices), "data": prices}
 
 
 @app.get("/api/dxy")
-def get_dxy():
+async def get_dxy():
     """US Dollar Index from yfinance."""
-    data = data_service.fetch_dxy()
+    data = await _run_sync(data_service.fetch_dxy)
     return {"count": len(data), "data": data}
 
 
 @app.get("/api/ovx")
-def get_ovx():
+async def get_ovx():
     """Oil Volatility Index from yfinance."""
-    data = data_service.fetch_ovx()
+    data = await _run_sync(data_service.fetch_ovx)
     return {"count": len(data), "data": data}
 
 
 @app.get("/api/spr")
-def get_spr():
+async def get_spr():
     """Strategic Petroleum Reserve data from EIA."""
-    data = data_service.fetch_spr_data()
+    data = await _run_sync(data_service.fetch_spr_data)
     return {"count": len(data), "data": data}
 
 
 @app.get("/api/china-pmi")
-def get_china_pmi():
+async def get_china_pmi():
     """China business confidence from FRED."""
-    data = data_service.fetch_china_pmi()
+    data = await _run_sync(data_service.fetch_china_pmi)
     return {"count": len(data), "data": data}
 
 
 @app.get("/api/hypothesis")
-def get_hypothesis():
+async def get_hypothesis():
     """Hypothesis test results from econometric analysis."""
     return data_service.get_hypothesis_results()
 
 
 @app.get("/api/iran-events")
-def get_iran_events():
+async def get_iran_events():
     """Iran-related ACLED events + curated major events + live news."""
-    acled_events = data_service.fetch_iran_events()
+    # Fetch ACLED events and news in parallel (curated is in-memory, instant)
+    acled_task = _run_sync(data_service.fetch_iran_events)
+    news_task = _run_sync(data_service.fetch_iran_news)
+    acled_events, news = await asyncio.gather(acled_task, news_task)
     curated = data_service.get_merged_curated_events()
-    news = data_service.fetch_iran_news()
     result = {"count": len(acled_events), "data": acled_events, "curated": curated, "news": news}
     err = data_service.get_iran_fetch_error()
     if err:
@@ -107,10 +118,12 @@ def get_iran_events():
 
 
 @app.get("/api/iran-impact")
-def get_iran_impact():
+async def get_iran_impact():
     """Oil price impact analysis around Iran events."""
-    iran_events = data_service.fetch_iran_events()
-    brent_prices = data_service.fetch_brent_prices()
+    # Fetch iran events and brent prices in parallel
+    iran_task = _run_sync(data_service.fetch_iran_events)
+    brent_task = _run_sync(data_service.fetch_brent_prices)
+    iran_events, brent_prices = await asyncio.gather(iran_task, brent_task)
     result = data_service.compute_iran_impact(iran_events, brent_prices)
     result["brent_prices"] = brent_prices
     return result
@@ -118,36 +131,59 @@ def get_iran_impact():
 
 # ─── Data Refresh ─────────────────────────────────────────────────────────────
 
+_refresh_in_progress = False
+
 def _do_refresh():
-    """Background task: clear ALL caches and re-fetch data."""
-    import json
-    data_service._acled_token = None
+    """Background task: clear caches and re-fetch data in parallel."""
+    global _refresh_in_progress
+    if _refresh_in_progress:
+        return
+    _refresh_in_progress = True
+    try:
+        import json
+        data_service._acled_token = None
 
-    # Clear ALL caches — not just ACLED
-    for cache_file in config.CACHE_DIR.glob("*.json"):
-        try:
-            cache_file.unlink()
-        except Exception:
-            pass
+        # Clear caches
+        for cache_file in config.CACHE_DIR.glob("*.json"):
+            try:
+                cache_file.unlink()
+            except Exception:
+                pass
 
-    # Re-fetch core data (will rebuild caches)
-    events = data_service.fetch_acled_events()
-    iran = data_service.fetch_iran_events()
-    data_service.fetch_brent_prices()
-    data_service.fetch_iran_news()
+        # Re-fetch all data sources in parallel
+        with data_service.ThreadPoolExecutor(max_workers=4) as pool:
+            f_events = pool.submit(data_service.fetch_acled_events)
+            f_iran = pool.submit(data_service.fetch_iran_events)
+            f_brent = pool.submit(data_service.fetch_brent_prices)
+            f_news = pool.submit(data_service.fetch_iran_news)
 
-    # Update JSON fallbacks if we got real API data
-    if len(events) > 1000:
-        (config.DATA_DIR / "acled_events.json").write_text(json.dumps(events, default=str))
-    if len(iran) > 100:
-        (config.DATA_DIR / "iran_events.json").write_text(json.dumps(iran, default=str))
+        events = f_events.result()
+        iran = f_iran.result()
+        f_brent.result()
+        f_news.result()
+
+        # Update JSON fallbacks if we got real API data
+        if len(events) > 1000:
+            (config.DATA_DIR / "acled_events.json").write_text(json.dumps(events, default=str))
+        if len(iran) > 100:
+            (config.DATA_DIR / "iran_events.json").write_text(json.dumps(iran, default=str))
+    finally:
+        _refresh_in_progress = False
 
 
 @app.post("/api/refresh")
-def refresh_data(bg: BackgroundTasks):
+async def refresh_data(bg: BackgroundTasks):
     """Trigger a background data refresh."""
+    if _refresh_in_progress:
+        return {"status": "refresh already in progress"}
     bg.add_task(_do_refresh)
     return {"status": "refresh started"}
+
+
+@app.get("/api/refresh-status")
+async def refresh_status():
+    """Check if a refresh is currently in progress."""
+    return {"in_progress": _refresh_in_progress}
 
 
 # ─── Frontend Entry Point ────────────────────────────────────────────────────

@@ -877,14 +877,21 @@ document.getElementById('refreshDataBtn')?.addEventListener('click', async () =>
     btn.textContent = 'Refreshing...';
     try {
         await fetch('/api/refresh', { method: 'POST' });
-        // Wait for background task, then reload frontend data
-        setTimeout(async () => {
-            await loadAllData();
-            btn.textContent = 'Refresh Data';
-            btn.disabled = false;
-        }, 3000);
+        // Poll until backend refresh completes (check every 2s, max 60s)
+        const maxWait = 60;
+        const interval = 2;
+        for (let waited = 0; waited < maxWait; waited += interval) {
+            await new Promise(r => setTimeout(r, interval * 1000));
+            try {
+                const status = await fetchJSON('/api/refresh-status');
+                if (!status.in_progress) break;
+            } catch { break; }
+            btn.textContent = `Refreshing... ${waited + interval}s`;
+        }
+        await loadAllData();
     } catch (e) {
         console.error('Refresh failed:', e);
+    } finally {
         btn.textContent = 'Refresh Data';
         btn.disabled = false;
     }
@@ -901,6 +908,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Build status bar
     _initStatusBar();
+
+    // ─── Fixed-position tooltip positioning ─────────────────────────────────
+    // .kpi-info-tooltip uses position:fixed so it escapes overflow:hidden parents.
+    // We compute top/left from the icon's bounding rect on hover.
+    function initFixedTooltips() {
+        document.querySelectorAll('.kpi-info').forEach(wrapper => {
+            const icon = wrapper.querySelector('.kpi-info-icon');
+            const tip = wrapper.querySelector('.kpi-info-tooltip');
+            if (!icon || !tip) return;
+
+            icon.addEventListener('mouseenter', () => {
+                const r = icon.getBoundingClientRect();
+                tip.style.left = Math.max(8, r.left - 40) + 'px';
+                tip.style.top = (r.top - tip.offsetHeight - 10) + 'px';
+                // Flip below if clipped at top
+                if (r.top - tip.offsetHeight - 10 < 8) {
+                    tip.style.top = (r.bottom + 10) + 'px';
+                }
+            });
+        });
+
+        document.querySelectorAll('.chart-info').forEach(wrapper => {
+            const icon = wrapper.querySelector('.chart-info-icon');
+            const tip = wrapper.querySelector('.chart-info-tooltip');
+            if (!icon || !tip) return;
+
+            icon.addEventListener('mouseenter', () => {
+                const r = icon.getBoundingClientRect();
+                tip.style.left = Math.max(8, r.right - tip.offsetWidth) + 'px';
+                tip.style.top = (r.top - tip.offsetHeight - 10) + 'px';
+                if (r.top - tip.offsetHeight - 10 < 8) {
+                    tip.style.top = (r.bottom + 10) + 'px';
+                }
+            });
+        });
+    }
+    initFixedTooltips();
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
