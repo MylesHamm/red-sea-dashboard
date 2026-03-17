@@ -657,13 +657,30 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
     // Build event lookup by date for scatter overlay + tooltip afterBody
     // Include curated, promoted ACLED, and geocoded news events
     const lastPrice = prices.length ? prices[prices.length - 1] : null;
+
+    // Helper: find price on or before a given date (nearest trading day)
+    function findNearestPrice(eventDate) {
+        const exact = dates.indexOf(eventDate);
+        if (exact >= 0) return { idx: exact, price: prices[exact], tradingDate: dates[exact] };
+        // Binary search for the nearest trading day on or before this date
+        let lo = 0, hi = dates.length - 1, best = -1;
+        while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            if (dates[mid] <= eventDate) { best = mid; lo = mid + 1; }
+            else { hi = mid - 1; }
+        }
+        if (best >= 0) return { idx: best, price: prices[best], tradingDate: dates[best] };
+        // If event is before all prices, use first price
+        if (dates.length) return { idx: 0, price: prices[0], tradingDate: dates[0] };
+        return { idx: -1, price: lastPrice, tradingDate: eventDate };
+    }
+
     const eventPoints = (curatedEvents || []).filter(ev => ev.date >= cutoff).map(ev => {
-        const idx = dates.indexOf(ev.date);
-        // Use exact price if available, otherwise last known price (for today's events)
-        const closestPrice = idx >= 0 ? prices[idx] : lastPrice;
+        const match = findNearestPrice(ev.date);
         return {
-            date: ev.date,
-            price: closestPrice,
+            date: match.tradingDate,  // Snap to nearest trading day
+            originalDate: ev.date,
+            price: match.price,
             title: ev.title,
             type: ev.type,
             severity: ev.severity || 3,
@@ -672,20 +689,13 @@ function createIranPriceTimelineChart(brentPrices, curatedEvents, zoomToWar = tr
         };
     }).filter(p => p.price != null);
 
-    // Deduplicate: if multiple events on same date, keep highest severity (prefer curated)
+    // Deduplicate: if multiple events on same (snapped) date, keep highest severity (prefer curated)
     const eventByDate = {};
     eventPoints.forEach(p => {
         if (!eventByDate[p.date] || p.source_type === 'curated' || p.severity > (eventByDate[p.date].severity || 0)) {
             eventByDate[p.date] = p;
         }
     });
-
-    // For events on dates beyond the price data, extend the dates/prices arrays
-    const extraDates = Object.keys(eventByDate).filter(d => !dates.includes(d)).sort();
-    for (const d of extraDates) {
-        dates.push(d);
-        prices.push(lastPrice);
-    }
 
     // Build scatter data aligned to the labels axis (null for non-event dates)
     const scatterData = dates.map(d => eventByDate[d] ? eventByDate[d].price : null);

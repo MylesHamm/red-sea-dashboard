@@ -350,16 +350,20 @@ def _load_acled_fallback() -> List[dict]:
 _thesis_events_cache: Optional[List[dict]] = None
 
 def load_thesis_events() -> List[dict]:
-    """Load the thesis events from thesis_events.csv (374 events).
-    Original 361 events from the econometric analysis + 13 additional
-    tanker-targeting attacks identified in the broader ACLED data."""
+    """Load the 667 ACLED-verified maritime events analyzed in the thesis
+    (Chapter 6 independent verification dataset)."""
     global _thesis_events_cache
     if _thesis_events_cache is not None:
         return _thesis_events_cache
 
-    csv_path = config.DATA_DIR / "thesis_events.csv"
+    # Primary: CH6 independently verified events (667 maritime attacks)
+    ch6_path = Path(__file__).resolve().parent.parent / "6 - Independent Verification" / "CH6_HouthiMaritimeEvents_ACLED.csv"
+    # Fallback: legacy thesis_events.csv in Dashboard/data/
+    legacy_path = config.DATA_DIR / "thesis_events.csv"
+
+    csv_path = ch6_path if ch6_path.exists() else legacy_path
     if not csv_path.exists():
-        logger.warning("thesis_events.csv not found, falling back to ACLED")
+        logger.warning("No thesis events CSV found, falling back to ACLED")
         return fetch_acled_events()
 
     try:
@@ -367,12 +371,18 @@ def load_thesis_events() -> List[dict]:
         col_map = {c: c.lower() for c in df.columns}
         df.rename(columns=col_map, inplace=True)
 
+        # Map CH6 column names to expected schema
+        if "date" in df.columns and "event_date" not in df.columns:
+            df.rename(columns={"date": "event_date"}, inplace=True)
+        if "event_id" in df.columns and "event_id_cnty" not in df.columns:
+            df.rename(columns={"event_id": "event_id_cnty"}, inplace=True)
+
         records = _df_to_event_records(df)
         _thesis_events_cache = records
-        logger.info(f"Thesis dataset: loaded {len(records)} events from thesis_events.csv")
+        logger.info(f"Thesis dataset: loaded {len(records)} events from {csv_path.name}")
         return records
     except Exception as e:
-        logger.warning(f"Failed to load thesis_events.csv: {e}")
+        logger.warning(f"Failed to load thesis events: {e}")
         return fetch_acled_events()
 
 
@@ -1281,19 +1291,12 @@ def get_merged_curated_events() -> List[dict]:
         logger.warning(f"News geocoding failed: {e}")
         news_events = []
 
-    # 3. Promoted ACLED events
-    try:
-        acled = fetch_iran_events()
-        acled_promoted = _promote_acled_events(acled, curated)
-    except Exception as e:
-        logger.warning(f"ACLED promotion failed: {e}")
-        acled_promoted = []
-
-    # 4. Merge and sort
-    merged = curated + news_events + acled_promoted
+    # 3. Merge and sort (curated + news only; ACLED-promoted are internal Iranian
+    #    conflicts like armed clashes/IEDs, not US-Iran tensions — excluded)
+    merged = curated + news_events
     merged.sort(key=lambda x: x.get("date", ""), reverse=True)
 
-    logger.info(f"Merged events: {len(curated)} curated + {len(news_events)} news + {len(acled_promoted)} ACLED promoted = {len(merged)} total")
+    logger.info(f"Merged events: {len(curated)} curated + {len(news_events)} news = {len(merged)} total")
     return merged
 
 
@@ -1438,47 +1441,50 @@ def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
 
 
 def get_hypothesis_results() -> dict:
-    """Return hypothesis test results from the econometric analysis."""
+    """Return hypothesis test results from the econometric analysis.
+    Updated 2026-03-17: Independent ACLED verification with all 7 control variables
+    (DXY, OVX, SPR, OPEC Dummy, Russia-Ukraine Dummy, China PMI, Baker Hughes Rigs).
+    """
     return {
         "h1": {
             "name": "H1: Attack Frequency",
             "description": "Higher frequency of Houthi maritime attacks increases Brent crude oil price volatility",
-            "coefficient": -0.1029,
-            "p_value": 0.0000,
-            "r_squared": 0.1188,
+            "coefficient": -0.0031,
+            "p_value": 0.802,
+            "r_squared": 0.6421,
             "supported": False,
-            "conclusion": "NOT SUPPORTED. The coefficient is statistically significant but negative, suggesting that as attack frequency increased, the market adapted and volatility actually decreased — consistent with a 'new normal' effect."
+            "conclusion": "NOT SUPPORTED. After controlling for DXY, OVX, SPR, OPEC, Russia-Ukraine, China PMI, and rig count, the attack frequency coefficient is near zero (β = -0.0031) and not statistically significant (p = 0.802). Market volatility is driven primarily by macroeconomic factors, not attack volume."
         },
         "h2": {
             "name": "H2: Tanker Specificity",
             "description": "Attacks specifically targeting oil tankers have a greater impact on volatility than general maritime attacks",
-            "coefficient": -0.2131,
-            "p_value": 0.009,
-            "r_squared": 0.0059,
+            "coefficient": -0.0811,
+            "p_value": 0.215,
+            "r_squared": 0.6424,
             "supported": False,
-            "conclusion": "NOT SUPPORTED. While statistically significant (p=0.009), the negative coefficient indicates tanker-specific attacks are associated with decreased volatility — consistent with market adaptation rather than amplified fear."
+            "conclusion": "NOT SUPPORTED. The tanker-specific coefficient is negative (β = -0.0811) and not statistically significant (p = 0.215) after controlling for all 7 macroeconomic variables. Tanker attacks do not produce a differential volatility impact beyond what is explained by broader market conditions."
         },
         "h3": {
             "name": "H3: Chokepoint Geography",
             "description": "Attacks at the Bab el-Mandeb strait chokepoint have a disproportionate impact on oil price volatility",
-            "coefficient": -0.0729,
-            "p_value": 0.287,
-            "r_squared": 0.0170,
-            "supported": False,
-            "conclusion": "NOT SUPPORTED. The coefficient is not statistically significant (p=0.287), indicating chokepoint proximity alone does not drive differential market response, though the effect direction is consistent with the adaptation thesis."
+            "coefficient": 0.1684,
+            "p_value": 0.012,
+            "r_squared": 0.6446,
+            "supported": True,
+            "conclusion": "SUPPORTED. Even after controlling for all 7 macroeconomic variables, chokepoint attacks show a statistically significant positive effect on volatility (β = 0.1684, p = 0.012). Attacks at the Bab el-Mandeb strait produce a measurable increase in oil price volatility independent of broader market conditions."
         },
         "garch_summary": {
             "model": "GJR-GARCH(1,1,1)",
             "distribution": "Normal",
             "mean_model": "Constant",
-            "observations": 731,
-            "log_likelihood": -1376.4,
-            "aic": 2763,
-            "bic": 2786,
+            "observations": 505,
+            "log_likelihood": -1027.56,
+            "aic": 2065,
+            "bic": 2086,
         },
         "model_comparison": {
             "labels": ["H1 (Generic)", "H2 (Tanker)", "H3 (Chokepoint)"],
-            "r_squared": [0.11883, 0.00593, 0.01695],
-            "finding": "The market reacts most strongly to raw VOLUME of attacks (H1), but in the opposite direction expected — higher attack frequency correlates with lower volatility over time."
+            "r_squared": [0.64212, 0.64236, 0.64458],
+            "finding": "With all 7 control variables, models explain ~64% of volatility variance. Only H3 (chokepoint attacks) shows a significant independent effect (p = 0.012), while H1 and H2 are absorbed by the controls — suggesting geographic chokepoint risk is the key transmission mechanism."
         }
     }
