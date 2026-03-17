@@ -356,8 +356,8 @@ def load_thesis_events() -> List[dict]:
     if _thesis_events_cache is not None:
         return _thesis_events_cache
 
-    # Primary: CH6 independently verified events (667 maritime attacks)
-    ch6_path = Path(__file__).resolve().parent.parent / "6 - Independent Verification" / "CH6_HouthiMaritimeEvents_ACLED.csv"
+    # Primary: independently verified events (667 maritime attacks)
+    ch6_path = Path(__file__).resolve().parent.parent / "4 - Data Analysis" / "Independent Verification" / "New_HouthiMaritimeEvents_ACLED.csv"
     # Fallback: legacy thesis_events.csv in Dashboard/data/
     legacy_path = config.DATA_DIR / "thesis_events.csv"
 
