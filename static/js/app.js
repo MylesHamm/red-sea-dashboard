@@ -915,71 +915,61 @@ document.addEventListener('DOMContentLoaded', () => {
     // overflow:hidden parents.  On mouseenter we measure the tooltip off-screen,
     // compute top/left from the icon's bounding rect, then add a .tooltip-visible
     // class so CSS transitions handle the fade-in.  On mouseleave we remove it.
-    function _positionTooltip(icon, tip, alignRight) {
-        // 1. Move off-screen and force layout so we can measure true dimensions
-        tip.style.visibility = 'hidden';
-        tip.style.opacity   = '0';
-        tip.style.display   = 'block';
-        tip.style.left      = '-9999px';
-        tip.style.top       = '-9999px';
+    function _positionTooltip(icon, tip) {
+        // Move tooltip to body so it's free from any overflow/transform context
+        if (tip.parentNode !== document.body) {
+            document.body.appendChild(tip);
+        }
 
+        // Measure off-screen
+        tip.style.cssText = 'position:fixed;display:block;visibility:hidden;opacity:0;' +
+            'left:-9999px;top:-9999px;width:280px;z-index:99999;pointer-events:none;';
         const tipH = tip.offsetHeight;
         const tipW = tip.offsetWidth;
-        const r    = icon.getBoundingClientRect();
+        const r = icon.getBoundingClientRect();
 
-        // 2. Horizontal: align left edge near icon, or right-align for chart tooltips
-        let left;
-        if (alignRight) {
-            left = r.right - tipW;
-        } else {
-            left = r.left - 40;
-        }
+        // Center horizontally on the icon, clamp to viewport
+        let left = r.left + r.width / 2 - tipW / 2;
         left = Math.max(8, Math.min(left, window.innerWidth - tipW - 8));
 
-        // 3. Vertical: prefer above; flip below if clipped at top
-        let top     = r.top - tipH - 10;
+        // Prefer above the icon; flip below if clipped
+        let top = r.top - tipH - 10;
         let flipped = false;
         if (top < 8) {
-            top     = r.bottom + 10;
+            top = r.bottom + 10;
             flipped = true;
         }
 
-        // 4. Apply computed position
-        tip.style.left = left + 'px';
-        tip.style.top  = top  + 'px';
-
-        // 5. Clear inline measurement overrides so CSS classes take effect
-        tip.style.removeProperty('visibility');
-        tip.style.removeProperty('opacity');
-        tip.style.removeProperty('display');
-
-        // 6. Toggle arrow direction class
+        // Apply position and show
+        tip.style.cssText = 'position:fixed;display:block;visibility:visible;opacity:1;' +
+            'width:280px;z-index:99999;pointer-events:none;' +
+            'background:#111b2a;color:#c0cad8;font-size:12px;font-style:normal;' +
+            'font-weight:400;line-height:1.5;padding:12px 14px;border-radius:8px;' +
+            'border:1px solid rgba(0,212,255,0.2);' +
+            'box-shadow:0 8px 24px rgba(0,0,0,0.5),0 0 15px rgba(0,212,255,0.08);' +
+            'transition:opacity 0.15s ease;' +
+            'left:' + left + 'px;top:' + top + 'px;';
         tip.classList.toggle('tooltip-below', flipped);
-
-        // 7. Show via class (CSS handles visibility + opacity transition)
-        tip.classList.add('tooltip-visible');
     }
 
     function _hideTooltip(tip) {
-        tip.classList.remove('tooltip-visible');
+        tip.style.visibility = 'hidden';
+        tip.style.opacity = '0';
         tip.classList.remove('tooltip-below');
     }
 
     function initFixedTooltips() {
-        document.querySelectorAll('.kpi-info').forEach(wrapper => {
-            const icon = wrapper.querySelector('.kpi-info-icon');
-            const tip  = wrapper.querySelector('.kpi-info-tooltip');
+        // Attach to both KPI and chart info icons
+        document.querySelectorAll('.kpi-info, .chart-info').forEach(wrapper => {
+            const icon = wrapper.querySelector('.kpi-info-icon') || wrapper.querySelector('.chart-info-icon');
+            const tip = wrapper.querySelector('.kpi-info-tooltip') || wrapper.querySelector('.chart-info-tooltip');
             if (!icon || !tip) return;
-            icon.addEventListener('mouseenter', () => _positionTooltip(icon, tip, false));
-            icon.addEventListener('mouseleave', () => _hideTooltip(tip));
-        });
 
-        document.querySelectorAll('.chart-info').forEach(wrapper => {
-            const icon = wrapper.querySelector('.chart-info-icon');
-            const tip  = wrapper.querySelector('.chart-info-tooltip');
-            if (!icon || !tip) return;
-            icon.addEventListener('mouseenter', () => _positionTooltip(icon, tip, true));
-            icon.addEventListener('mouseleave', () => _hideTooltip(tip));
+            // Store reference so we can find the tooltip after it's moved to body
+            icon._tooltip = tip;
+
+            icon.addEventListener('mouseenter', () => _positionTooltip(icon, icon._tooltip));
+            icon.addEventListener('mouseleave', () => _hideTooltip(icon._tooltip));
         });
     }
     initFixedTooltips();
