@@ -324,44 +324,32 @@ def _load_acled_fallback() -> List[dict]:
         except Exception as e:
             logger.warning(f"ACLED JSON fallback failed: {e}")
 
-    # Fall back to CSV files
-    logger.info("ACLED: falling back to CSV")
-    for path in [config.HOUTHI_CSV_PATH, config.HOUTHI_EXCEL_PATH]:
-        if path.exists():
-            try:
-                if str(path).endswith(".xlsx"):
-                    df = pd.read_excel(path)
-                else:
-                    df = pd.read_csv(path)
-
-                col_map = {c: c.lower() for c in df.columns}
-                df.rename(columns=col_map, inplace=True)
-
-                records = _df_to_event_records(df)
-                logger.info(f"ACLED CSV fallback: loaded {len(records)} events from {path.name}")
-                return records
-            except Exception as e:
-                logger.warning(f"Failed to load {path}: {e}")
+    # Fall back to thesis events CSV
+    logger.info("ACLED: falling back to thesis events CSV")
+    if config.THESIS_EVENTS_PATH.exists():
+        try:
+            df = pd.read_csv(config.THESIS_EVENTS_PATH)
+            col_map = {c: c.lower() for c in df.columns}
+            df.rename(columns=col_map, inplace=True)
+            records = _df_to_event_records(df)
+            logger.info(f"ACLED CSV fallback: loaded {len(records)} events from {config.THESIS_EVENTS_PATH.name}")
+            return records
+        except Exception as e:
+            logger.warning(f"Failed to load thesis events CSV: {e}")
     return []
 
 
-# ─── Thesis Dataset (Curated 361 Events) ─────────────────────────────────────
+# ─── Thesis Dataset (726 Verified Maritime Events) ───────────────────────────
 
 _thesis_events_cache: Optional[List[dict]] = None
 
 def load_thesis_events() -> List[dict]:
-    """Load the 667 ACLED-verified maritime events analyzed in the thesis
-    (Chapter 6 independent verification dataset)."""
+    """Load the 726 ACLED-verified maritime events analyzed in the thesis."""
     global _thesis_events_cache
     if _thesis_events_cache is not None:
         return _thesis_events_cache
 
-    # Primary: independently verified events (667 maritime attacks)
-    ch6_path = Path(__file__).resolve().parent.parent / "4 - Data Analysis" / "Independent Verification" / "New_HouthiMaritimeEvents_ACLED.csv"
-    # Fallback: legacy thesis_events.csv in Dashboard/data/
-    legacy_path = config.DATA_DIR / "thesis_events.csv"
-
-    csv_path = ch6_path if ch6_path.exists() else legacy_path
+    csv_path = config.THESIS_EVENTS_PATH
     if not csv_path.exists():
         logger.warning("No thesis events CSV found, falling back to ACLED")
         return fetch_acled_events()
@@ -634,7 +622,7 @@ def fetch_china_pmi() -> List[dict]:
 # ─── Master Dataset (CSV Backbone) ──────────────────────────────────────────
 
 def load_master_dataset() -> dict:
-    """Load the full myles_dataset_final.csv and return as structured JSON."""
+    """Load the master dataset CSV and return as structured JSON."""
     cached = _read_cache("master_dataset", 1800)  # 30 min cache
     if cached:
         return cached
@@ -660,12 +648,13 @@ def load_master_dataset() -> dict:
         "Baker_Hughes_Rigs": ("baker_hughes_rigs", 1, True),
     }
     int_cols = {
-        "WeekleyAttackFrq": "weekly_attacks",
+        "WeeklyAttackFreq": "weekly_attacks",
+        "daily_attacks": "daily_attacks",
+        "tanker_attacks": "tanker_attacks",
+        "chokepoint_attacks": "chokepoint_attacks",
+        "fatalities": "fatalities_count",
         "OPEC_Dummy": "opec_dummy",
         "RussiaUkraine_Dummy": "russia_ukraine_dummy",
-        "OPEC_Decision": "opec_decision",
-        "RussiaUkraine_Attacks": "russia_ukraine_attacks",
-        "IranIsrael_Escalation": "iran_israel_escalation",
     }
     ts = pd.DataFrame({"date": df["Date"].dt.strftime("%Y-%m-%d")})
     for src, (dst, rnd, excl_zero) in col_map.items():
@@ -697,7 +686,7 @@ def load_master_dataset() -> dict:
         "latest_brent_price": round(float(valid_prices.iloc[-1]), 2),
         "brent_price_change": round(float(valid_prices.iloc[-1] - valid_prices.iloc[-2]), 2) if len(valid_prices) > 1 else 0,
         "peak_volatility": round(float(df["Daily_Volatility"].max()), 4),
-        "max_weekly_attacks": int(df["WeekleyAttackFrq"].max()),
+        "max_weekly_attacks": int(df["WeeklyAttackFreq"].max()),
         "latest_dxy": round(float(df["DXY"].dropna().iloc[-1]), 2) if df["DXY"].dropna().shape[0] > 0 else None,
         "latest_ovx": round(float(df["OVX"].dropna().iloc[-1]), 2) if df["OVX"].dropna().shape[0] > 0 else None,
         "total_trading_days": len(valid_prices),
@@ -705,7 +694,7 @@ def load_master_dataset() -> dict:
 
     # Price windows (event study: T-2 to T+5)
     price_cols = ["Price_T-2", "Price_T-1", "Price_T0", "Price_T+1", "Price_T+2", "Price_T+3", "Price_T+4", "Price_T+5"]
-    attack_rows = df[df["WeekleyAttackFrq"] > 0]
+    attack_rows = df[df["WeeklyAttackFreq"] > 0]
     price_windows = {}
     for col in price_cols:
         if col in df.columns:
@@ -713,8 +702,8 @@ def load_master_dataset() -> dict:
             price_windows[col] = round(float(values.mean()), 2) if len(values) > 0 else 0
 
     # Correlation matrix
-    corr_cols = ["Brent_Price", "Daily_Volatility", "WeekleyAttackFrq", "DXY", "OVX",
-                 "OPEC_Dummy", "RussiaUkraine_Dummy", "IranIsrael_Escalation",
+    corr_cols = ["Brent_Price", "Daily_Volatility", "WeeklyAttackFreq", "DXY", "OVX",
+                 "OPEC_Dummy", "RussiaUkraine_Dummy",
                  "China_PMI", "Baker_Hughes_Rigs", "SPR_Release_Volume"]
     available_cols = [c for c in corr_cols if c in df.columns]
     corr_df = df[available_cols].replace(0, np.nan).dropna(how="all").corr()
@@ -1449,29 +1438,29 @@ def get_hypothesis_results() -> dict:
         "h1": {
             "name": "H1: Attack Frequency",
             "description": "Higher frequency of Houthi maritime attacks increases Brent crude oil price volatility",
-            "coefficient": -0.0031,
-            "p_value": 0.802,
-            "r_squared": 0.6421,
+            "coefficient": -0.0332,
+            "p_value": 0.026,
+            "r_squared": 0.487,
             "supported": False,
-            "conclusion": "NOT SUPPORTED. After controlling for DXY, OVX, SPR, OPEC, Russia-Ukraine, China PMI, and rig count, the attack frequency coefficient is near zero (β = -0.0031) and not statistically significant (p = 0.802). Market volatility is driven primarily by macroeconomic factors, not attack volume."
+            "conclusion": "NOT SUPPORTED in predicted direction. After controlling for DXY, OVX, SPR, OPEC, Russia-Ukraine, China PMI, and rig count, the attack frequency coefficient is negative (β = −0.0332, p = 0.026), indicating that higher attack frequency is associated with lower volatility — consistent with market adaptation."
         },
         "h2": {
             "name": "H2: Tanker Specificity",
             "description": "Attacks specifically targeting oil tankers have a greater impact on volatility than general maritime attacks",
-            "coefficient": -0.0811,
-            "p_value": 0.215,
-            "r_squared": 0.6424,
+            "coefficient": -0.2326,
+            "p_value": 0.004,
+            "r_squared": 0.487,
             "supported": False,
-            "conclusion": "NOT SUPPORTED. The tanker-specific coefficient is negative (β = -0.0811) and not statistically significant (p = 0.215) after controlling for all 7 macroeconomic variables. Tanker attacks do not produce a differential volatility impact beyond what is explained by broader market conditions."
+            "conclusion": "NOT SUPPORTED in predicted direction. The tanker-specific coefficient is negative and statistically significant (β = −0.2326, p = 0.004) after controlling for all 7 macroeconomic variables, suggesting markets have adapted to tanker-targeting attacks."
         },
         "h3": {
             "name": "H3: Chokepoint Geography",
             "description": "Attacks at the Bab el-Mandeb strait chokepoint have a disproportionate impact on oil price volatility",
-            "coefficient": 0.1684,
-            "p_value": 0.012,
-            "r_squared": 0.6446,
-            "supported": True,
-            "conclusion": "SUPPORTED. Even after controlling for all 7 macroeconomic variables, chokepoint attacks show a statistically significant positive effect on volatility (β = 0.1684, p = 0.012). Attacks at the Bab el-Mandeb strait produce a measurable increase in oil price volatility independent of broader market conditions."
+            "coefficient": 0.1277,
+            "p_value": 0.250,
+            "r_squared": 0.459,
+            "supported": False,
+            "conclusion": "NOT SUPPORTED. Chokepoint attacks show a positive but not statistically significant coefficient (β = 0.1277, p = 0.250) after controlling for all 7 macroeconomic variables. Geographic proximity to the Bab el-Mandeb strait does not independently predict oil price volatility."
         },
         "garch_summary": {
             "model": "GJR-GARCH(1,1,1)",
@@ -1484,7 +1473,7 @@ def get_hypothesis_results() -> dict:
         },
         "model_comparison": {
             "labels": ["H1 (Generic)", "H2 (Tanker)", "H3 (Chokepoint)"],
-            "r_squared": [0.64212, 0.64236, 0.64458],
-            "finding": "With all 7 control variables, models explain ~64% of volatility variance. Only H3 (chokepoint attacks) shows a significant independent effect (p = 0.012), while H1 and H2 are absorbed by the controls — suggesting geographic chokepoint risk is the key transmission mechanism."
+            "r_squared": [0.487, 0.487, 0.459],
+            "finding": "With all 7 control variables, models explain approximately 46-49% of volatility variance. None of the three hypotheses are supported in their predicted direction. H1 and H2 show significant negative coefficients (market adaptation), while H3 is not statistically significant — suggesting oil markets have largely priced in Houthi maritime disruptions."
         }
     }

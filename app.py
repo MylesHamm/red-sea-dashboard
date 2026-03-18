@@ -56,7 +56,7 @@ async def get_events():
 
 @app.get("/api/thesis-events")
 async def get_thesis_events():
-    """The exact 361 events analyzed in the thesis — for geospatial map accuracy."""
+    """The 726 ACLED-verified maritime events analyzed in the thesis."""
     events = await _run_sync(data_service.load_thesis_events)
     return {"count": len(events), "data": events}
 

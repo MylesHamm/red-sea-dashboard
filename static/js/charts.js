@@ -522,7 +522,7 @@ function createGeopoliticalChart(timeseries) {
                 {
                     type: 'bar',
                     label: 'OPEC Decisions',
-                    data: timeseries.map(d => d.opec_decision ? d.brent_price : null),
+                    data: timeseries.map(d => d.opec_dummy ? d.brent_price : null),
                     backgroundColor: COLORS.gold,
                     borderColor: COLORS.gold,
                     borderWidth: 0,
@@ -533,7 +533,7 @@ function createGeopoliticalChart(timeseries) {
                 {
                     type: 'bar',
                     label: 'Russia-Ukraine',
-                    data: timeseries.map(d => d.russia_ukraine_attacks ? -2 : null),
+                    data: timeseries.map(d => d.russia_ukraine_dummy ? -2 : null),
                     backgroundColor: 'rgba(123, 104, 174, 0.5)',
                     yAxisID: 'y1',
                     order: 1,
@@ -542,7 +542,7 @@ function createGeopoliticalChart(timeseries) {
                 {
                     type: 'bar',
                     label: 'Iran-Israel',
-                    data: timeseries.map(d => d.iran_israel_escalation ? -1 : null),
+                    data: [],
                     backgroundColor: 'rgba(224, 123, 76, 0.5)',
                     yAxisID: 'y1',
                     order: 1,
@@ -1079,10 +1079,9 @@ function createCorrelationChart(correlation) {
         const map = {
             'Brent_Price': 'Brent',
             'Daily_Volatility': 'Volatility',
-            'WeekleyAttackFrq': 'Attack Freq.',
+            'WeeklyAttackFreq': 'Attack Freq.',
             'OPEC_Dummy': 'OPEC',
             'RussiaUkraine_Dummy': 'Rus-Ukr',
-            'IranIsrael_Escalation': 'Iran-Isr',
             'China_PMI': 'China PMI',
             'Baker_Hughes_Rigs': 'Rigs',
             'SPR_Release_Volume': 'SPR',

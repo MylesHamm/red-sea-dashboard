@@ -4,7 +4,7 @@
 
 let masterData = null;
 let eventsData = null;
-let thesisEventsData = null;  // The exact 361 events analyzed in the thesis
+let thesisEventsData = null;  // The 726 ACLED-verified maritime events analyzed in the thesis
 let hypothesisData = null;
 let iranEventsData = null;
 let iranImpactData = null;

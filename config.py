@@ -21,9 +21,8 @@ DATA_DIR = BASE_DIR / "data"
 CACHE_DIR = BASE_DIR / ".cache"
 
 # Source data files (fallback CSVs)
-MYLES_DATASET_PATH = DATA_DIR / "myles_dataset_final.csv"
-HOUTHI_EXCEL_PATH = DATA_DIR / "HouthiData_Updated.xlsx"
-HOUTHI_CSV_PATH = DATA_DIR / "HouthiDataARCVisuals.csv"
+MYLES_DATASET_PATH = DATA_DIR / "master_dataset.csv"
+THESIS_EVENTS_PATH = DATA_DIR / "thesis_events.csv"
 
 # --- API Keys (from environment variables) ---
 EIA_API_KEY = os.environ.get("EIA_API_KEY", "")
