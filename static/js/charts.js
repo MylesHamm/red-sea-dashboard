@@ -542,7 +542,7 @@ function createGeopoliticalChart(timeseries) {
                 {
                     type: 'bar',
                     label: 'Iran-Israel',
-                    data: [],
+                    data: timeseries.map(d => d.iran_israel_escalation ? -1 : null),
                     backgroundColor: 'rgba(224, 123, 76, 0.5)',
                     yAxisID: 'y1',
                     order: 1,
@@ -1082,6 +1082,7 @@ function createCorrelationChart(correlation) {
             'WeeklyAttackFreq': 'Attack Freq.',
             'OPEC_Dummy': 'OPEC',
             'RussiaUkraine_Dummy': 'Rus-Ukr',
+            'IranIsrael_Escalation': 'Iran-Isr',
             'China_PMI': 'China PMI',
             'Baker_Hughes_Rigs': 'Rigs',
             'SPR_Release_Volume': 'SPR',

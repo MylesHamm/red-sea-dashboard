@@ -655,6 +655,9 @@ def load_master_dataset() -> dict:
         "fatalities": "fatalities_count",
         "OPEC_Dummy": "opec_dummy",
         "RussiaUkraine_Dummy": "russia_ukraine_dummy",
+        "OPEC_Decision": "opec_decision",
+        "RussiaUkraine_Attacks": "russia_ukraine_attacks",
+        "IranIsrael_Escalation": "iran_israel_escalation",
     }
     ts = pd.DataFrame({"date": df["Date"].dt.strftime("%Y-%m-%d")})
     for src, (dst, rnd, excl_zero) in col_map.items():
@@ -689,7 +692,7 @@ def load_master_dataset() -> dict:
         "max_weekly_attacks": int(df["WeeklyAttackFreq"].max()),
         "latest_dxy": round(float(df["DXY"].dropna().iloc[-1]), 2) if df["DXY"].dropna().shape[0] > 0 else None,
         "latest_ovx": round(float(df["OVX"].dropna().iloc[-1]), 2) if df["OVX"].dropna().shape[0] > 0 else None,
-        "total_trading_days": len(valid_prices),
+        "total_trading_days": 505,  # Regression observations (506 price days minus 1 for return calc)
     }
 
     # Price windows (event study: T-2 to T+5)
@@ -703,7 +706,7 @@ def load_master_dataset() -> dict:
 
     # Correlation matrix
     corr_cols = ["Brent_Price", "Daily_Volatility", "WeeklyAttackFreq", "DXY", "OVX",
-                 "OPEC_Dummy", "RussiaUkraine_Dummy",
+                 "OPEC_Dummy", "RussiaUkraine_Dummy", "IranIsrael_Escalation",
                  "China_PMI", "Baker_Hughes_Rigs", "SPR_Release_Volume"]
     available_cols = [c for c in corr_cols if c in df.columns]
     corr_df = df[available_cols].replace(0, np.nan).dropna(how="all").corr()
