@@ -103,6 +103,13 @@ async def get_hypothesis():
     return data_service.get_hypothesis_results()
 
 
+@app.get("/api/suez-transits")
+async def get_suez_transits():
+    """Monthly Suez Canal transit volumes from IMF PortWatch."""
+    data = await _run_sync(data_service.fetch_suez_transits)
+    return {"count": len(data), "data": data}
+
+
 @app.get("/api/iran-events")
 async def get_iran_events():
     """Iran-related ACLED events + curated major events + live news."""

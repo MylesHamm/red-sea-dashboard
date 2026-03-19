@@ -1211,56 +1211,97 @@ function createSuezTransitChart() {
     const existing = Chart.getChart(canvas);
     if (existing) existing.destroy();
 
-    // Monthly Suez Canal transits (approximate estimates from UNCTAD / Suez Canal Authority reports)
-    // NOTE: These are approximate values for illustrative purposes. Exact monthly figures vary by source.
-    const data = [
-        { month: '2023-07', transits: 2280 },
-        { month: '2023-08', transits: 2310 },
-        { month: '2023-09', transits: 2250 },
-        { month: '2023-10', transits: 2200 },
-        { month: '2023-11', transits: 2150 },
-        { month: '2023-12', transits: 1400 },  // Houthi attacks begin mid-Nov
-        { month: '2024-01', transits: 900 },
-        { month: '2024-02', transits: 850 },
-        { month: '2024-03', transits: 880 },
-        { month: '2024-04', transits: 920 },
-        { month: '2024-05', transits: 950 },
-        { month: '2024-06', transits: 930 },
-        { month: '2024-07', transits: 940 },
-        { month: '2024-08', transits: 960 },
-        { month: '2024-09', transits: 950 },
-        { month: '2024-10', transits: 970 },
-        { month: '2024-11', transits: 960 },
-        { month: '2024-12', transits: 940 },
-        { month: '2025-01', transits: 950 },
-        { month: '2025-02', transits: 930 },
-        { month: '2025-03', transits: 920 },
-        { month: '2025-04', transits: 940 },
-        { month: '2025-05', transits: 950 },
-        { month: '2025-06', transits: 960 },
-        { month: '2025-07', transits: 950 },
-        { month: '2025-08', transits: 940 },
-        { month: '2025-09', transits: 920 },
-        { month: '2025-10', transits: 930 },
-        { month: '2025-11', transits: 910 },
-        { month: '2025-12', transits: 900 },
-        { month: '2026-01', transits: 890 },
-        { month: '2026-02', transits: 750 },   // US-Iran war further reduces traffic
-        { month: '2026-03', transits: 820 },   // Dual-chokepoint threat keeps traffic low; US Navy Red Sea escorts allow limited Suez use
-    ];
+    // Show loading state
+    const ctx2d = canvas.getContext('2d');
+    ctx2d.fillStyle = '#8892a0';
+    ctx2d.font = '12px Inter';
+    ctx2d.textAlign = 'center';
+    ctx2d.fillText('Loading Suez Canal data from IMF PortWatch...', canvas.width / 2, canvas.height / 2);
 
-    const lineData = data.map(d => ({ x: d.month + '-15', y: d.transits }));
+    // Fetch live data from IMF PortWatch via backend
+    fetch('/api/suez-transits')
+        .then(resp => resp.json())
+        .then(result => {
+            const data = result.data;
+            if (!data || !data.length) {
+                ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+                ctx2d.fillText('No Suez Canal transit data available', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+            _renderSuezChart(canvas, data);
+        })
+        .catch(err => {
+            console.error('Suez transit fetch failed:', err);
+            ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+            ctx2d.fillStyle = COLORS.attacks;
+            ctx2d.fillText('Failed to load Suez Canal data', canvas.width / 2, canvas.height / 2);
+        });
+}
 
-    // Annotation line for when attacks began
-    const attackStartIndex = data.findIndex(d => d.month === '2023-11');
+function _renderSuezChart(canvas, data) {
+    // Destroy any chart that was created during loading
+    const existing = Chart.getChart(canvas);
+    if (existing) existing.destroy();
+
+    // Build datasets: total transits + tanker transits breakdown
+    const totalData = data.map(d => ({ x: d.month + '-15', y: d.transits }));
+    const tankerData = data.map(d => ({ x: d.month + '-15', y: d.tanker_transits }));
+
+    // Dynamic y-axis minimum
+    const minTransits = Math.min(...data.map(d => d.transits));
+    const yMin = Math.max(0, Math.floor(minTransits * 0.8 / 100) * 100);
+
+    // Build annotation lines — only show if data covers those dates
+    const months = data.map(d => d.month);
+    const annotations = {};
+
+    if (months.some(m => m >= '2023-11')) {
+        annotations.attackLine = {
+            type: 'line',
+            xMin: '2023-11-15',
+            xMax: '2023-11-15',
+            borderColor: COLORS.attacks,
+            borderWidth: 2,
+            borderDash: [6, 4],
+            label: {
+                display: true,
+                content: 'Houthi Attacks Begin',
+                position: 'start',
+                backgroundColor: 'rgba(196, 61, 61, 0.85)',
+                color: '#fff',
+                font: { size: 10, family: 'Inter', weight: '600' },
+                padding: 4,
+            },
+        };
+    }
+
+    if (months.some(m => m >= '2026-02')) {
+        annotations.warLine = {
+            type: 'line',
+            xMin: '2026-02-15',
+            xMax: '2026-02-15',
+            borderColor: '#8B0000',
+            borderWidth: 2,
+            borderDash: [6, 4],
+            label: {
+                display: true,
+                content: 'US-Iran War',
+                position: 'start',
+                backgroundColor: 'rgba(139, 0, 0, 0.85)',
+                color: '#fff',
+                font: { size: 10, family: 'Inter', weight: '600' },
+                padding: 4,
+            },
+        };
+    }
 
     new Chart(canvas, {
         type: 'line',
         data: {
             datasets: [
                 {
-                    label: 'Monthly Transits (Est.)',
-                    data: lineData,
+                    label: 'Total Monthly Transits',
+                    data: totalData,
                     borderColor: COLORS.brent,
                     backgroundColor: COLORS.brentBg,
                     fill: true,
@@ -1268,6 +1309,18 @@ function createSuezTransitChart() {
                     pointRadius: 3,
                     pointHoverRadius: 6,
                     borderWidth: 2.5,
+                },
+                {
+                    label: 'Tanker Transits',
+                    data: tankerData,
+                    borderColor: COLORS.ovx,
+                    backgroundColor: 'rgba(224, 123, 76, 0.10)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 2,
+                    pointHoverRadius: 5,
+                    borderWidth: 1.5,
+                    borderDash: [4, 3],
                 },
             ],
         },
@@ -1290,7 +1343,7 @@ function createSuezTransitChart() {
                 },
                 y: {
                     beginAtZero: false,
-                    min: 500,
+                    min: yMin,
                     title: { display: true, text: 'Vessel Transits', font: { size: 11, family: 'Inter' }, color: '#8892a0' },
                     grid: { color: COLORS.gridLine },
                     ticks: {
@@ -1310,47 +1363,10 @@ function createSuezTransitChart() {
                     titleFont: { family: 'Inter', weight: '600' },
                     bodyFont: { family: 'Inter' },
                     callbacks: {
-                        label: (ctx) => `${ctx.parsed.y.toLocaleString()} transits`,
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()} transits`,
                     },
                 },
-                annotation: {
-                    annotations: {
-                        attackLine: {
-                            type: 'line',
-                            xMin: '2023-11-15',
-                            xMax: '2023-11-15',
-                            borderColor: COLORS.attacks,
-                            borderWidth: 2,
-                            borderDash: [6, 4],
-                            label: {
-                                display: true,
-                                content: 'Houthi Attacks Begin',
-                                position: 'start',
-                                backgroundColor: 'rgba(196, 61, 61, 0.85)',
-                                color: '#fff',
-                                font: { size: 10, family: 'Inter', weight: '600' },
-                                padding: 4,
-                            },
-                        },
-                        warLine: {
-                            type: 'line',
-                            xMin: '2026-02-15',
-                            xMax: '2026-02-15',
-                            borderColor: '#8B0000',
-                            borderWidth: 2,
-                            borderDash: [6, 4],
-                            label: {
-                                display: true,
-                                content: 'US-Iran War',
-                                position: 'start',
-                                backgroundColor: 'rgba(139, 0, 0, 0.85)',
-                                color: '#fff',
-                                font: { size: 10, family: 'Inter', weight: '600' },
-                                padding: 4,
-                            },
-                        },
-                    },
-                },
+                annotation: { annotations },
             },
         },
     });

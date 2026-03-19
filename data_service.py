@@ -1021,6 +1021,94 @@ def fetch_iran_news() -> List[dict]:
         return []
 
 
+# ─── IMF PortWatch — Suez Canal Transit Data ─────────────────────────────────
+
+_PORTWATCH_BASE = (
+    "https://services9.arcgis.com/weJ1QsnbMYJlCHdG/arcgis/rest/services/"
+    "Daily_Chokepoints_Data/FeatureServer/0/query"
+)
+_SUEZ_PORT_ID = "chokepoint1"
+
+
+def fetch_suez_transits() -> List[dict]:
+    """Fetch daily Suez Canal transit data from IMF PortWatch and aggregate to monthly totals.
+    Returns list of {month, transits, tanker_transits, container_transits} sorted ascending."""
+
+    cached = _read_cache("suez_transits", ttl=86400)  # 24h cache — data updates weekly
+    if cached:
+        return cached
+
+    logger.info("Fetching Suez Canal transit data from IMF PortWatch...")
+
+    # Fetch from July 2023 onward (covers pre-attack baseline + crisis period)
+    all_records = []
+    offset = 0
+    batch_size = 2000
+
+    while True:
+        params = {
+            "where": f"portid='{_SUEZ_PORT_ID}' AND year>=2023 AND (year>2023 OR month>=7)",
+            "outFields": "date,year,month,n_total,n_tanker,n_container,n_dry_bulk",
+            "orderByFields": "date ASC",
+            "resultRecordCount": batch_size,
+            "resultOffset": offset,
+            "f": "json",
+        }
+        try:
+            resp = requests.get(_PORTWATCH_BASE, params=params, headers=_BROWSER_HEADERS, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            logger.warning(f"PortWatch API request failed at offset {offset}: {e}")
+            break
+
+        features = data.get("features", [])
+        if not features:
+            break
+
+        for f in features:
+            a = f["attributes"]
+            all_records.append(a)
+
+        # Check if there are more records
+        if len(features) < batch_size:
+            break
+        offset += batch_size
+
+    if not all_records:
+        logger.warning("No Suez transit data returned from PortWatch")
+        return []
+
+    # Aggregate daily records to monthly totals
+    monthly = defaultdict(lambda: {"transits": 0, "tanker": 0, "container": 0, "dry_bulk": 0, "days": 0})
+    for r in all_records:
+        key = f"{r['year']}-{r['month']:02d}"
+        monthly[key]["transits"] += r.get("n_total", 0) or 0
+        monthly[key]["tanker"] += r.get("n_tanker", 0) or 0
+        monthly[key]["container"] += r.get("n_container", 0) or 0
+        monthly[key]["dry_bulk"] += r.get("n_dry_bulk", 0) or 0
+        monthly[key]["days"] += 1
+
+    # Build sorted result — only include months with at least 15 days of data
+    result = []
+    for month_key in sorted(monthly.keys()):
+        m = monthly[month_key]
+        if m["days"] < 15:
+            continue
+        result.append({
+            "month": month_key,
+            "transits": m["transits"],
+            "tanker_transits": m["tanker"],
+            "container_transits": m["container"],
+            "dry_bulk_transits": m["dry_bulk"],
+            "days_sampled": m["days"],
+        })
+
+    logger.info(f"Suez transit data: {len(result)} months from {len(all_records)} daily records")
+    _write_cache("suez_transits", result)
+    return result
+
+
 _HIGH_SIGNAL_WORDS = {"killed", "strike", "strikes", "missile", "attack", "destroyed", "explosion", "bomb", "drone", "fire", "burning", "casualties", "dead", "wounded"}
 _ACLED_KEY_ACTORS = {"irgc", "united states", "israel", "hezbollah", "houthi", "navy", "air force", "centcom", "idf"}
 _ACLED_TYPE_MAP = {
