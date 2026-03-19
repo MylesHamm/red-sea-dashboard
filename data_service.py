@@ -143,7 +143,7 @@ def _get_acled_token() -> str:
             "client_id": "acled",
         },
         headers={**_BROWSER_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
-        timeout=30,
+        timeout=15,
     )
     if not resp.ok:
         raise requests.HTTPError(
@@ -209,7 +209,7 @@ def _paginated_acled_fetch(token: str, params: dict, label: str) -> List[dict]:
             config.ACLED_DATA_URL,
             headers={**_BROWSER_HEADERS, "Authorization": f"Bearer {token}"},
             params=p,
-            timeout=60,
+            timeout=20,
         )
         resp.raise_for_status()
         batch = resp.json().get("data", [])
@@ -396,7 +396,7 @@ def fetch_brent_prices() -> List[dict]:
                 "start": "2023-10-01",
                 "length": 5000,
             },
-            timeout=30,
+            timeout=15,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -534,7 +534,7 @@ def fetch_spr_data() -> List[dict]:
                 "start": "2023-10-01",
                 "length": 5000,
             },
-            timeout=30,
+            timeout=15,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -751,7 +751,7 @@ def fetch_iran_events() -> List[dict]:
                     params={"_format": "json", "country": "Iran",
                             "event_date": "2025-01-01|2026-12-31", "event_date_where": "BETWEEN",
                             "fields": iran_fields, "limit": 5000, "page": page},
-                    timeout=60,
+                    timeout=20,
                 )
                 resp.raise_for_status()
                 batch = resp.json().get("data", [])
@@ -771,7 +771,7 @@ def fetch_iran_events() -> List[dict]:
                         "actor2": actor2, "actor2_where": "LIKE",
                         "event_date": "2025-01-01|2026-12-31", "event_date_where": "BETWEEN",
                         "fields": iran_fields, "limit": 5000},
-                timeout=60,
+                timeout=20,
             )
             resp.raise_for_status()
             bilateral = resp.json().get("data", [])

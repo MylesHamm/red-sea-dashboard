@@ -88,38 +88,54 @@ async function loadAllData() {
     updateStatus('loading', 'Loading data...');
 
     try {
-        // Fetch master data and events in parallel
-        const [master, events, thesisEvents, hypothesis, iranEvents, iranImpact] = await Promise.all([
+        // Phase 1: Load fast, essential data first (CSV-backed, no external API)
+        const [master, thesisEvents, hypothesis] = await Promise.all([
             fetchJSON('/api/master'),
-            fetchJSON('/api/events'),
             fetchJSON('/api/thesis-events').catch(() => null),
             fetchJSON('/api/hypothesis'),
-            fetchJSON('/api/iran-events').catch(() => ({ count: 0, data: [], curated: [] })),
-            fetchJSON('/api/iran-impact').catch(() => ({ kpis: {}, impact_by_type: {}, event_table: [] })),
         ]);
 
         masterData = master;
-        eventsData = events.data || [];
-        // Thesis dataset: the exact events analyzed — used for geospatial map
-        thesisEventsData = (thesisEvents && thesisEvents.data) ? thesisEvents.data : eventsData;
+        thesisEventsData = (thesisEvents && thesisEvents.data) ? thesisEvents.data : [];
         hypothesisData = hypothesis;
-        iranEventsData = iranEvents;
-        iranImpactData = iranImpact;
 
+        // Render core tabs immediately
         renderOverview();
         renderEconometric();
         renderControls();
         renderDataTable();
-        renderCurrentEvents();
-        renderMaritime();
 
-        // If map tab is active, load thesis events (not the full ACLED feed)
+        // If map tab is active, load thesis events now
         if (currentTab === 'geospatial' && thesisEventsData.length) {
             loadMapEvents(thesisEventsData, true);
         }
 
-        updateStatus('live', `Live — ${eventsData.length} events loaded`);
+        updateStatus('live', `Live — ${masterData.timeseries.length} trading days loaded`);
         updateLastUpdated();
+
+        // Phase 2: Load slower external API data in background (non-blocking)
+        Promise.all([
+            fetchJSON('/api/events').catch(() => ({ count: 0, data: [] })),
+            fetchJSON('/api/iran-events').catch(() => ({ count: 0, data: [], curated: [] })),
+            fetchJSON('/api/iran-impact').catch(() => ({ kpis: {}, impact_by_type: {}, event_table: [] })),
+        ]).then(([events, iranEvents, iranImpact]) => {
+            eventsData = events.data || [];
+            if (!thesisEventsData.length) thesisEventsData = eventsData;
+            iranEventsData = iranEvents;
+            iranImpactData = iranImpact;
+
+            renderCurrentEvents();
+            renderMaritime();
+
+            // Update map if on geospatial tab and thesis data wasn't available earlier
+            if (currentTab === 'geospatial' && allMapEvents.length === 0 && thesisEventsData.length) {
+                loadMapEvents(thesisEventsData, true);
+            }
+
+            updateStatus('live', `Live — ${eventsData.length} events loaded`);
+        }).catch(err => {
+            console.warn('Background data load partial failure:', err);
+        });
 
     } catch (err) {
         console.error('Data load failed:', err);
