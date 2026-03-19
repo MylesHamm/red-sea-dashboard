@@ -376,6 +376,15 @@ function createPriceWindowChart(priceWindows) {
 
     // Color the event day differently
     const bgColors = data.map((_, i) => i === 2 ? COLORS.attacks : COLORS.brent);
+    const borderColors = data.map((_, i) => i === 2 ? '#ff6666' : '#6ba8e8');
+
+    // Compute tight y-axis range so bars are visually distinct
+    const validData = data.filter(v => v > 0);
+    const minVal = Math.min(...validData);
+    const maxVal = Math.max(...validData);
+    const padding = (maxVal - minVal) * 0.5 || 0.5;
+    const yMin = Math.floor((minVal - padding) * 10) / 10;
+    const yMax = Math.ceil((maxVal + padding) * 10) / 10;
 
     chartInstances['priceWindowChart'] = new Chart(ctx, {
         type: 'bar',
@@ -385,6 +394,8 @@ function createPriceWindowChart(priceWindows) {
                 label: 'Avg Price (USD)',
                 data: data,
                 backgroundColor: bgColors,
+                borderColor: borderColors,
+                borderWidth: 1,
                 borderRadius: 4,
             }]
         },
@@ -395,7 +406,10 @@ function createPriceWindowChart(priceWindows) {
                 y: {
                     ...CHART_DEFAULTS.scales.y,
                     beginAtZero: false,
-                    title: { display: true, text: 'Price (USD/barrel)', font: { family: 'Inter', size: 11 } }
+                    min: yMin,
+                    max: yMax,
+                    title: { display: true, text: 'Price (USD/barrel)', font: { family: 'Inter', size: 11 }, color: '#8892a0' },
+                    ticks: { ...CHART_DEFAULTS.scales.y.ticks, callback: v => '$' + v.toFixed(2) }
                 }
             },
             plugins: { ...CHART_DEFAULTS.plugins, legend: { display: false } }
