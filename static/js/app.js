@@ -59,6 +59,16 @@ function switchTab(tab) {
         }, 150);
     }
 
+    // Re-render econometric charts when tab becomes visible
+    // (Chart.js needs visible parent for correct canvas sizing)
+    if (tab === 'econometric' && masterData && hypothesisData) {
+        setTimeout(() => {
+            createModelComparisonChart(hypothesisData);
+            createPriceWindowChart(masterData.price_windows);
+            createScatterChart(masterData.timeseries);
+        }, 100);
+    }
+
     // Re-render correlation heatmap when controls tab becomes visible
     // (canvas needs visible parent for correct sizing)
     if (tab === 'controls' && masterData && masterData.correlation) {

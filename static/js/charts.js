@@ -368,9 +368,11 @@ function createPriceWindowChart(priceWindows) {
     const ctx = document.getElementById('priceWindowChart');
     if (!ctx) return;
 
+    console.log('[PriceWindow] Input:', JSON.stringify(priceWindows));
     const labels = ['T-2', 'T-1', 'T0', 'T+1', 'T+2', 'T+3', 'T+4', 'T+5'];
     const keys = ['Price_T-2', 'Price_T-1', 'Price_T0', 'Price_T+1', 'Price_T+2', 'Price_T+3', 'Price_T+4', 'Price_T+5'];
     const data = keys.map(k => priceWindows[k] || 0);
+    console.log('[PriceWindow] Data array:', JSON.stringify(data));
 
     // Color the event day differently
     const bgColors = data.map((_, i) => i === 2 ? COLORS.attacks : COLORS.navy);
