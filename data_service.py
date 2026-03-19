@@ -637,6 +637,30 @@ def load_master_dataset() -> dict:
     df["Date"] = pd.to_datetime(df["Date"])
     df.sort_values("Date", inplace=True)
 
+    # Normalize column names — new dataset uses lowercase variants
+    col_renames = {
+        "weekly_attack_freq": "WeeklyAttackFreq",
+        "brent_return_pct": "brent_return_pct",
+        "brent_abs_return": "brent_abs_return",
+    }
+    df.rename(columns={k: v for k, v in col_renames.items() if k in df.columns}, inplace=True)
+
+    # Compute Daily_Volatility from absolute returns if missing
+    if "Daily_Volatility" not in df.columns and "brent_abs_return" in df.columns:
+        df["Daily_Volatility"] = df["brent_abs_return"]
+
+    # Compute Price_T-2 through Price_T+5 event-window columns if missing
+    if "Price_T0" not in df.columns and "Brent_Price" in df.columns:
+        prices = df["Brent_Price"].values
+        for offset in range(-2, 6):
+            col_name = f"Price_T{'+' if offset > 0 else ''}{offset}" if offset != 0 else "Price_T0"
+            shifted = pd.Series(prices).shift(-offset).values
+            df[col_name] = shifted
+
+    # Ensure IranIsrael_Escalation exists (binary control variable)
+    if "IranIsrael_Escalation" not in df.columns:
+        df["IranIsrael_Escalation"] = 0
+
     # Time series records — vectorized (avoids slow iterrows)
     col_map = {
         "Brent_Price": ("brent_price", 2, False),
