@@ -375,7 +375,7 @@ function createPriceWindowChart(priceWindows) {
     console.log('[PriceWindow] Data array:', JSON.stringify(data));
 
     // Color the event day differently
-    const bgColors = data.map((_, i) => i === 2 ? COLORS.attacks : COLORS.navy);
+    const bgColors = data.map((_, i) => i === 2 ? COLORS.attacks : COLORS.brent);
 
     chartInstances['priceWindowChart'] = new Chart(ctx, {
         type: 'bar',
