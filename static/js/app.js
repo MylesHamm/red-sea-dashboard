@@ -151,7 +151,7 @@ function renderOverview() {
 
     // KPI cards
     animateValue('kpi-brent', `$${kpis.latest_brent_price}`);
-    animateValue('kpi-events', eventsData ? eventsData.length : '--');
+    animateValue('kpi-events', thesisEventsData && thesisEventsData.length ? thesisEventsData.length : (eventsData ? eventsData.length : '--'));
     animateValue('kpi-volatility', kpis.peak_volatility != null ? `${kpis.peak_volatility.toFixed(2)}%` : '--');
     animateValue('kpi-attacks', kpis.max_weekly_attacks);
     animateValue('kpi-dxy', kpis.latest_dxy || '--');
@@ -188,7 +188,8 @@ function renderOverview() {
     // Charts
     createPriceAttackChart(timeseries);
     createVolatilityChart(timeseries);
-    if (eventsData) createEventTypesChart(eventsData);
+    const chartEvents = thesisEventsData && thesisEventsData.length ? thesisEventsData : eventsData;
+    if (chartEvents) createEventTypesChart(chartEvents);
 }
 
 // Re-render overview charts when crossfilter changes
@@ -210,7 +211,8 @@ function renderOverviewFiltered() {
 
     createPriceAttackChart(timeseries);
     createVolatilityChart(timeseries);
-    if (eventsData) createEventTypesChart(eventsData);
+    const chartEvents = thesisEventsData && thesisEventsData.length ? thesisEventsData : eventsData;
+    if (chartEvents) createEventTypesChart(chartEvents);
 }
 
 function renderEconometric() {
