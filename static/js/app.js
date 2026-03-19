@@ -110,7 +110,7 @@ async function loadAllData() {
             loadMapEvents(thesisEventsData, true);
         }
 
-        updateStatus('live', `Live — ${masterData.timeseries.length} trading days loaded`);
+        updateStatus('live', `Live — ${masterData.kpis.total_trading_days || masterData.timeseries.length} trading days loaded`);
         updateLastUpdated();
 
         // Phase 2: Load slower external API data in background (non-blocking)
