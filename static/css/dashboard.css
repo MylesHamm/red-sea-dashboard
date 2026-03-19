@@ -22,7 +22,7 @@
     --accent-dim: rgba(0, 212, 255, 0.15);
     --accent-glow: rgba(0, 212, 255, 0.05);
 
-    /* Data colors */
+    /* Data colors — synced with charts.js COLORS */
     --brent: #3D99D4;
     --attacks: #ff5252;
     --volatility: #ffab00;
@@ -30,6 +30,8 @@
     --negative: #ff5252;
     --dxy: #9B7BEE;
     --ovx: #E07B4C;
+    /* NOTE: These CSS vars match the COLORS object in charts.js.
+       If you change one, update the other. */
 
     --radius: 8px;
     --shadow: 0 0 20px rgba(0, 212, 255, 0.05);

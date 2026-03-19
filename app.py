@@ -3,14 +3,16 @@ Red Sea Crisis Intelligence Dashboard - FastAPI Backend
 Run: python app.py
 """
 import asyncio
+import json
+import threading
 from functools import partial
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from starlette.responses import Response
 from fastapi.background import BackgroundTasks
+from starlette.middleware.base import BaseHTTPMiddleware
 
 import config
 import data_service
@@ -18,13 +20,12 @@ import data_service
 
 def _run_sync(fn, *args):
     """Run a blocking function in the default executor."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return loop.run_in_executor(None, fn if not args else partial(fn, *args))
 
 app = FastAPI(title="Red Sea Crisis Intelligence Dashboard")
 
 # Serve static files (HTML, CSS, JS) with no-cache headers
-from starlette.middleware.base import BaseHTTPMiddleware
 
 class NoCacheStaticMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
@@ -131,16 +132,16 @@ async def get_iran_impact():
 
 # ─── Data Refresh ─────────────────────────────────────────────────────────────
 
+_refresh_lock = threading.Lock()
 _refresh_in_progress = False
 
 def _do_refresh():
     """Background task: clear caches and re-fetch data in parallel."""
     global _refresh_in_progress
-    if _refresh_in_progress:
+    if not _refresh_lock.acquire(blocking=False):
         return
     _refresh_in_progress = True
     try:
-        import json
         data_service._acled_token = None
 
         # Clear only API-driven caches (preserve master_dataset, thesis_events)
@@ -172,6 +173,7 @@ def _do_refresh():
             (config.DATA_DIR / "iran_events.json").write_text(json.dumps(iran, default=str))
     finally:
         _refresh_in_progress = False
+        _refresh_lock.release()
 
 
 @app.post("/api/refresh")

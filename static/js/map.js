@@ -2,6 +2,14 @@
    Interactive Map — Leaflet.js with heatmap, clustering, time slider
    ═══════════════════════════════════════════════════════════════════════════ */
 
+// HTML escape helper (XSS prevention for map popups)
+function _escMap(str) {
+    if (str == null) return '';
+    const div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
+}
+
 let map = null;
 let heatLayer = null;
 let markerClusterGroup = null;
@@ -223,26 +231,27 @@ function updateMapLayers() {
             const dateStr = e.event_date ? e.event_date.substring(0, 10) : 'Unknown';
             const notesShort = (e.notes || '').substring(0, 200);
 
+            const h = _escMap;
             marker.bindPopup(`
                 <div style="font-family:'SF Mono','Fira Code',Consolas,monospace;max-width:300px">
-                    <div style="font-weight:700;font-size:11px;margin-bottom:6px;color:#00d4ff;letter-spacing:1px">${dateStr}</div>
+                    <div style="font-weight:700;font-size:11px;margin-bottom:6px;color:#00d4ff;letter-spacing:1px">${h(dateStr)}</div>
                     <div style="font-size:10px;margin-bottom:3px">
-                        <span style="color:#5a6a7a">TYPE</span> <span style="color:#c0cad8;margin-left:4px">${e.event_type || 'N/A'}</span>
+                        <span style="color:#5a6a7a">TYPE</span> <span style="color:#c0cad8;margin-left:4px">${h(e.event_type || 'N/A')}</span>
                     </div>
                     <div style="font-size:10px;margin-bottom:3px">
-                        <span style="color:#5a6a7a">SUB</span> <span style="color:#c0cad8;margin-left:4px">${e.sub_event_type || 'N/A'}</span>
+                        <span style="color:#5a6a7a">SUB</span> <span style="color:#c0cad8;margin-left:4px">${h(e.sub_event_type || 'N/A')}</span>
                     </div>
                     <div style="font-size:10px;margin-bottom:3px">
-                        <span style="color:#5a6a7a">ACTOR</span> <span style="color:#c0cad8;margin-left:4px">${e.actor1 || 'N/A'}</span>
+                        <span style="color:#5a6a7a">ACTOR</span> <span style="color:#c0cad8;margin-left:4px">${h(e.actor1 || 'N/A')}</span>
                     </div>
                     <div style="font-size:10px;margin-bottom:3px">
-                        <span style="color:#5a6a7a">LOC</span> <span style="color:#c0cad8;margin-left:4px">${e.location || 'N/A'}</span>
+                        <span style="color:#5a6a7a">LOC</span> <span style="color:#c0cad8;margin-left:4px">${h(e.location || 'N/A')}</span>
                     </div>
                     <div style="font-size:10px;margin-bottom:3px">
-                        <span style="color:#5a6a7a">KIA</span> <strong style="color:${e.fatalities > 0 ? '#ff4444' : '#c0cad8'};margin-left:4px">${e.fatalities}</strong>
+                        <span style="color:#5a6a7a">KIA</span> <strong style="color:${e.fatalities > 0 ? '#ff4444' : '#c0cad8'};margin-left:4px">${h(e.fatalities)}</strong>
                     </div>
                     ${e.isTanker ? '<div style="font-size:10px;color:#ff4444;font-weight:700;margin-top:6px;letter-spacing:0.5px">TANKER / ENERGY TARGET</div>' : ''}
-                    <div style="font-size:9px;color:#4a5a6a;margin-top:8px;line-height:1.4">${notesShort}${(e.notes || '').length > 200 ? '...' : ''}</div>
+                    <div style="font-size:9px;color:#4a5a6a;margin-top:8px;line-height:1.4">${h(notesShort)}${(e.notes || '').length > 200 ? '...' : ''}</div>
                 </div>
             `, { maxWidth: 320 });
 

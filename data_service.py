@@ -2,10 +2,15 @@
 Data Service Layer - API integration with caching and CSV fallback.
 Handles: ACLED, EIA (Brent + SPR), yfinance (DXY, OVX), FRED (China BCI)
 """
+import bisect
 import json
+import os
+import re
 import time
 import logging
+import threading
 from pathlib import Path
+from collections import defaultdict, OrderedDict
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict
 
@@ -116,45 +121,58 @@ def _read_cache(key: str, ttl: int) -> Optional[dict]:
 
 def _write_cache(key: str, payload):
     path = _cache_path(key)
-    path.write_text(json.dumps({"_ts": time.time(), "payload": payload}, default=str))
+    data = json.dumps({"_ts": time.time(), "payload": payload}, default=str)
+    # Atomic write: write to temp file then rename to avoid corruption on crash
+    tmp = str(path) + ".tmp"
+    try:
+        Path(tmp).write_text(data, encoding="utf-8")
+        os.replace(tmp, str(path))
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 # ─── ACLED API ───────────────────────────────────────────────────────────────
 
 _acled_token = None
 _acled_token_expires = 0
+_acled_token_lock = threading.Lock()
 _iran_fetch_error = None  # Store last error for debugging
 
 
 def _get_acled_token() -> str:
     global _acled_token, _acled_token_expires
-    if _acled_token and time.time() < _acled_token_expires:
-        return _acled_token
+    with _acled_token_lock:
+        if _acled_token and time.time() < _acled_token_expires:
+            return _acled_token
 
-    if not config.ACLED_USERNAME or not config.ACLED_PASSWORD:
-        raise ValueError("ACLED credentials not configured (set ACLED_USERNAME and ACLED_PASSWORD env vars)")
+        if not config.ACLED_USERNAME or not config.ACLED_PASSWORD:
+            raise ValueError("ACLED credentials not configured (set ACLED_USERNAME and ACLED_PASSWORD env vars)")
 
-    resp = requests.post(
-        config.ACLED_TOKEN_URL,
-        data={
-            "username": config.ACLED_USERNAME,
-            "password": config.ACLED_PASSWORD,
-            "grant_type": "password",
-            "client_id": "acled",
-        },
-        headers={**_BROWSER_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
-        timeout=15,
-    )
-    if not resp.ok:
-        raise requests.HTTPError(
-            f"{resp.status_code} for {resp.url} | resp={resp.text[:300]}",
-            response=resp,
+        resp = requests.post(
+            config.ACLED_TOKEN_URL,
+            data={
+                "username": config.ACLED_USERNAME,
+                "password": config.ACLED_PASSWORD,
+                "grant_type": "password",
+                "client_id": "acled",
+            },
+            headers={**_BROWSER_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
+            timeout=15,
         )
-    token_data = resp.json()
-    _acled_token = token_data["access_token"]
-    _acled_token_expires = time.time() + token_data.get("expires_in", 86400) - 300
-    logger.info("ACLED OAuth token acquired")
-    return _acled_token
+        if not resp.ok:
+            raise requests.HTTPError(
+                f"{resp.status_code} for {resp.url} | resp={resp.text[:300]}",
+                response=resp,
+            )
+        token_data = resp.json()
+        _acled_token = token_data["access_token"]
+        _acled_token_expires = time.time() + token_data.get("expires_in", 86400) - 300
+        logger.info("ACLED OAuth token acquired")
+        return _acled_token
 
 
 _EVENT_COLUMNS = ["event_id_cnty", "event_date", "event_type", "sub_event_type",
@@ -442,7 +460,6 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
 
     # Try Yahoo Finance direct API (more reliable than yfinance library)
     try:
-        from datetime import datetime, timedelta
         last_dt = datetime.strptime(last_date, "%Y-%m-%d")
         period1 = int(last_dt.timestamp())
         period2 = int((datetime.now() + timedelta(days=1)).timestamp())
@@ -909,7 +926,6 @@ def fetch_iran_news() -> List[dict]:
 
     try:
         import xml.etree.ElementTree as ET
-        from datetime import datetime as dt
 
         # Multiple targeted queries to capture different angles of the conflict
         queries = [
@@ -977,7 +993,7 @@ def fetch_iran_news() -> List[dict]:
         results = []
         for a in filtered[:50]:  # Cap at 50 most recent
             try:
-                pub_dt = dt.strptime(a["pubDate"][:25], "%a, %d %b %Y %H:%M:%S")
+                pub_dt = datetime.strptime(a["pubDate"][:25], "%a, %d %b %Y %H:%M:%S")
                 date_str = pub_dt.strftime("%Y-%m-%d")
             except (ValueError, IndexError):
                 continue
@@ -1067,7 +1083,6 @@ def _score_news_headline(item: dict) -> int:
             score += 1
 
     # Specificity bonus: numbers in headline (casualties, counts, distances)
-    import re
     if re.search(r'\b\d+\b', title):
         score += 1
 
@@ -1127,7 +1142,6 @@ def _geocode_news_events(news_items: List[dict]) -> List[dict]:
         })
 
     # Keep only top 2 per date (highest scoring)
-    from collections import defaultdict
     by_date = defaultdict(list)
     for c in candidates:
         by_date[c["date"]].append(c)
@@ -1291,7 +1305,6 @@ def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
 
     def get_closing_price_before(date_str: str):
         """Get the closing price on the most recent trading day BEFORE this date."""
-        import bisect
         idx = bisect.bisect_left(sorted_dates, date_str)
         if idx > 0:
             return price_map[sorted_dates[idx - 1]]
@@ -1299,9 +1312,7 @@ def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
 
     def get_closing_price_after(date_str: str, days: int):
         """Get the closing price on the nearest trading day on or after date + days."""
-        from datetime import datetime, timedelta
         target = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=days)).strftime("%Y-%m-%d")
-        import bisect
         idx = bisect.bisect_left(sorted_dates, target)
         if idx < len(sorted_dates):
             return price_map[sorted_dates[idx]]
@@ -1316,8 +1327,6 @@ def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
     # Group curated events by TRADING day.
     # Weekend events (Sat/Sun) roll forward to the next Monday when markets
     # actually reacted, so before/after prices form a clean chain.
-    from collections import OrderedDict
-    from datetime import datetime, timedelta
 
     def _next_trading_day(date_str: str) -> str:
         """If date falls on a weekend, roll forward to Monday."""

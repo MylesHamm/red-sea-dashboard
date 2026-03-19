@@ -2,6 +2,15 @@
    Main Application Logic — Tab navigation, data fetching, auto-refresh
    ═══════════════════════════════════════════════════════════════════════════ */
 
+// ─── HTML Escape Helper (XSS prevention) ────────────────────────────────────
+
+function _esc(str) {
+    if (str == null) return '';
+    const div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
+}
+
 let masterData = null;
 let eventsData = null;
 let thesisEventsData = null;  // The 726 ACLED-verified maritime events analyzed in the thesis
@@ -349,7 +358,7 @@ function renderCurrentEvents() {
             const events = day.events || [{ title: day.title, type: day.type, severity: day.severity }];
             const displayDate = day.display_date || day.date;
             const eventsList = events.map(e =>
-                `<div class="day-event"><span class="event-type-badge type-${e.type}">${e.type}</span> ${e.title}</div>`
+                `<div class="day-event"><span class="event-type-badge type-${_esc(e.type)}">${_esc(e.type)}</span> ${_esc(e.title)}</div>`
             ).join('');
             return `
                 <tr>
@@ -417,13 +426,14 @@ function renderNewsFeed(news) {
                     ${articles.map(a => {
                         const sent = _newsSentiment(a.title);
                         const priority = _isPriorityNews(a.title);
+                        const safeUrl = _esc(a.url || '#');
                         return `
-                        <a href="${a.url || '#'}" target="_blank" rel="noopener" class="news-article">
+                        <a href="${safeUrl}" target="_blank" rel="noopener" class="news-article">
                             <span class="sentiment-dot sentiment-${sent}"></span>
-                            <span class="news-article-type type-${a.type}">${a.type}</span>
+                            <span class="news-article-type type-${_esc(a.type)}">${_esc(a.type)}</span>
                             ${priority ? '<span class="priority-flag">PRIORITY</span>' : ''}
-                            <span class="news-article-title">${a.title}</span>
-                            <span class="news-article-source">${a.source || ''}</span>
+                            <span class="news-article-title">${_esc(a.title)}</span>
+                            <span class="news-article-source">${_esc(a.source || '')}</span>
                         </a>`;
                     }).join('')}
                 </div>
@@ -483,7 +493,7 @@ function renderCurrentEventsFiltered() {
             const events = day.events || [{ title: day.title, type: day.type, severity: day.severity }];
             const displayDate = day.display_date || day.date;
             const eventsList = events.map(e =>
-                `<div class="day-event"><span class="event-type-badge type-${e.type}">${e.type}</span> ${e.title}</div>`
+                `<div class="day-event"><span class="event-type-badge type-${_esc(e.type)}">${_esc(e.type)}</span> ${_esc(e.title)}</div>`
             ).join('');
             return `
                 <tr>
@@ -565,13 +575,13 @@ function renderTablePage() {
     const page = tableData.slice(start, end);
 
     tbody.innerHTML = page.map(e => `
-        <tr class="data-row-clickable" data-lat="${e.latitude || ''}" data-lng="${e.longitude || ''}">
-            <td>${(e.event_date || '').substring(0, 10)}</td>
-            <td>${e.event_type || ''}</td>
-            <td>${e.sub_event_type || ''}</td>
-            <td>${e.actor1 || ''}</td>
-            <td>${e.location || ''}</td>
-            <td>${e.fatalities || 0}</td>
+        <tr class="data-row-clickable" data-lat="${_esc(e.latitude || '')}" data-lng="${_esc(e.longitude || '')}">
+            <td>${_esc((e.event_date || '').substring(0, 10))}</td>
+            <td>${_esc(e.event_type || '')}</td>
+            <td>${_esc(e.sub_event_type || '')}</td>
+            <td>${_esc(e.actor1 || '')}</td>
+            <td>${_esc(e.location || '')}</td>
+            <td>${_esc(e.fatalities || 0)}</td>
         </tr>
     `).join('');
 
@@ -657,14 +667,21 @@ document.getElementById('resetFilters')?.addEventListener('click', () => {
 document.getElementById('exportCsv')?.addEventListener('click', () => {
     if (!tableData.length) return;
     const headers = ['Date', 'Event Type', 'Sub-Event', 'Actor', 'Location', 'Fatalities', 'Notes'];
+    const csvEscape = (val) => {
+        const s = String(val == null ? '' : val);
+        if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+            return '"' + s.replace(/"/g, '""') + '"';
+        }
+        return s;
+    };
     const rows = tableData.map(e => [
-        (e.event_date || '').substring(0, 10),
-        e.event_type || '',
-        e.sub_event_type || '',
-        e.actor1 || '',
-        e.location || '',
-        e.fatalities || 0,
-        `"${(e.notes || '').replace(/"/g, '""')}"`,
+        csvEscape((e.event_date || '').substring(0, 10)),
+        csvEscape(e.event_type || ''),
+        csvEscape(e.sub_event_type || ''),
+        csvEscape(e.actor1 || ''),
+        csvEscape(e.location || ''),
+        csvEscape(e.fatalities || 0),
+        csvEscape(e.notes || ''),
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -755,18 +772,18 @@ function renderCuratedTimeline(events) {
 
     container.innerHTML = sorted.map(e => {
         const severity = '\u2605'.repeat(e.severity || 0);
-        const fatStr = e.fatalities ? `<div class="curated-timeline-fatalities">${e.fatalities.toLocaleString()} fatalities</div>` : '';
+        const fatStr = e.fatalities ? `<div class="curated-timeline-fatalities">${Number(e.fatalities).toLocaleString()} fatalities</div>` : '';
         return `
-            <div class="curated-timeline-item" data-lat="${e.lat}" data-lon="${e.lon || e.lng}">
-                <div class="curated-timeline-date">${e.date}</div>
+            <div class="curated-timeline-item" data-lat="${_esc(e.lat)}" data-lon="${_esc(e.lon || e.lng)}">
+                <div class="curated-timeline-date">${_esc(e.date)}</div>
                 <div class="curated-timeline-body">
-                    <div class="curated-timeline-title">${e.title}</div>
+                    <div class="curated-timeline-title">${_esc(e.title)}</div>
                     <div class="curated-timeline-meta">
-                        <span class="curated-timeline-type type-${e.type}">${e.type}</span>
+                        <span class="curated-timeline-type type-${_esc(e.type)}">${_esc(e.type)}</span>
                         <span class="curated-timeline-severity">${severity}</span>
-                        <span class="curated-timeline-location">${e.location || ''}</span>
+                        <span class="curated-timeline-location">${_esc(e.location || '')}</span>
                     </div>
-                    <div class="curated-timeline-desc">${e.description}</div>
+                    <div class="curated-timeline-desc">${_esc(e.description)}</div>
                     ${fatStr}
                 </div>
             </div>
@@ -791,12 +808,12 @@ function renderCuratedTimeline(events) {
                             : '';
                         const popupHtml = `
                             <div class="tactical-popup">
-                                <div style="color:#00d4ff;font-family:monospace;font-weight:700;margin-bottom:4px;">${ev.title}</div>
-                                <div style="color:#8892a0;font-size:11px;margin-bottom:6px;">${ev.date} &middot; ${ev.location || ''}</div>
-                                <div style="color:#c0c8d4;font-size:12px;line-height:1.5;">${ev.description || ''}</div>
+                                <div style="color:#00d4ff;font-family:monospace;font-weight:700;margin-bottom:4px;">${_esc(ev.title)}</div>
+                                <div style="color:#8892a0;font-size:11px;margin-bottom:6px;">${_esc(ev.date)} &middot; ${_esc(ev.location || '')}</div>
+                                <div style="color:#c0c8d4;font-size:12px;line-height:1.5;">${_esc(ev.description || '')}</div>
                                 ${fatLine}
                                 <div style="margin-top:8px;font-size:11px;">
-                                    <span style="color:#ffcc00;">TYPE: ${(ev.type || '').toUpperCase()}</span> &middot;
+                                    <span style="color:#ffcc00;">TYPE: ${_esc((ev.type || '').toUpperCase())}</span> &middot;
                                     <span style="color:#ff6b6b;">SEVERITY: ${ev.severity || 0}/5</span>
                                 </div>
                             </div>
@@ -931,9 +948,9 @@ document.getElementById('refreshDataBtn')?.addEventListener('click', async () =>
 document.addEventListener('DOMContentLoaded', () => {
     loadAllData();
 
-    // Restore last active tab from session
+    // Restore last active tab from session (validate it exists)
     const savedTab = localStorage.getItem('activeTab');
-    if (savedTab) switchTab(savedTab);
+    if (savedTab && document.getElementById(`tab-${savedTab}`)) switchTab(savedTab);
 
     // Build status bar
     _initStatusBar();
@@ -986,6 +1003,15 @@ document.addEventListener('DOMContentLoaded', () => {
         tip.classList.remove('tooltip-below');
     }
 
+    // Clean up orphaned tooltips on tab switch
+    const _origSwitchTabCleanup = switchTab;
+    switchTab = function(tab) {
+        document.querySelectorAll('.kpi-info-tooltip, .chart-info-tooltip').forEach(tip => {
+            if (tip.parentNode === document.body) _hideTooltip(tip);
+        });
+        return _origSwitchTabCleanup(tab);
+    };
+
     function initFixedTooltips() {
         // Attach to both KPI and chart info icons
         document.querySelectorAll('.kpi-info, .chart-info').forEach(wrapper => {
@@ -1030,8 +1056,9 @@ switchTab = function(tab) {
 // ─── 2. Keyboard Navigation ─────────────────────────────────────────────────
 
 document.addEventListener('keydown', (e) => {
-    // Don't intercept when typing in inputs
+    // Don't intercept when typing in inputs or with modifier keys
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.altKey) return;
 
     const tabs = Array.from(document.querySelectorAll('.tab-btn')).map(b => b.dataset.tab);
     const idx = tabs.indexOf(currentTab);

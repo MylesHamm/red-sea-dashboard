@@ -2,19 +2,27 @@
    Chart Definitions — All Chart.js configurations
    ═══════════════════════════════════════════════════════════════════════════ */
 
+// HTML escape helper (shared with app.js via global scope)
+function _escChart(str) {
+    if (str == null) return '';
+    const div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
+}
+
 const COLORS = {
-    brent: '#4A90D9',
-    brentBg: 'rgba(74, 144, 217, 0.15)',
-    attacks: '#E05555',
-    attacksBg: 'rgba(224, 85, 85, 0.30)',
-    volatility: '#F0C050',
-    volatilityBg: 'rgba(240, 192, 80, 0.12)',
-    positive: '#3ECF8E',
-    negative: '#E05555',
-    dxy: '#9B8EC4',
-    dxyBg: 'rgba(155, 142, 196, 0.12)',
-    ovx: '#F09060',
-    ovxBg: 'rgba(240, 144, 96, 0.12)',
+    brent: '#3D99D4',
+    brentBg: 'rgba(61, 153, 212, 0.15)',
+    attacks: '#ff5252',
+    attacksBg: 'rgba(255, 82, 82, 0.30)',
+    volatility: '#ffab00',
+    volatilityBg: 'rgba(255, 171, 0, 0.12)',
+    positive: '#00e676',
+    negative: '#ff5252',
+    dxy: '#9B7BEE',
+    dxyBg: 'rgba(155, 123, 238, 0.12)',
+    ovx: '#E07B4C',
+    ovxBg: 'rgba(224, 123, 76, 0.12)',
     navy: '#0d1420',
     gold: '#D4B870',
     gray: '#8892a0',
@@ -368,11 +376,9 @@ function createPriceWindowChart(priceWindows) {
     const ctx = document.getElementById('priceWindowChart');
     if (!ctx) return;
 
-    console.log('[PriceWindow] Input:', JSON.stringify(priceWindows));
     const labels = ['T-2', 'T-1', 'T0', 'T+1', 'T+2', 'T+3', 'T+4', 'T+5'];
     const keys = ['Price_T-2', 'Price_T-1', 'Price_T0', 'Price_T+1', 'Price_T+2', 'Price_T+3', 'Price_T+4', 'Price_T+5'];
     const data = keys.map(k => priceWindows[k] || 0);
-    console.log('[PriceWindow] Data array:', JSON.stringify(data));
 
     // Color the event day differently
     const bgColors = data.map((_, i) => i === 2 ? COLORS.attacks : COLORS.brent);
@@ -397,10 +403,14 @@ function createPriceWindowChart(priceWindows) {
                 borderColor: borderColors,
                 borderWidth: 1,
                 borderRadius: 4,
+                barPercentage: 0.7,
+                categoryPercentage: 0.8,
             }]
         },
         options: {
             ...CHART_DEFAULTS,
+            responsive: true,
+            maintainAspectRatio: false,
             scales: {
                 x: { ...CHART_DEFAULTS.scales.x },
                 y: {
@@ -1604,23 +1614,24 @@ function updateIranIsraelMapLayers() {
         const marker = L.marker([e.lat, e.lng], {
             icon: L.divIcon({
                 className: 'curated-pulse-wrap',
-                html: `<div class="${pulseClass}" title="${e.title}"></div>`,
+                html: `<div class="${pulseClass}" title="${_escChart(e.title)}"></div>`,
                 iconSize: [dotSize, dotSize],
                 iconAnchor: [dotSize/2, dotSize/2],
             }),
         });
+        const h = _escChart;
         marker.bindPopup(`
             <div style="font-family:'SF Mono','Fira Code',Consolas,monospace;max-width:320px">
-                <div style="font-weight:700;font-size:12px;margin-bottom:4px;color:${dateColor};letter-spacing:1px">${e.date}</div>
+                <div style="font-weight:700;font-size:12px;margin-bottom:4px;color:${dateColor};letter-spacing:1px">${h(e.date)}</div>
                 ${sourceBadge}
-                <div style="font-weight:600;font-size:12px;margin-bottom:6px;color:#e0e8f0">${e.title}</div>
+                <div style="font-weight:600;font-size:12px;margin-bottom:6px;color:#e0e8f0">${h(e.title)}</div>
                 <div style="font-size:10px;margin-bottom:4px">
                     <span style="color:#5a6a7a">TYPE</span>
-                    <span style="text-transform:uppercase;font-weight:500;color:#c0cad8;margin-left:6px">${e.type}</span>
+                    <span style="text-transform:uppercase;font-weight:500;color:#c0cad8;margin-left:6px">${h(e.type)}</span>
                 </div>
                 <div style="font-size:10px;margin-bottom:4px">
                     <span style="color:#5a6a7a">LOC</span>
-                    <span style="color:#c0cad8;margin-left:6px">${e.location}</span>
+                    <span style="color:#c0cad8;margin-left:6px">${h(e.location)}</span>
                 </div>
                 <div style="font-size:10px;margin-bottom:4px">
                     <span style="color:#5a6a7a">SEV</span>
@@ -1628,9 +1639,9 @@ function updateIranIsraelMapLayers() {
                 </div>${e.fatalities ? `
                 <div style="font-size:10px;margin-bottom:4px">
                     <span style="color:#5a6a7a">KIA</span>
-                    <strong style="color:#ff4444;margin-left:6px">${e.fatalities.toLocaleString()}</strong>
+                    <strong style="color:#ff4444;margin-left:6px">${Number(e.fatalities).toLocaleString()}</strong>
                 </div>` : ''}
-                <div style="font-size:10px;color:#5a6a7a;margin-top:6px;line-height:1.4">${e.description}</div>
+                <div style="font-size:10px;color:#5a6a7a;margin-top:6px;line-height:1.4">${h(e.description)}</div>
             </div>
         `, { maxWidth: 340 });
         iranIsraelMarkerGroup.addLayer(marker);
@@ -1659,18 +1670,19 @@ function updateIranIsraelMapLayers() {
 }
 
 function _buildMapPopup(e, label) {
+    const h = _escChart;
     const notesShort = (e.notes || '').substring(0, 200);
     const badgeColor = e.source === 'israel' ? '#3D6B99' : '#C43D3D';
     return `
         <div style="font-family:'SF Mono','Fira Code',Consolas,monospace;max-width:300px">
-            <div style="font-weight:700;font-size:11px;margin-bottom:4px;color:#00d4ff;letter-spacing:1px">${e.date}</div>
-            <div style="font-size:9px;color:#fff;background:${badgeColor};display:inline-block;padding:2px 6px;border-radius:2px;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">${label}</div>
-            <div style="font-size:10px;margin-bottom:3px"><span style="color:#5a6a7a">TYPE</span> <span style="color:#c0cad8;margin-left:4px">${e.type}</span></div>
-            <div style="font-size:10px;margin-bottom:3px"><span style="color:#5a6a7a">SUB</span> <span style="color:#c0cad8;margin-left:4px">${e.subType || 'N/A'}</span></div>
-            <div style="font-size:10px;margin-bottom:3px"><span style="color:#5a6a7a">ACTOR</span> <span style="color:#c0cad8;margin-left:4px">${e.actor || 'N/A'}</span></div>
-            <div style="font-size:10px;margin-bottom:3px"><span style="color:#5a6a7a">LOC</span> <span style="color:#c0cad8;margin-left:4px">${e.location}</span></div>
-            <div style="font-size:10px;margin-bottom:3px"><span style="color:#5a6a7a">KIA</span> <strong style="color:${e.fatalities > 0 ? '#ff4444' : '#c0cad8'};margin-left:4px">${e.fatalities}</strong></div>
-            <div style="font-size:9px;color:#4a5a6a;margin-top:6px;line-height:1.4">${notesShort}${(e.notes || '').length > 200 ? '...' : ''}</div>
+            <div style="font-weight:700;font-size:11px;margin-bottom:4px;color:#00d4ff;letter-spacing:1px">${h(e.date)}</div>
+            <div style="font-size:9px;color:#fff;background:${badgeColor};display:inline-block;padding:2px 6px;border-radius:2px;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">${h(label)}</div>
+            <div style="font-size:10px;margin-bottom:3px"><span style="color:#5a6a7a">TYPE</span> <span style="color:#c0cad8;margin-left:4px">${h(e.type)}</span></div>
+            <div style="font-size:10px;margin-bottom:3px"><span style="color:#5a6a7a">SUB</span> <span style="color:#c0cad8;margin-left:4px">${h(e.subType || 'N/A')}</span></div>
+            <div style="font-size:10px;margin-bottom:3px"><span style="color:#5a6a7a">ACTOR</span> <span style="color:#c0cad8;margin-left:4px">${h(e.actor || 'N/A')}</span></div>
+            <div style="font-size:10px;margin-bottom:3px"><span style="color:#5a6a7a">LOC</span> <span style="color:#c0cad8;margin-left:4px">${h(e.location)}</span></div>
+            <div style="font-size:10px;margin-bottom:3px"><span style="color:#5a6a7a">KIA</span> <strong style="color:${e.fatalities > 0 ? '#ff4444' : '#c0cad8'};margin-left:4px">${h(e.fatalities)}</strong></div>
+            <div style="font-size:9px;color:#4a5a6a;margin-top:6px;line-height:1.4">${h(notesShort)}${(e.notes || '').length > 200 ? '...' : ''}</div>
         </div>
     `;
 }
