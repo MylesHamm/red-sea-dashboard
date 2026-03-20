@@ -438,14 +438,20 @@ def fetch_brent_prices() -> List[dict]:
 
 
 def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
-    """Extend EIA/FRED Brent data with recent prices beyond API reporting lag."""
+    """Extend EIA/FRED Brent data with recent prices beyond API reporting lag.
+
+    Data waterfall (each layer only fills gaps left by the one above):
+        1. Yahoo Finance direct API  (real-time, but often blocked from servers)
+        2. yfinance library           (same data, different client)
+        3. FRED DCOILBRENTEU series   (reliable, ~1-day lag, auto-updates daily)
+        4. Hardcoded fallback table   (last resort for known war-period dates)
+    """
     # Deduplicate by date (keep latest) and sort chronologically
     by_date = {r["date"]: r for r in eia_records}
     last_date = max(by_date.keys()) if by_date else "2023-10-01"
 
-    # Fallback war-period Brent crude settlements from news sources (CNBC, Reuters, Bloomberg, etc.)
-    # Used ONLY when live data (EIA/Yahoo Finance) is unavailable for a given date.
-    # Note: Mar 7 (Sat) and Mar 8 (Sun) are non-trading days — no settlements.
+    # Hardcoded war-period settlements from CNBC / Reuters / Bloomberg.
+    # Used ONLY when ALL live sources (EIA, Yahoo, FRED) fail for a given date.
     fallback_prices = {
         "2026-03-02": 77.24,   # First trading day after war started Feb 28 (Sat)
         "2026-03-03": 83.28,   # Brent surges as shipping suspended
@@ -453,12 +459,19 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
         "2026-03-05": 88.59,   # Brent surges on insurance withdrawal, 500+ missiles
         "2026-03-06": 95.74,   # Analysts warn $100+; Iran strikes Gulf states
         # Mar 7 (Sat) and Mar 8 (Sun) — no settlement
-        "2026-03-09": 98.96,   # Brent settles +3.4% from Friday; hit $119 intraday
+        "2026-03-09": 98.96,   # Brent settles +3.4% from Friday
         "2026-03-10": 87.80,   # Sharp pullback (-11.3%) as Trump signals war "very complete"
         "2026-03-11": 91.98,   # CNBC: Brent +4.76% as IEA releases 400M bbl reserves
+        "2026-03-12": 100.46,  # CNBC: First close above $100 since Aug 2022 (+9.22%)
+        "2026-03-13": 103.14,  # CNBC: Brent +2.67%; oil above $100 for second day
+        # Mar 14 (Sat) and Mar 15 (Sun) — no settlement
+        "2026-03-16": 101.04,  # EIA/FRED spot price
+        "2026-03-17": 103.42,  # CNBC: +3.2% as allies refuse Hormuz escort
+        "2026-03-18": 107.38,  # CNBC: +3.8% amid Hormuz shutdown fears
+        "2026-03-19": 108.65,  # CNBC: Hit $119 intraday; settled +1.18% after Netanyahu comments
     }
 
-    # Try Yahoo Finance direct API (more reliable than yfinance library)
+    # ── Layer 1: Yahoo Finance direct API ────────────────────────────────────
     try:
         last_dt = datetime.strptime(last_date, "%Y-%m-%d")
         period1 = int(last_dt.timestamp())
@@ -487,7 +500,7 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
     except Exception as e:
         logger.warning(f"Yahoo Finance API failed: {e}")
 
-    # Fallback: try yfinance library for any remaining gaps
+    # ── Layer 2: yfinance library ────────────────────────────────────────────
     live_dates_after = {d for d in by_date if d > last_date}
     if not live_dates_after:
         try:
@@ -504,7 +517,27 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
         except Exception as e:
             logger.warning(f"Brent yfinance failed: {e}")
 
-    # Apply fallback prices ONLY for dates not already covered by live data
+    # ── Layer 3: FRED DCOILBRENTEU (auto-updates daily, ~1-day lag) ──────────
+    # This is the most reliable server-side source — fills any remaining gaps.
+    live_dates_after = {d for d in by_date if d > last_date}
+    if len(live_dates_after) < 3:  # Likely missing recent days
+        try:
+            from fredapi import Fred
+            fred = Fred(api_key=config.FRED_API_KEY)
+            series = fred.get_series("DCOILBRENTEU", observation_start=last_date)
+            added = 0
+            for idx, val in series.items():
+                if pd.notna(val):
+                    d = idx.strftime("%Y-%m-%d")
+                    if d > last_date and d not in by_date:
+                        by_date[d] = {"date": d, "price": round(float(val), 2)}
+                        added += 1
+            if added > 0:
+                logger.info(f"FRED DCOILBRENTEU: supplemented {added} Brent prices after {last_date}")
+        except Exception as e:
+            logger.warning(f"FRED Brent (DCOILBRENTEU) failed: {e}")
+
+    # ── Layer 4: Hardcoded fallback (last resort) ────────────────────────────
     for date_str, price in fallback_prices.items():
         if date_str not in by_date:
             by_date[date_str] = {"date": date_str, "price": price}
