@@ -713,14 +713,26 @@ def load_master_dataset() -> dict:
         latest_brent = round(float(valid_prices.iloc[-1]), 2)
         brent_change = round(float(valid_prices.iloc[-1] - valid_prices.iloc[-2]), 2) if len(valid_prices) > 1 else 0
 
+    # Use live DXY from yfinance instead of stale CSV last-row
+    live_dxy = fetch_dxy()
+    latest_dxy = round(live_dxy[-1]["value"], 2) if live_dxy else (
+        round(float(df["DXY"].dropna().iloc[-1]), 2) if df["DXY"].dropna().shape[0] > 0 else None
+    )
+
+    # Use live OVX from yfinance instead of stale CSV last-row
+    live_ovx = fetch_ovx()
+    latest_ovx = round(live_ovx[-1]["value"], 2) if live_ovx else (
+        round(float(df["OVX"].dropna().iloc[-1]), 2) if df["OVX"].dropna().shape[0] > 0 else None
+    )
+
     kpis = {
         "avg_brent_price": round(float(valid_prices.mean()), 2),
         "latest_brent_price": latest_brent,
         "brent_price_change": brent_change,
         "peak_volatility": round(float(df["Daily_Volatility"].max()), 4),
         "max_weekly_attacks": int(df["WeeklyAttackFreq"].max()),
-        "latest_dxy": round(float(df["DXY"].dropna().iloc[-1]), 2) if df["DXY"].dropna().shape[0] > 0 else None,
-        "latest_ovx": round(float(df["OVX"].dropna().iloc[-1]), 2) if df["OVX"].dropna().shape[0] > 0 else None,
+        "latest_dxy": latest_dxy,
+        "latest_ovx": latest_ovx,
         "total_trading_days": 505,  # Regression observations (506 price days minus 1 for return calc)
     }
 
