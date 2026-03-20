@@ -113,9 +113,10 @@
 
             <!-- Global Crossfilter Bar -->
             <div class="crossfilter-bar" id="crossfilterBar" style="display:none">
-                <span class="crossfilter-label">Active Filter:</span>
-                <span class="crossfilter-value" id="crossfilterValue"></span>
-                <button class="crossfilter-clear" id="crossfilterClear">Clear Filter</button>
+                <span class="crossfilter-label">CROSSFILTER ACTIVE</span>
+                <span class="crossfilter-detail">Event Type: <span class="crossfilter-value" id="crossfilterValue"></span></span>
+                <span class="crossfilter-scope">Applies to: Price/Attacks, Volatility, Scatter, Event Types</span>
+                <button class="crossfilter-clear" id="crossfilterClear">Clear</button>
             </div>
 
             <!-- Chart Row 1: Price vs Attacks -->
@@ -365,9 +366,10 @@
         <div class="container">
             <!-- Iran Crossfilter Bar -->
             <div class="crossfilter-bar" id="iranCrossfilterBar" style="display:none">
-                <span class="crossfilter-label">Filtering by:</span>
-                <span class="crossfilter-value" id="iranCrossfilterValue"></span>
-                <button class="crossfilter-clear" id="iranCrossfilterClear">Clear Filter</button>
+                <span class="crossfilter-label">CROSSFILTER ACTIVE</span>
+                <span class="crossfilter-detail">Event Type: <span class="crossfilter-value" id="iranCrossfilterValue"></span></span>
+                <span class="crossfilter-scope">Applies to: Map, Timeline, Event Table, Doughnut, Impact Chart</span>
+                <button class="crossfilter-clear" id="iranCrossfilterClear">Clear</button>
             </div>
 
             <!-- KPI Row -->
@@ -551,7 +553,10 @@
                 <div class="chart-card full-width">
                     <div class="chart-header">
                         <h3>Major US-Iran Events — Oil Price Impact</h3>
-                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Curated timeline of major US-Iran geopolitical events grouped by trading day. 'Before' is the previous trading day's close; 'After' is that day's settlement. Change % shows the single-day market response. Weekend events are grouped with the next trading day.</span></div>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span class="event-timeline-count" id="iranTableCount">--</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Curated timeline of major US-Iran geopolitical events grouped by trading day. 'Before' is the previous trading day's close; 'After' is that day's settlement. Change % shows the single-day market response. Weekend events are grouped with the next trading day. Responds to time slider and type crossfilter.</span></div>
+                        </div>
                     </div>
                     <div class="table-container iran-table">
                         <table id="iranEventTable">
@@ -932,8 +937,8 @@
     </footer>
 
     <!-- Dashboard JS -->
-    <script src="/static/js/charts.js?v=20260319c"></script>
-    <script src="/static/js/map.js?v=20260319c"></script>
-    <script src="/static/js/app.js?v=20260319c"></script>
+    <script src="/static/js/charts.js?v=20260319d"></script>
+    <script src="/static/js/map.js?v=20260319d"></script>
+    <script src="/static/js/app.js?v=20260319d"></script>
 </body>
 </html>

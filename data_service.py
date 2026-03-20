@@ -701,10 +701,22 @@ def load_master_dataset() -> dict:
 
     # KPIs
     valid_prices = df["Brent_Price"].dropna()
+
+    # Use live Brent price from EIA/yfinance instead of stale CSV last-row
+    live_brent = fetch_brent_prices()
+    if live_brent:
+        live_latest = live_brent[-1]["price"]
+        live_prev = live_brent[-2]["price"] if len(live_brent) > 1 else live_latest
+        latest_brent = round(live_latest, 2)
+        brent_change = round(live_latest - live_prev, 2)
+    else:
+        latest_brent = round(float(valid_prices.iloc[-1]), 2)
+        brent_change = round(float(valid_prices.iloc[-1] - valid_prices.iloc[-2]), 2) if len(valid_prices) > 1 else 0
+
     kpis = {
         "avg_brent_price": round(float(valid_prices.mean()), 2),
-        "latest_brent_price": round(float(valid_prices.iloc[-1]), 2),
-        "brent_price_change": round(float(valid_prices.iloc[-1] - valid_prices.iloc[-2]), 2) if len(valid_prices) > 1 else 0,
+        "latest_brent_price": latest_brent,
+        "brent_price_change": brent_change,
         "peak_volatility": round(float(df["Daily_Volatility"].max()), 4),
         "max_weekly_attacks": int(df["WeeklyAttackFreq"].max()),
         "latest_dxy": round(float(df["DXY"].dropna().iloc[-1]), 2) if df["DXY"].dropna().shape[0] > 0 else None,

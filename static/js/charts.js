@@ -249,21 +249,45 @@ function createVolatilityChart(timeseries) {
     const ctx = document.getElementById('volatilityChart');
     if (!ctx) return;
 
+    const dates = timeseries.map(d => d.date);
+    const volatility = timeseries.map(d => d.daily_volatility);
+
+    // If crossfilter active, highlight matching periods with a second dataset
+    let highlightData = null;
+    if (activeFilter && activeFilter.type === 'eventType' && timeseries._eventDates) {
+        const matchDates = new Set(timeseries._eventDates[activeFilter.value] || []);
+        highlightData = dates.map((d, i) => matchDates.has(d) ? volatility[i] : null);
+    }
+
+    const datasets = [{
+        label: 'Daily Volatility',
+        data: volatility,
+        borderColor: activeFilter ? COLORS.volatility + '55' : COLORS.volatility,
+        backgroundColor: activeFilter ? COLORS.volatilityBg + '33' : COLORS.volatilityBg,
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.3,
+    }];
+
+    if (highlightData) {
+        datasets.push({
+            label: `Volatility (${activeFilter.value})`,
+            data: highlightData,
+            borderColor: COLORS.attacks,
+            backgroundColor: 'rgba(255, 82, 82, 0.25)',
+            borderWidth: 2.5,
+            pointRadius: 3,
+            pointBackgroundColor: COLORS.attacks,
+            fill: true,
+            tension: 0.3,
+            spanGaps: false,
+        });
+    }
+
     chartInstances['volatilityChart'] = new Chart(ctx, {
         type: 'line',
-        data: {
-            labels: timeseries.map(d => d.date),
-            datasets: [{
-                label: 'Daily Volatility',
-                data: timeseries.map(d => d.daily_volatility),
-                borderColor: COLORS.volatility,
-                backgroundColor: COLORS.volatilityBg,
-                borderWidth: 2,
-                pointRadius: 0,
-                fill: true,
-                tension: 0.3,
-            }]
-        },
+        data: { labels: dates, datasets },
         options: {
             ...CHART_DEFAULTS,
             _syncGroup: 'overview',
@@ -432,23 +456,47 @@ function createScatterChart(timeseries) {
     const ctx = document.getElementById('scatterChart');
     if (!ctx) return;
 
-    const points = timeseries
-        .filter(d => d.weekly_attacks > 0 && d.daily_volatility != null)
-        .map(d => ({ x: d.weekly_attacks, y: d.daily_volatility }));
+    const filtered = timeseries.filter(d => d.weekly_attacks > 0 && d.daily_volatility != null);
+
+    // If crossfilter active, split into matching vs non-matching datasets
+    const datasets = [];
+    if (activeFilter && activeFilter.type === 'eventType' && timeseries._eventDates) {
+        const matchDates = new Set(timeseries._eventDates[activeFilter.value] || []);
+        const matching = filtered.filter(d => matchDates.has(d.date)).map(d => ({ x: d.weekly_attacks, y: d.daily_volatility }));
+        const other = filtered.filter(d => !matchDates.has(d.date)).map(d => ({ x: d.weekly_attacks, y: d.daily_volatility }));
+        datasets.push({
+            label: activeFilter.value,
+            data: matching,
+            backgroundColor: COLORS.attacks,
+            borderColor: COLORS.attacks,
+            borderWidth: 1,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+        });
+        datasets.push({
+            label: 'Other Events',
+            data: other,
+            backgroundColor: 'rgba(136, 146, 160, 0.15)',
+            borderColor: 'rgba(136, 146, 160, 0.3)',
+            borderWidth: 1,
+            pointRadius: 3,
+            pointHoverRadius: 5,
+        });
+    } else {
+        datasets.push({
+            label: 'Attack Weeks',
+            data: filtered.map(d => ({ x: d.weekly_attacks, y: d.daily_volatility })),
+            backgroundColor: COLORS.attacksBg,
+            borderColor: COLORS.attacks,
+            borderWidth: 1,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+        });
+    }
 
     chartInstances['scatterChart'] = new Chart(ctx, {
         type: 'scatter',
-        data: {
-            datasets: [{
-                label: 'Attack Weeks',
-                data: points,
-                backgroundColor: COLORS.attacksBg,
-                borderColor: COLORS.attacks,
-                borderWidth: 1,
-                pointRadius: 4,
-                pointHoverRadius: 6,
-            }]
-        },
+        data: { datasets },
         options: {
             ...CHART_DEFAULTS,
             scales: {
@@ -651,6 +699,8 @@ function setIranFilter(value) {
         bar.style.display = 'flex';
     }
     if (typeof renderCurrentEventsFiltered === 'function') renderCurrentEventsFiltered();
+    if (typeof _rerenderCuratedTimeline === 'function') _rerenderCuratedTimeline();
+    updateIranIsraelMapLayers();
     if (typeof _updateStatusBar === 'function') _updateStatusBar();
 }
 
@@ -659,6 +709,8 @@ function clearIranFilter() {
     const bar = document.getElementById('iranCrossfilterBar');
     if (bar) bar.style.display = 'none';
     if (typeof renderCurrentEventsFiltered === 'function') renderCurrentEventsFiltered();
+    if (typeof _rerenderCuratedTimeline === 'function') _rerenderCuratedTimeline();
+    updateIranIsraelMapLayers();
     if (typeof _updateStatusBar === 'function') _updateStatusBar();
 }
 
@@ -1547,6 +1599,10 @@ function setupIranTimeSlider() {
     _iranTimeSlider.on('change', (values) => {
         _iranTimeRange = [parseInt(values[0]), parseInt(values[1])];
         updateIranIsraelMapLayers();
+        // Propagate time filter to event table and curated timeline
+        if (typeof renderCurrentEventsFiltered === 'function') renderCurrentEventsFiltered();
+        if (typeof _rerenderCuratedTimeline === 'function') _rerenderCuratedTimeline();
+        if (typeof _updateStatusBar === 'function') _updateStatusBar();
     });
 }
 
@@ -1570,7 +1626,15 @@ function updateIranIsraelMapLayers() {
     const showHeatmap = document.getElementById('toggleIranHeatmap')?.checked ?? true;
 
     const categoryVisible = { military: showMilitary, diplomatic: showDiplomatic, sanctions: showSanctions, proxy: showProxy };
-    const passesTypeFilter = (type) => categoryVisible[_typeCategory(type)] ?? true;
+    const passesTypeFilter = (type) => {
+        const cat = _typeCategory(type);
+        if (!(categoryVisible[cat] ?? true)) return false;
+        // Also apply iranFilter crossfilter if active
+        if (iranFilter && iranFilter.type === 'iranEventType') {
+            return cat === _typeCategory(iranFilter.value);
+        }
+        return true;
+    };
 
     // Time range filter
     const inTimeRange = (dateStr) => {

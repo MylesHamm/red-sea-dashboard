@@ -230,6 +230,7 @@ function renderOverviewFiltered() {
 
     createPriceAttackChart(timeseries);
     createVolatilityChart(timeseries);
+    createScatterChart(timeseries);
     const chartEvents = thesisEventsData && thesisEventsData.length ? thesisEventsData : eventsData;
     if (chartEvents) createEventTypesChart(chartEvents);
 }
@@ -461,6 +462,13 @@ document.getElementById('zoomFull')?.addEventListener('click', () => setTimeline
 
 // ─── Iran Crossfilter Re-render ─────────────────────────────────────────────
 
+// Helper: check if a date string falls within the Iran time slider range
+function _inIranTimeRange(dateStr) {
+    if (typeof _iranTimeRange === 'undefined' || !_iranTimeRange || !dateStr) return true;
+    const ts = new Date(dateStr).getTime();
+    return ts >= _iranTimeRange[0] && ts <= _iranTimeRange[1];
+}
+
 function renderCurrentEventsFiltered() {
     if (!iranEventsData || !iranImpactData) return;
 
@@ -470,8 +478,12 @@ function renderCurrentEventsFiltered() {
     // Re-render timeline with current zoom + filter state
     createIranPriceTimelineChart(brentPrices, curated, _iranZoomToWar);
 
-    // Re-render doughnut (dims non-selected segments)
-    createIranEventTypeChart(iranEventsData.data || []);
+    // Re-render doughnut — filter by time range if slider is active
+    let doughnutEvents = iranEventsData.data || [];
+    if (typeof _iranTimeRange !== 'undefined' && _iranTimeRange) {
+        doughnutEvents = doughnutEvents.filter(e => _inIranTimeRange(e.event_date || e.date));
+    }
+    createIranEventTypeChart(doughnutEvents);
 
     // Re-render impact bar chart (dims non-matching types)
     createIranImpactChart(iranImpactData.impact_by_type || {});
@@ -480,13 +492,22 @@ function renderCurrentEventsFiltered() {
     const tbody = document.getElementById('iranTableBody');
     if (tbody && iranImpactData.event_table) {
         let rows = iranImpactData.event_table.sort((a, b) => b.date.localeCompare(a.date));
+
+        // Apply time slider filter
+        rows = rows.filter(day => _inIranTimeRange(day.date));
+
+        // Apply type crossfilter
         if (typeof iranFilter !== 'undefined' && iranFilter) {
-            // Filter days that contain at least one event of the filtered type
             rows = rows.filter(day => {
                 const events = day.events || [{ type: day.type }];
                 return events.some(e => e.type === iranFilter.value);
             });
         }
+
+        // Show filtered count
+        const tableCount = document.getElementById('iranTableCount');
+        if (tableCount) tableCount.textContent = `${rows.length} events`;
+
         tbody.innerHTML = rows.map(day => {
             const changeCls = day.change_pct > 0 ? 'change-positive' : day.change_pct < 0 ? 'change-negative' : '';
             const changeText = day.change_pct != null ? `${day.change_pct > 0 ? '+' : ''}${day.change_pct}%` : '--';
@@ -507,6 +528,23 @@ function renderCurrentEventsFiltered() {
             `;
         }).join('');
     }
+}
+
+// Re-render curated timeline with current filters (type + time range)
+function _rerenderCuratedTimeline() {
+    if (!iranEventsData) return;
+    const curated = iranEventsData.curated || [];
+    let filtered = curated;
+
+    // Apply time range filter
+    filtered = filtered.filter(e => _inIranTimeRange(e.date));
+
+    // Apply type crossfilter
+    if (typeof iranFilter !== 'undefined' && iranFilter) {
+        filtered = filtered.filter(e => e.type === iranFilter.value);
+    }
+
+    renderCuratedTimeline(filtered);
 }
 
 // ─── Data Table ─────────────────────────────────────────────────────────────

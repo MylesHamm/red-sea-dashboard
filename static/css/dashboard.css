@@ -501,6 +501,19 @@ body {
     letter-spacing: 0.5px;
 }
 
+.crossfilter-detail {
+    color: #e0e6ed;
+    font-size: 13px;
+}
+
+.crossfilter-scope {
+    font-size: 10px;
+    color: #5a6a7a;
+    font-family: var(--mono);
+    letter-spacing: 0.3px;
+    margin-left: 4px;
+}
+
 .crossfilter-clear:hover {
     background: rgba(0,212,255,0.2);
     box-shadow: 0 0 10px rgba(0,212,255,0.15);
