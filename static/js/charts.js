@@ -1252,100 +1252,87 @@ function createCorrelationChart(correlation) {
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Maritime Traffic — Suez Canal Transit Volume Chart
+   Maritime Traffic — Chokepoint Transit Volume Charts
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function createSuezTransitChart() {
-    const canvas = document.getElementById('suezTransitChart');
+/**
+ * Generic chokepoint transit chart loader.
+ * @param {string} canvasId  — DOM id of the <canvas>
+ * @param {string} apiUrl    — backend endpoint (e.g. '/api/suez-transits')
+ * @param {string} label     — human-readable name (e.g. 'Suez Canal')
+ * @param {object} [opts]    — optional overrides { annotations: [...] }
+ */
+function _loadChokepointChart(canvasId, apiUrl, label, opts) {
+    const canvas = document.getElementById(canvasId);
     if (!canvas) return;
 
-    // Destroy previous instance
     const existing = Chart.getChart(canvas);
     if (existing) existing.destroy();
 
-    // Show loading state
     const ctx2d = canvas.getContext('2d');
     ctx2d.fillStyle = '#8892a0';
     ctx2d.font = '12px Inter';
     ctx2d.textAlign = 'center';
-    ctx2d.fillText('Loading Suez Canal data from IMF PortWatch...', canvas.width / 2, canvas.height / 2);
+    ctx2d.fillText(`Loading ${label} data from IMF PortWatch...`, canvas.width / 2, canvas.height / 2);
 
-    // Fetch live data from IMF PortWatch via backend
-    fetch('/api/suez-transits')
+    fetch(apiUrl)
         .then(resp => resp.json())
         .then(result => {
             const data = result.data;
             if (!data || !data.length) {
                 ctx2d.clearRect(0, 0, canvas.width, canvas.height);
-                ctx2d.fillText('No Suez Canal transit data available', canvas.width / 2, canvas.height / 2);
+                ctx2d.fillText(`No ${label} transit data available`, canvas.width / 2, canvas.height / 2);
                 return;
             }
-            _renderSuezChart(canvas, data);
+            _renderChokepointChart(canvas, data, label, opts);
         })
         .catch(err => {
-            console.error('Suez transit fetch failed:', err);
+            console.error(`${label} transit fetch failed:`, err);
             ctx2d.clearRect(0, 0, canvas.width, canvas.height);
             ctx2d.fillStyle = COLORS.attacks;
-            ctx2d.fillText('Failed to load Suez Canal data', canvas.width / 2, canvas.height / 2);
+            ctx2d.fillText(`Failed to load ${label} data`, canvas.width / 2, canvas.height / 2);
         });
 }
 
-function _renderSuezChart(canvas, data) {
-    // Destroy any chart that was created during loading
+function _renderChokepointChart(canvas, data, label, opts) {
     const existing = Chart.getChart(canvas);
     if (existing) existing.destroy();
 
-    // Build datasets: total transits + tanker transits breakdown
     const totalData = data.map(d => ({ x: d.month + '-15', y: d.transits }));
     const tankerData = data.map(d => ({ x: d.month + '-15', y: d.tanker_transits }));
 
-    // Dynamic y-axis minimum
-    const minTransits = Math.min(...data.map(d => d.transits));
-    const yMin = Math.max(0, Math.floor(minTransits * 0.8 / 100) * 100);
-
-    // Build annotation lines — only show if data covers those dates
+    // Dynamic y-axis: start from zero so tanker line is never clipped
     const months = data.map(d => d.month);
     const annotations = {};
 
+    // Standard annotation lines
     if (months.some(m => m >= '2023-11')) {
         annotations.attackLine = {
             type: 'line',
-            xMin: '2023-11-15',
-            xMax: '2023-11-15',
-            borderColor: COLORS.attacks,
-            borderWidth: 2,
-            borderDash: [6, 4],
+            xMin: '2023-11-15', xMax: '2023-11-15',
+            borderColor: COLORS.attacks, borderWidth: 2, borderDash: [6, 4],
             label: {
-                display: true,
-                content: 'Houthi Attacks Begin',
-                position: 'start',
-                backgroundColor: 'rgba(196, 61, 61, 0.85)',
-                color: '#fff',
-                font: { size: 10, family: 'Inter', weight: '600' },
-                padding: 4,
+                display: true, content: 'Houthi Attacks Begin', position: 'start',
+                backgroundColor: 'rgba(196, 61, 61, 0.85)', color: '#fff',
+                font: { size: 10, family: 'Inter', weight: '600' }, padding: 4,
+            },
+        };
+    }
+    if (months.some(m => m >= '2026-02')) {
+        annotations.warLine = {
+            type: 'line',
+            xMin: '2026-02-15', xMax: '2026-02-15',
+            borderColor: '#8B0000', borderWidth: 2, borderDash: [6, 4],
+            label: {
+                display: true, content: 'US-Iran War', position: 'start',
+                backgroundColor: 'rgba(139, 0, 0, 0.85)', color: '#fff',
+                font: { size: 10, family: 'Inter', weight: '600' }, padding: 4,
             },
         };
     }
 
-    if (months.some(m => m >= '2026-02')) {
-        annotations.warLine = {
-            type: 'line',
-            xMin: '2026-02-15',
-            xMax: '2026-02-15',
-            borderColor: '#8B0000',
-            borderWidth: 2,
-            borderDash: [6, 4],
-            label: {
-                display: true,
-                content: 'US-Iran War',
-                position: 'start',
-                backgroundColor: 'rgba(139, 0, 0, 0.85)',
-                color: '#fff',
-                font: { size: 10, family: 'Inter', weight: '600' },
-                padding: 4,
-            },
-        };
-    }
+    // Merge any custom annotations from opts
+    if (opts && opts.annotations) Object.assign(annotations, opts.annotations);
 
     new Chart(canvas, {
         type: 'line',
@@ -1356,23 +1343,17 @@ function _renderSuezChart(canvas, data) {
                     data: totalData,
                     borderColor: COLORS.brent,
                     backgroundColor: COLORS.brentBg,
-                    fill: true,
-                    tension: 0.3,
-                    pointRadius: 3,
-                    pointHoverRadius: 6,
-                    borderWidth: 2.5,
+                    fill: true, tension: 0.3,
+                    pointRadius: 3, pointHoverRadius: 6, borderWidth: 2.5,
                 },
                 {
                     label: 'Tanker Transits',
                     data: tankerData,
                     borderColor: COLORS.ovx,
                     backgroundColor: 'rgba(224, 123, 76, 0.10)',
-                    fill: true,
-                    tension: 0.3,
-                    pointRadius: 2,
-                    pointHoverRadius: 5,
-                    borderWidth: 1.5,
-                    borderDash: [4, 3],
+                    fill: true, tension: 0.3,
+                    pointRadius: 2, pointHoverRadius: 5,
+                    borderWidth: 1.5, borderDash: [4, 3],
                 },
             ],
         },
@@ -1381,37 +1362,23 @@ function _renderSuezChart(canvas, data) {
             scales: {
                 x: {
                     type: 'time',
-                    time: {
-                        unit: 'month',
-                        displayFormats: { month: 'MMM yyyy' },
-                        tooltipFormat: 'MMM yyyy',
-                    },
+                    time: { unit: 'month', displayFormats: { month: 'MMM yyyy' }, tooltipFormat: 'MMM yyyy' },
                     grid: { display: false },
-                    ticks: {
-                        font: { size: 10, family: 'Inter' },
-                        color: '#8892a0',
-                        maxTicksLimit: 12,
-                    },
+                    ticks: { font: { size: 10, family: 'Inter' }, color: '#8892a0', maxTicksLimit: 12 },
                 },
                 y: {
-                    beginAtZero: false,
-                    min: yMin,
+                    beginAtZero: true,
                     title: { display: true, text: 'Vessel Transits', font: { size: 11, family: 'Inter' }, color: '#8892a0' },
                     grid: { color: COLORS.gridLine },
-                    ticks: {
-                        font: { size: 10, family: 'Inter' },
-                        color: '#8892a0',
-                    },
+                    ticks: { font: { size: 10, family: 'Inter' }, color: '#8892a0' },
                 },
             },
             plugins: {
                 ...CHART_DEFAULTS.plugins,
                 tooltip: {
                     backgroundColor: '#0d1420',
-                    borderColor: 'rgba(0, 212, 255, 0.3)',
-                    borderWidth: 1,
-                    titleColor: '#00d4ff',
-                    bodyColor: '#e0e6ed',
+                    borderColor: 'rgba(0, 212, 255, 0.3)', borderWidth: 1,
+                    titleColor: '#00d4ff', bodyColor: '#e0e6ed',
                     titleFont: { family: 'Inter', weight: '600' },
                     bodyFont: { family: 'Inter' },
                     callbacks: {
@@ -1422,6 +1389,19 @@ function _renderSuezChart(canvas, data) {
             },
         },
     });
+}
+
+// Public chart creators
+function createSuezTransitChart() {
+    _loadChokepointChart('suezTransitChart', '/api/suez-transits', 'Suez Canal');
+}
+
+function createBabElMandebChart() {
+    _loadChokepointChart('babElMandebChart', '/api/bab-el-mandeb-transits', 'Bab el-Mandeb');
+}
+
+function createHormuzChart() {
+    _loadChokepointChart('hormuzChart', '/api/hormuz-transits', 'Strait of Hormuz');
 }
 
 

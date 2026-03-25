@@ -110,6 +110,20 @@ async def get_suez_transits():
     return {"count": len(data), "data": data}
 
 
+@app.get("/api/bab-el-mandeb-transits")
+async def get_bab_el_mandeb_transits():
+    """Monthly Bab el-Mandeb Strait transit volumes from IMF PortWatch."""
+    data = await _run_sync(data_service.fetch_bab_el_mandeb_transits)
+    return {"count": len(data), "data": data}
+
+
+@app.get("/api/hormuz-transits")
+async def get_hormuz_transits():
+    """Monthly Strait of Hormuz transit volumes from IMF PortWatch."""
+    data = await _run_sync(data_service.fetch_hormuz_transits)
+    return {"count": len(data), "data": data}
+
+
 @app.get("/api/iran-events")
 async def get_iran_events():
     """Iran-related ACLED events + curated major events + live news."""

@@ -84,11 +84,15 @@ function switchTab(tab) {
         setTimeout(() => createCorrelationChart(masterData.correlation), 100);
     }
 
-    // Initialize maritime embeds and chart on first tab visit
+    // Initialize maritime embeds and charts on first tab visit
     if (tab === 'maritime') {
         initMaritimeEmbeds();
         // Defer chart creation until canvas is visible (avoids 0px sizing)
-        setTimeout(() => createSuezTransitChart(), 150);
+        setTimeout(() => {
+            createSuezTransitChart();
+            createBabElMandebChart();
+            createHormuzChart();
+        }, 150);
     }
 
     // Conclusion tab — static content, no special initialization needed

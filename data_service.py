@@ -1078,33 +1078,43 @@ def fetch_iran_news() -> List[dict]:
         return []
 
 
-# ─── IMF PortWatch — Suez Canal Transit Data ─────────────────────────────────
+# ─── IMF PortWatch — Chokepoint Transit Data ─────────────────────────────────
 
 _PORTWATCH_BASE = (
     "https://services9.arcgis.com/weJ1QsnbMYJlCHdG/arcgis/rest/services/"
     "Daily_Chokepoints_Data/FeatureServer/0/query"
 )
-_SUEZ_PORT_ID = "chokepoint1"
+
+_CHOKEPOINT_IDS = {
+    "suez": "chokepoint1",
+    "bab_el_mandeb": "chokepoint4",
+    "hormuz": "chokepoint6",
+}
 
 
-def fetch_suez_transits() -> List[dict]:
-    """Fetch daily Suez Canal transit data from IMF PortWatch and aggregate to monthly totals.
+def _fetch_chokepoint_transits(chokepoint_key: str) -> List[dict]:
+    """Fetch daily transit data from IMF PortWatch for a given chokepoint and aggregate to monthly totals.
     Returns list of {month, transits, tanker_transits, container_transits} sorted ascending."""
 
-    cached = _read_cache("suez_transits", ttl=86400)  # 24h cache — data updates weekly
+    cache_key = f"{chokepoint_key}_transits"
+    cached = _read_cache(cache_key, ttl=86400)  # 24h cache — data updates weekly
     if cached:
         return cached
 
-    logger.info("Fetching Suez Canal transit data from IMF PortWatch...")
+    port_id = _CHOKEPOINT_IDS.get(chokepoint_key)
+    if not port_id:
+        logger.error(f"Unknown chokepoint key: {chokepoint_key}")
+        return []
 
-    # Fetch from July 2023 onward (covers pre-attack baseline + crisis period)
+    logger.info(f"Fetching {chokepoint_key} transit data from IMF PortWatch...")
+
     all_records = []
     offset = 0
     batch_size = 2000
 
     while True:
         params = {
-            "where": f"portid='{_SUEZ_PORT_ID}' AND year>=2023 AND (year>2023 OR month>=7)",
+            "where": f"portid='{port_id}' AND year>=2023 AND (year>2023 OR month>=7)",
             "outFields": "date,year,month,n_total,n_tanker,n_container,n_dry_bulk",
             "orderByFields": "date ASC",
             "resultRecordCount": batch_size,
@@ -1116,7 +1126,7 @@ def fetch_suez_transits() -> List[dict]:
             resp.raise_for_status()
             data = resp.json()
         except Exception as e:
-            logger.warning(f"PortWatch API request failed at offset {offset}: {e}")
+            logger.warning(f"PortWatch API request failed for {chokepoint_key} at offset {offset}: {e}")
             break
 
         features = data.get("features", [])
@@ -1124,16 +1134,14 @@ def fetch_suez_transits() -> List[dict]:
             break
 
         for f in features:
-            a = f["attributes"]
-            all_records.append(a)
+            all_records.append(f["attributes"])
 
-        # Check if there are more records
         if len(features) < batch_size:
             break
         offset += batch_size
 
     if not all_records:
-        logger.warning("No Suez transit data returned from PortWatch")
+        logger.warning(f"No {chokepoint_key} transit data returned from PortWatch")
         return []
 
     # Aggregate daily records to monthly totals
@@ -1161,9 +1169,24 @@ def fetch_suez_transits() -> List[dict]:
             "days_sampled": m["days"],
         })
 
-    logger.info(f"Suez transit data: {len(result)} months from {len(all_records)} daily records")
-    _write_cache("suez_transits", result)
+    logger.info(f"{chokepoint_key} transit data: {len(result)} months from {len(all_records)} daily records")
+    _write_cache(cache_key, result)
     return result
+
+
+def fetch_suez_transits() -> List[dict]:
+    """Fetch Suez Canal transit data."""
+    return _fetch_chokepoint_transits("suez")
+
+
+def fetch_bab_el_mandeb_transits() -> List[dict]:
+    """Fetch Bab el-Mandeb Strait transit data."""
+    return _fetch_chokepoint_transits("bab_el_mandeb")
+
+
+def fetch_hormuz_transits() -> List[dict]:
+    """Fetch Strait of Hormuz transit data."""
+    return _fetch_chokepoint_transits("hormuz")
 
 
 _HIGH_SIGNAL_WORDS = {"killed", "strike", "strikes", "missile", "attack", "destroyed", "explosion", "bomb", "drone", "fire", "burning", "casualties", "dead", "wounded"}

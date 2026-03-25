@@ -708,14 +708,45 @@
             <div class="chart-row">
                 <div class="chart-card full-width">
                     <div class="chart-header">
-                        <h3>Suez Canal Transit Volume — Houthi &amp; War Impact</h3>
+                        <h3>Suez Canal Transit Volume</h3>
                         <div class="chart-header-right">
                             <span class="chart-badge">Monthly</span>
-                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Approximate monthly vessel transits through the Suez Canal (all vessel types). First collapse from Houthi proxy attacks (Nov 2023), then a further decline as the US-Iran war (Feb 2026) compounded the disruption. Values are estimates based on published UNCTAD and Suez Canal Authority reports; exact figures may vary by source.</span></div>
+                            <span class="chart-badge" style="background:rgba(0,212,255,0.1);color:#00d4ff">IMF PortWatch</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Monthly vessel transits through the Suez Canal from IMF PortWatch API. The Suez Canal is the downstream indicator of Bab el-Mandeb disruption — ships avoiding Houthi attacks reroute around Africa, reducing Suez volume. Shows both total transits and tanker-specific volume.</span></div>
                         </div>
                     </div>
                     <div class="chart-wrapper" style="height:350px">
                         <canvas id="suezTransitChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bab el-Mandeb + Strait of Hormuz -->
+            <div class="chart-row two-col">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Bab el-Mandeb Strait Transits</h3>
+                        <div class="chart-header-right">
+                            <span class="chart-badge">Monthly</span>
+                            <span class="chart-badge" style="background:rgba(0,212,255,0.1);color:#00d4ff">IMF PortWatch</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Monthly vessel transits through the Bab el-Mandeb Strait (southern Red Sea entrance between Yemen and Djibouti). This is the chokepoint where Houthi forces have been targeting commercial shipping since Nov 2023. ~7 million barrels/day of oil normally transit here.</span></div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper" style="height:320px">
+                        <canvas id="babElMandebChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Strait of Hormuz Transits</h3>
+                        <div class="chart-header-right">
+                            <span class="chart-badge">Monthly</span>
+                            <span class="chart-badge" style="background:rgba(0,212,255,0.1);color:#00d4ff">IMF PortWatch</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Monthly vessel transits through the Strait of Hormuz (Persian Gulf exit between Iran and Oman). ~21 million barrels/day of oil normally transit here — the world's most critical energy chokepoint. IRGC maritime blockade began Mar 2026 during US-Iran war.</span></div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper" style="height:320px">
+                        <canvas id="hormuzChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -937,8 +968,8 @@
     </footer>
 
     <!-- Dashboard JS -->
-    <script src="/static/js/charts.js?v=20260319d"></script>
-    <script src="/static/js/map.js?v=20260319d"></script>
-    <script src="/static/js/app.js?v=20260319d"></script>
+    <script src="/static/js/charts.js?v=20260325a"></script>
+    <script src="/static/js/map.js?v=20260325a"></script>
+    <script src="/static/js/app.js?v=20260325a"></script>
 </body>
 </html>
