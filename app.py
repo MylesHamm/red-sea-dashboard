@@ -42,6 +42,12 @@ app.mount("/static", StaticFiles(directory=config.BASE_DIR / "static"), name="st
 
 # ─── API Endpoints ───────────────────────────────────────────────────────────
 
+@app.get("/api/health")
+async def health_check():
+    """Fast health check for Render — does not trigger data loading."""
+    return {"status": "ok"}
+
+
 @app.get("/api/master")
 async def get_master_data():
     """Full master dataset: timeseries, KPIs, price windows, correlation."""
@@ -210,6 +216,38 @@ async def refresh_data(bg: BackgroundTasks):
 async def refresh_status():
     """Check if a refresh is currently in progress."""
     return {"in_progress": _refresh_in_progress}
+
+
+# ─── Startup Preload ─────────────────────────────────────────────────────────
+
+@app.on_event("startup")
+async def preload_data():
+    """Warm all caches in parallel on app boot so users don't wait."""
+    import concurrent.futures
+
+    def _preload():
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+            futures = {
+                "master": pool.submit(data_service.load_master_dataset),
+                "thesis": pool.submit(data_service.load_thesis_events),
+                "brent": pool.submit(data_service.fetch_brent_prices),
+                "acled": pool.submit(data_service.fetch_acled_events),
+                "iran": pool.submit(data_service.fetch_iran_events),
+                "news": pool.submit(data_service.fetch_iran_news),
+                "suez": pool.submit(data_service.fetch_suez_transits),
+                "mandeb": pool.submit(data_service.fetch_bab_el_mandeb_transits),
+                "hormuz": pool.submit(data_service.fetch_hormuz_transits),
+            }
+            for name, fut in futures.items():
+                try:
+                    fut.result(timeout=90)
+                    print(f"  [preload] {name}: OK")
+                except Exception as e:
+                    print(f"  [preload] {name}: FAILED ({e})")
+
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, _preload)
+    print("  [preload] All data sources warmed")
 
 
 # ─── Frontend Entry Point ────────────────────────────────────────────────────

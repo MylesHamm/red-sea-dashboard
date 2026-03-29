@@ -108,7 +108,7 @@ async function fetchJSON(url) {
 }
 
 async function loadAllData() {
-    updateStatus('loading', 'Loading data...');
+    updateStatus('loading', 'Loading core data...');
 
     try {
         // Phase 1: Load fast, essential data first (CSV-backed, no external API)
@@ -136,7 +136,9 @@ async function loadAllData() {
         updateStatus('live', `Live — ${masterData.kpis.total_trading_days || masterData.timeseries.length} trading days loaded`);
         updateLastUpdated();
 
-        // Phase 2: Load slower external API data in background (non-blocking)
+        // Phase 2: Load external API data in parallel (non-blocking)
+        updateStatus('loading', 'Loading ACLED + Iran events...');
+
         Promise.all([
             fetchJSON('/api/events').catch(() => ({ count: 0, data: [] })),
             fetchJSON('/api/iran-events').catch(() => ({ count: 0, data: [], curated: [] })),
@@ -158,6 +160,7 @@ async function loadAllData() {
             updateStatus('live', `Live — ${eventsData.length} events loaded`);
         }).catch(err => {
             console.warn('Background data load partial failure:', err);
+            updateStatus('live', 'Live — some data sources unavailable');
         });
 
     } catch (err) {

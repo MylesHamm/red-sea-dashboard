@@ -218,16 +218,16 @@ _MARITIME_KEYWORDS = [
 ]
 
 
-def _paginated_acled_fetch(token: str, params: dict, label: str) -> List[dict]:
+def _paginated_acled_fetch(token: str, params: dict, label: str, max_pages: int = 15) -> List[dict]:
     """Fetch paginated ACLED results."""
     results = []
-    for page in range(1, 30):
+    for page in range(1, max_pages + 1):
         p = {**params, "page": page}
         resp = requests.get(
             config.ACLED_DATA_URL,
             headers={**_BROWSER_HEADERS, "Authorization": f"Bearer {token}"},
             params=p,
-            timeout=20,
+            timeout=12,
         )
         resp.raise_for_status()
         batch = resp.json().get("data", [])
@@ -480,7 +480,7 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
             f"https://query1.finance.yahoo.com/v8/finance/chart/BZ=F"
             f"?period1={period1}&period2={period2}&interval=1d"
         )
-        yf_resp = requests.get(yf_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+        yf_resp = requests.get(yf_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
         yf_resp.raise_for_status()
         yf_data = yf_resp.json()
         result = yf_data.get("chart", {}).get("result", [])
@@ -735,11 +735,11 @@ def load_master_dataset() -> dict:
     # KPIs
     valid_prices = df["Brent_Price"].dropna()
 
-    # Use live Brent price from EIA/yfinance instead of stale CSV last-row
-    live_brent = fetch_brent_prices()
-    if live_brent:
+    # Use cached Brent price if available (non-blocking); fall back to CSV last-row
+    live_brent = _read_cache("brent_prices", config.CACHE_TTL_BRENT)
+    if live_brent and len(live_brent) >= 2:
         live_latest = live_brent[-1]["price"]
-        live_prev = live_brent[-2]["price"] if len(live_brent) > 1 else live_latest
+        live_prev = live_brent[-2]["price"]
         latest_brent = round(live_latest, 2)
         brent_change = round(live_latest - live_prev, 2)
     else:
@@ -825,7 +825,7 @@ def fetch_iran_events() -> List[dict]:
                     params={"_format": "json", "country": "Iran",
                             "event_date": "2025-01-01|2026-12-31", "event_date_where": "BETWEEN",
                             "fields": iran_fields, "limit": 5000, "page": page},
-                    timeout=20,
+                    timeout=12,
                 )
                 resp.raise_for_status()
                 batch = resp.json().get("data", [])
@@ -845,7 +845,7 @@ def fetch_iran_events() -> List[dict]:
                         "actor2": actor2, "actor2_where": "LIKE",
                         "event_date": "2025-01-01|2026-12-31", "event_date_where": "BETWEEN",
                         "fields": iran_fields, "limit": 5000},
-                timeout=20,
+                timeout=12,
             )
             resp.raise_for_status()
             bilateral = resp.json().get("data", [])
@@ -995,7 +995,7 @@ def fetch_iran_news() -> List[dict]:
 
         for q in queries:
             url = f"https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
-            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
             if resp.status_code != 200:
                 continue
             root = ET.fromstring(resp.text)
@@ -1122,7 +1122,7 @@ def _fetch_chokepoint_transits(chokepoint_key: str) -> List[dict]:
             "f": "json",
         }
         try:
-            resp = requests.get(_PORTWATCH_BASE, params=params, headers=_BROWSER_HEADERS, timeout=30)
+            resp = requests.get(_PORTWATCH_BASE, params=params, headers=_BROWSER_HEADERS, timeout=15)
             resp.raise_for_status()
             data = resp.json()
         except Exception as e:
