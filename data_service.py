@@ -469,6 +469,14 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
         "2026-03-17": 103.42,  # CNBC: +3.2% as allies refuse Hormuz escort
         "2026-03-18": 107.38,  # CNBC: +3.8% amid Hormuz shutdown fears
         "2026-03-19": 108.65,  # CNBC: Hit $119 intraday; settled +1.18% after Netanyahu comments
+        "2026-03-20": 110.96,  # Iraq force majeure on Basra crude; supply disruptions widen
+        # Mar 21 (Sat) and Mar 22 (Sun) — no settlement
+        "2026-03-23": 96.07,   # Sharp pullback on IRGC Hormuz 'tollbooth' de-escalation signals
+        "2026-03-24": 100.09,  # Partial recovery; China/India negotiate Hormuz passage
+        "2026-03-25": 103.42,  # Kuwait airport drone attack; regional spread
+        "2026-03-26": 108.01,  # Iran rejects talks; IRGC confirms tollbooth system
+        "2026-03-27": 105.32,  # Marines arrive; humanitarian corridor eases fears slightly
+        "2026-03-28": 112.57,  # Houthis fire missiles at Israel; 82nd Airborne deploys
     }
 
     # ── Layer 1: Yahoo Finance direct API ────────────────────────────────────
@@ -971,6 +979,15 @@ def get_curated_iran_events() -> List[dict]:
 
         # ── Day 20 (March 19, 2026) ──
         {"date": "2026-03-19", "title": "Brent Hits $115; Strikes on Yazd Airport; Ras Laffan LNG Hub Hit", "type": "military", "description": "Brent crude surges to $115/bbl after Israeli strikes spark Iranian retaliation on Qatar's Ras Laffan LNG hub. US-Israeli strikes hit Yazd Airport. Trump threatens to 'blow up' South Pars if Iran continues attacking Qatar. Saudi Arabia warns it will take military action against Iran. IDF has carried out 7,600+ strikes across Iran. Pentagon requests $200B+ war budget. FM Araghchi warns allies helping reopen Hormuz risk 'complicity in war crimes.'", "severity": 5, "fatalities": 0, "lat": 31.9049, "lon": 54.2825, "location": "Yazd, Iran"},
+
+        # ── Days 21-30 (March 20-29, 2026) ──
+        {"date": "2026-03-20", "title": "Iraq Declares Force Majeure on Basra Crude; Brent at $110.96", "type": "proxy", "description": "Iraq declares force majeure on Basra crude exports citing pipeline damage from Iranian retaliatory strikes near Fao Peninsula. Gulf tanker insurance premiums hit record highs. Brent settles at $110.96 as supply disruptions widen beyond Iran.", "severity": 4, "fatalities": 0, "lat": 30.5085, "lon": 47.7804, "location": "Basra, Iraq"},
+        {"date": "2026-03-23", "title": "Brent Drops to $96; IRGC Hormuz 'Tollbooth' Rumors Emerge", "type": "diplomatic", "description": "Brent drops sharply to $96.07 as reports emerge that IRGC may allow select nations to transit Hormuz for fees — a de facto 'tollbooth' system. Markets interpret this as partial de-escalation. China and India reportedly negotiating safe passage for their flagged tankers.", "severity": 3, "fatalities": 0, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
+        {"date": "2026-03-25", "title": "Kuwait Airport Drone Attack; UNIFIL Peacekeeper Killed in Lebanon", "type": "military", "description": "Iranian-aligned militia drones strike Kuwait International Airport, damaging runway and terminal. One UNIFIL peacekeeper killed in southern Lebanon as Hezbollah-IDF fighting intensifies. Regional conflict spreading to previously neutral states.", "severity": 4, "fatalities": 3, "lat": 29.2266, "lon": 47.9689, "location": "Kuwait City, Kuwait"},
+        {"date": "2026-03-26", "title": "Iran Rejects Direct US Talks; IRGC Opens Hormuz 'Tollbooth'", "type": "diplomatic", "description": "Iran formally rejects direct US negotiations, calling preconditions 'surrender terms.' IRGC confirms selective Hormuz transit for Chinese and Indian tankers paying transit fees — estimated $2-5M per passage. Western-flagged vessels still blocked. Brent rebounds to $108.01.", "severity": 4, "fatalities": 0, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
+        {"date": "2026-03-27", "title": "3,500 Marines Arrive on USS Tripoli; Humanitarian Ships Allowed", "type": "military", "description": "USS Tripoli arrives in Gulf of Oman with 3,500 Marines from 15th MEU. Pentagon announces humanitarian corridor through Hormuz for food and medical supplies. Iran allows passage of two humanitarian vessels as goodwill gesture while maintaining military blockade.", "severity": 4, "fatalities": 0, "lat": 25.0000, "lon": 57.5000, "location": "Gulf of Oman"},
+        {"date": "2026-03-28", "title": "Houthis Fire Missiles at Israel; 82nd Airborne Deploys to Region", "type": "military", "description": "Houthis fire ballistic missiles at Israel for first time since war began — 11 injured from debris in southern Israel. Marks major Houthi escalation beyond Red Sea shipping attacks. 82nd Airborne Division deploys to region. Brent surges to $112.57. Renewed fears of Red Sea shipping strikes as Houthis re-enter direct combat.", "severity": 5, "fatalities": 0, "lat": 31.0461, "lon": 34.8516, "location": "Southern Israel"},
+        {"date": "2026-03-29", "title": "Pentagon Prepares Ground Operations in Iran; 13 US KIA Total", "type": "military", "description": "Pentagon announces preparation for 'weeks of ground operations' targeting Qeshm Island and Kharg Island to permanently secure Hormuz and eliminate Iran's oil export capability. 82nd Airborne and Marine forces staging. Iran's IRGC threatens to 'rain fire' on any ground troops. US casualties now 13 KIA, 300+ wounded since Feb 28. Oil markets brace for further escalation.", "severity": 5, "fatalities": 0, "lat": 26.8500, "lon": 55.9000, "location": "Qeshm Island, Iran"},
     ]
 
 
