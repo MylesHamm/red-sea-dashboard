@@ -148,10 +148,16 @@ async def get_iran_events():
 @app.get("/api/iran-impact")
 async def get_iran_impact():
     """Oil price impact analysis around Iran events."""
-    # Fetch iran events and brent prices in parallel
-    iran_task = _run_sync(data_service.fetch_iran_events)
-    brent_task = _run_sync(data_service.fetch_brent_prices)
-    iran_events, brent_prices = await asyncio.gather(iran_task, brent_task)
+    # Read from cache if available (iran-events endpoint warms this);
+    # only fetch if cache is cold
+    iran_cached = data_service._read_cache("iran_events", 3600)
+    if iran_cached:
+        iran_events = iran_cached
+        brent_prices = await _run_sync(data_service.fetch_brent_prices)
+    else:
+        iran_task = _run_sync(data_service.fetch_iran_events)
+        brent_task = _run_sync(data_service.fetch_brent_prices)
+        iran_events, brent_prices = await asyncio.gather(iran_task, brent_task)
     result = data_service.compute_iran_impact(iran_events, brent_prices)
     result["brent_prices"] = brent_prices
     return result

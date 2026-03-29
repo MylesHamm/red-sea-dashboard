@@ -218,7 +218,7 @@ _MARITIME_KEYWORDS = [
 ]
 
 
-def _paginated_acled_fetch(token: str, params: dict, label: str, max_pages: int = 15) -> List[dict]:
+def _paginated_acled_fetch(token: str, params: dict, label: str, max_pages: int = 10) -> List[dict]:
     """Fetch paginated ACLED results."""
     results = []
     for page in range(1, max_pages + 1):
@@ -227,7 +227,7 @@ def _paginated_acled_fetch(token: str, params: dict, label: str, max_pages: int 
             config.ACLED_DATA_URL,
             headers={**_BROWSER_HEADERS, "Authorization": f"Bearer {token}"},
             params=p,
-            timeout=12,
+            timeout=10,
         )
         resp.raise_for_status()
         batch = resp.json().get("data", [])
@@ -864,14 +864,14 @@ def fetch_iran_events() -> List[dict]:
 
         def _fetch_iran_country():
             results = []
-            for page in range(1, 20):
+            for page in range(1, 8):  # Cap at 7 pages (35k events max — more than enough)
                 resp = requests.get(
                     config.ACLED_DATA_URL,
                     headers={**_BROWSER_HEADERS, "Authorization": f"Bearer {token}"},
                     params={"_format": "json", "country": "Iran",
                             "event_date": "2025-01-01|2026-12-31", "event_date_where": "BETWEEN",
                             "fields": iran_fields, "limit": 5000, "page": page},
-                    timeout=12,
+                    timeout=10,
                 )
                 resp.raise_for_status()
                 batch = resp.json().get("data", [])
@@ -891,7 +891,7 @@ def fetch_iran_events() -> List[dict]:
                         "actor2": actor2, "actor2_where": "LIKE",
                         "event_date": "2025-01-01|2026-12-31", "event_date_where": "BETWEEN",
                         "fields": iran_fields, "limit": 5000},
-                timeout=12,
+                timeout=10,
             )
             resp.raise_for_status()
             bilateral = resp.json().get("data", [])
@@ -1048,12 +1048,13 @@ def fetch_iran_news() -> List[dict]:
         seen_titles = set()
         all_articles = []
 
-        for q in queries:
+        def _fetch_rss(q):
             url = f"https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
-            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=6)
             if resp.status_code != 200:
-                continue
+                return []
             root = ET.fromstring(resp.text)
+            items = []
             for item in root.findall(".//item"):
                 title_el = item.find("title")
                 pub_el = item.find("pubDate")
@@ -1061,18 +1062,24 @@ def fetch_iran_news() -> List[dict]:
                 link_el = item.find("link")
                 if title_el is None or pub_el is None:
                     continue
-                title = title_el.text or ""
-                # Deduplicate across queries
-                title_lower = title.lower()
-                if title_lower in seen_titles:
-                    continue
-                seen_titles.add(title_lower)
-                all_articles.append({
-                    "title": title,
+                items.append({
+                    "title": title_el.text or "",
                     "pubDate": pub_el.text or "",
                     "source": source_el.text if source_el is not None else "",
                     "url": link_el.text if link_el is not None else "",
                 })
+            return items
+
+        # Fetch all RSS feeds in parallel
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            rss_results = list(pool.map(_fetch_rss, queries))
+
+        for items in rss_results:
+            for a in items:
+                title_lower = a["title"].lower()
+                if title_lower not in seen_titles:
+                    seen_titles.add(title_lower)
+                    all_articles.append(a)
 
         # Relevance filter: must mention Iran/Hormuz AND oil/military/war context
         iran_terms = {"iran", "iranian", "tehran", "hormuz", "irgc", "persian gulf", "hezbollah", "houthi"}

@@ -18,6 +18,8 @@ let hypothesisData = null;
 let iranEventsData = null;
 let iranImpactData = null;
 let currentTab = 'overview';
+let _iranDataLoading = false;
+let _iranDataLoaded = false;
 
 // ─── Tab Navigation ─────────────────────────────────────────────────────────
 
@@ -48,24 +50,27 @@ function switchTab(tab) {
     }
 
     // Initialize Iran/Israel map + resize charts on current events tab visit
-    // (Chart.js needs a visible parent to compute correct canvas dimensions)
+    // Lazy-loads Iran data on first visit; re-renders charts on subsequent visits
     if (tab === 'currentevents') {
-        setTimeout(() => {
-            try {
-                if (iranEventsData) _loadIranIsraelMapFromData();
-                resizeIranIsraelMap();
-            } catch (e) { console.warn('Iran map init:', e); }
-            // Re-render charts that may have been created while tab was hidden (0×0 canvas)
-            if (iranImpactData) {
-                const brentPrices = iranImpactData.brent_prices || (masterData ? masterData.timeseries.filter(d => d.brent_price).map(d => ({ date: d.date, price: d.brent_price })) : []);
-                const curated = iranEventsData ? iranEventsData.curated || [] : [];
-                const isWarZoom = document.getElementById('zoomWar')?.classList.contains('active') ?? true;
-                createIranPriceTimelineChart(brentPrices, curated, isWarZoom);
-                createIranForecastChart(brentPrices);
-                createIranImpactChart(iranImpactData.impact_by_type || {});
-                if (iranEventsData) createIranEventTypeChart(iranEventsData.data || []);
-            }
-        }, 150);
+        if (!_iranDataLoaded && !_iranDataLoading) {
+            _loadIranData();
+        } else if (_iranDataLoaded) {
+            setTimeout(() => {
+                try {
+                    if (iranEventsData) _loadIranIsraelMapFromData();
+                    resizeIranIsraelMap();
+                } catch (e) { console.warn('Iran map init:', e); }
+                if (iranImpactData) {
+                    const brentPrices = iranImpactData.brent_prices || (masterData ? masterData.timeseries.filter(d => d.brent_price).map(d => ({ date: d.date, price: d.brent_price })) : []);
+                    const curated = iranEventsData ? iranEventsData.curated || [] : [];
+                    const isWarZoom = document.getElementById('zoomWar')?.classList.contains('active') ?? true;
+                    createIranPriceTimelineChart(brentPrices, curated, isWarZoom);
+                    createIranForecastChart(brentPrices);
+                    createIranImpactChart(iranImpactData.impact_by_type || {});
+                    if (iranEventsData) createIranEventTypeChart(iranEventsData.data || []);
+                }
+            }, 150);
+        }
     }
 
     // Re-render econometric charts when tab becomes visible
@@ -107,6 +112,47 @@ async function fetchJSON(url) {
     return resp.json();
 }
 
+async function _loadIranData() {
+    if (_iranDataLoaded || _iranDataLoading) return;
+    _iranDataLoading = true;
+    updateStatus('loading', 'Loading Iran events & impact data...');
+    try {
+        const [iranEvents, iranImpact] = await Promise.all([
+            fetchJSON('/api/iran-events').catch(() => ({ count: 0, data: [], curated: [] })),
+            fetchJSON('/api/iran-impact').catch(() => ({ kpis: {}, impact_by_type: {}, event_table: [] })),
+        ]);
+        iranEventsData = iranEvents;
+        iranImpactData = iranImpact;
+        _iranDataLoaded = true;
+
+        renderCurrentEvents();
+
+        // If still on the tab, init map + charts
+        if (currentTab === 'currentevents') {
+            setTimeout(() => {
+                try {
+                    _loadIranIsraelMapFromData();
+                    resizeIranIsraelMap();
+                } catch (e) { console.warn('Iran map init:', e); }
+                const brentPrices = iranImpactData.brent_prices || (masterData ? masterData.timeseries.filter(d => d.brent_price).map(d => ({ date: d.date, price: d.brent_price })) : []);
+                const curated = iranEventsData ? iranEventsData.curated || [] : [];
+                const isWarZoom = document.getElementById('zoomWar')?.classList.contains('active') ?? true;
+                createIranPriceTimelineChart(brentPrices, curated, isWarZoom);
+                createIranForecastChart(brentPrices);
+                createIranImpactChart(iranImpactData.impact_by_type || {});
+                if (iranEventsData) createIranEventTypeChart(iranEventsData.data || []);
+            }, 150);
+        }
+
+        updateStatus('live', `Live — Iran data loaded`);
+    } catch (err) {
+        console.warn('Iran data load failed:', err);
+        updateStatus('live', 'Live — Iran data unavailable');
+    } finally {
+        _iranDataLoading = false;
+    }
+}
+
 async function loadAllData() {
     updateStatus('loading', 'Loading core data...');
 
@@ -127,6 +173,7 @@ async function loadAllData() {
         renderEconometric();
         renderControls();
         renderDataTable();
+        renderMaritime();
 
         // If map tab is active, load thesis events now
         if (currentTab === 'geospatial' && thesisEventsData.length) {
@@ -136,32 +183,22 @@ async function loadAllData() {
         updateStatus('live', `Live — ${masterData.kpis.total_trading_days || masterData.timeseries.length} trading days loaded`);
         updateLastUpdated();
 
-        // Phase 2: Load external API data in parallel (non-blocking)
-        updateStatus('loading', 'Loading ACLED + Iran events...');
-
-        Promise.all([
-            fetchJSON('/api/events').catch(() => ({ count: 0, data: [] })),
-            fetchJSON('/api/iran-events').catch(() => ({ count: 0, data: [], curated: [] })),
-            fetchJSON('/api/iran-impact').catch(() => ({ kpis: {}, impact_by_type: {}, event_table: [] })),
-        ]).then(([events, iranEvents, iranImpact]) => {
+        // Phase 2: Load ACLED events (for map) in background; Iran data loads on-demand
+        fetchJSON('/api/events').then(events => {
             eventsData = events.data || [];
             if (!thesisEventsData.length) thesisEventsData = eventsData;
-            iranEventsData = iranEvents;
-            iranImpactData = iranImpact;
-
-            renderCurrentEvents();
-            renderMaritime();
-
-            // Update map if on geospatial tab and thesis data wasn't available earlier
             if (currentTab === 'geospatial' && allMapEvents.length === 0 && thesisEventsData.length) {
                 loadMapEvents(thesisEventsData, true);
             }
-
             updateStatus('live', `Live — ${eventsData.length} events loaded`);
-        }).catch(err => {
-            console.warn('Background data load partial failure:', err);
+        }).catch(() => {
             updateStatus('live', 'Live — some data sources unavailable');
         });
+
+        // If user is already on the Iran tab, load immediately
+        if (currentTab === 'currentevents') {
+            _loadIranData();
+        }
 
     } catch (err) {
         console.error('Data load failed:', err);
