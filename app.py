@@ -222,15 +222,30 @@ async def refresh_status():
 
 @app.on_event("startup")
 async def preload_data():
-    """Warm all caches in parallel on app boot so users don't wait."""
-    import concurrent.futures
+    """Warm caches in a background thread so the server starts accepting
+    requests immediately (critical for Render health-check timing)."""
 
     def _preload():
+        import concurrent.futures
+        print("  [preload] Starting background cache warming...")
         with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+            # Phase 1: Warm external API caches that master depends on
+            api_futures = {
+                "brent": pool.submit(data_service.fetch_brent_prices),
+                "dxy": pool.submit(data_service.fetch_dxy),
+                "ovx": pool.submit(data_service.fetch_ovx),
+            }
+            for name, fut in api_futures.items():
+                try:
+                    fut.result(timeout=20)
+                    print(f"  [preload] {name}: OK")
+                except Exception as e:
+                    print(f"  [preload] {name}: FAILED ({e})")
+
+            # Phase 2: master (reads caches from phase 1) + remaining sources
             futures = {
                 "master": pool.submit(data_service.load_master_dataset),
                 "thesis": pool.submit(data_service.load_thesis_events),
-                "brent": pool.submit(data_service.fetch_brent_prices),
                 "acled": pool.submit(data_service.fetch_acled_events),
                 "iran": pool.submit(data_service.fetch_iran_events),
                 "news": pool.submit(data_service.fetch_iran_news),
@@ -240,14 +255,15 @@ async def preload_data():
             }
             for name, fut in futures.items():
                 try:
-                    fut.result(timeout=90)
+                    fut.result(timeout=60)
                     print(f"  [preload] {name}: OK")
                 except Exception as e:
                     print(f"  [preload] {name}: FAILED ({e})")
+        print("  [preload] All data sources warmed")
 
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, _preload)
-    print("  [preload] All data sources warmed")
+    # Fire-and-forget in a daemon thread — server starts immediately
+    t = threading.Thread(target=_preload, daemon=True)
+    t.start()
 
 
 # ─── Frontend Entry Point ────────────────────────────────────────────────────

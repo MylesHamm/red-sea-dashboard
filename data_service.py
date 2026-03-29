@@ -644,11 +644,49 @@ def fetch_yfinance_series(ticker: str, cache_key: str) -> List[dict]:
 
 
 def fetch_dxy() -> List[dict]:
-    return fetch_yfinance_series("DX-Y.NYB", "dxy")
+    """DXY: try yfinance first, then FRED DTWEXBGS (broad trade-weighted dollar) as fallback."""
+    result = fetch_yfinance_series("DX-Y.NYB", "dxy")
+    if result:
+        return result
+    # FRED fallback — broad trade-weighted dollar index (close proxy for DXY)
+    try:
+        from fredapi import Fred
+        fred = Fred(api_key=config.FRED_API_KEY)
+        series = fred.get_series("DTWEXBGS", observation_start="2023-10-01")
+        records = [
+            {"date": idx.strftime("%Y-%m-%d"), "value": round(float(val), 4)}
+            for idx, val in series.items() if pd.notna(val)
+        ]
+        if records:
+            _write_cache("dxy", records)
+            logger.info(f"FRED DTWEXBGS (DXY proxy): fetched {len(records)} data points")
+            return records
+    except Exception as e:
+        logger.warning(f"FRED DXY fallback failed: {e}")
+    return []
 
 
 def fetch_ovx() -> List[dict]:
-    return fetch_yfinance_series("^OVX", "ovx")
+    """OVX: try yfinance first, then FRED OVXCLS as fallback."""
+    result = fetch_yfinance_series("^OVX", "ovx")
+    if result:
+        return result
+    # FRED fallback — CBOE Crude Oil ETF Volatility Index
+    try:
+        from fredapi import Fred
+        fred = Fred(api_key=config.FRED_API_KEY)
+        series = fred.get_series("OVXCLS", observation_start="2023-10-01")
+        records = [
+            {"date": idx.strftime("%Y-%m-%d"), "value": round(float(val), 4)}
+            for idx, val in series.items() if pd.notna(val)
+        ]
+        if records:
+            _write_cache("ovx", records)
+            logger.info(f"FRED OVXCLS: fetched {len(records)} data points")
+            return records
+    except Exception as e:
+        logger.warning(f"FRED OVX fallback failed: {e}")
+    return []
 
 
 # ─── FRED API (China BCI) ───────────────────────────────────────────────────
@@ -754,14 +792,14 @@ def load_master_dataset() -> dict:
         latest_brent = round(float(valid_prices.iloc[-1]), 2)
         brent_change = round(float(valid_prices.iloc[-1] - valid_prices.iloc[-2]), 2) if len(valid_prices) > 1 else 0
 
-    # Use live DXY from yfinance instead of stale CSV last-row
-    live_dxy = fetch_dxy()
+    # Use cached DXY (non-blocking); fall back to CSV last-row
+    live_dxy = _read_cache("dxy", config.CACHE_TTL_YFINANCE)
     latest_dxy = round(live_dxy[-1]["value"], 2) if live_dxy else (
         round(float(df["DXY"].dropna().iloc[-1]), 2) if df["DXY"].dropna().shape[0] > 0 else None
     )
 
-    # Use live OVX from yfinance instead of stale CSV last-row
-    live_ovx = fetch_ovx()
+    # Use cached OVX (non-blocking); fall back to CSV last-row
+    live_ovx = _read_cache("ovx", config.CACHE_TTL_YFINANCE)
     latest_ovx = round(live_ovx[-1]["value"], 2) if live_ovx else (
         round(float(df["OVX"].dropna().iloc[-1]), 2) if df["OVX"].dropna().shape[0] > 0 else None
     )
