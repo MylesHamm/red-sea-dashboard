@@ -765,20 +765,20 @@
                     <div class="verdict-card">
                         <div class="verdict-status" style="background:rgba(196,61,61,0.15);color:#C43D3D;border:1px solid rgba(196,61,61,0.3)">NOT SUPPORTED</div>
                         <h3>H1: Fear Premium</h3>
-                        <p class="verdict-stat">&beta; = &minus;0.0031, p = 0.802</p>
-                        <p>Attack frequency coefficient is not statistically significant, indicating weekly attack frequency does not independently predict oil price volatility (R&sup2; = 0.642).</p>
+                        <p class="verdict-stat">&beta; = &minus;0.033, p = 0.026*</p>
+                        <p>Statistically significant but negative &mdash; more attacks are associated with <em>less</em> volatility, the opposite of the fear premium hypothesis. Supports market adaptation (R&sup2; = 0.487).</p>
                     </div>
                     <div class="verdict-card">
                         <div class="verdict-status" style="background:rgba(196,61,61,0.15);color:#C43D3D;border:1px solid rgba(196,61,61,0.3)">NOT SUPPORTED</div>
                         <h3>H2: Tanker-Specific Targeting</h3>
-                        <p class="verdict-stat">&beta; = &minus;0.0811, p = 0.215</p>
-                        <p>Tanker-specific attacks show a negative but not statistically significant coefficient after controlling for all 7 macroeconomic variables, consistent with market adaptation (R&sup2; = 0.642).</p>
+                        <p class="verdict-stat">&beta; = &minus;0.233, p = 0.004**</p>
+                        <p>Strongest adaptation effect. Despite targeting energy infrastructure directly, tanker attacks are associated with <em>reduced</em> volatility &mdash; markets recalibrated to energy-sector targeting (R&sup2; = 0.464).</p>
                     </div>
                     <div class="verdict-card">
                         <div class="verdict-status" style="background:rgba(196,61,61,0.15);color:#C43D3D;border:1px solid rgba(196,61,61,0.3)">NOT SUPPORTED</div>
                         <h3>H3: Geographic Concentration (Chokepoint Proximity)</h3>
-                        <p class="verdict-stat">&beta; = 0.1684, p = 0.012</p>
-                        <p>Chokepoint attacks show a positive and statistically significant coefficient after controlling for all 7 macroeconomic variables, the only variable with marginal predictive power (R&sup2; = 0.645).</p>
+                        <p class="verdict-stat">&beta; = &minus;0.128, p = 0.250</p>
+                        <p>Not statistically significant. Despite 67% of attacks concentrating near Bab el-Mandeb, geographic proximity alone does not predict oil price volatility (R&sup2; = 0.459).</p>
                     </div>
                 </div>
             </div>
@@ -790,20 +790,20 @@
                     <div class="chart-header">
                         <h3>MARKET ADAPTATION TO SUSTAINED MARITIME DISRUPTIONS</h3>
                     </div>
-                    <p style="padding:0 24px 16px;color:var(--text-secondary);line-height:1.7">After controlling for 7 macroeconomic variables using GARCH conditional variance as the dependent variable, none of the three hypotheses are supported in their predicted direction. H1 (&beta; = &minus;0.0031, p = 0.802) and H2 (&beta; = &minus;0.0811, p = 0.215) are not statistically significant. Only H3 chokepoint attacks reach significance (&beta; = 0.1684, p = 0.012), representing the sole variable with marginal predictive power. Oil markets have largely priced in the sustained Red Sea disruption campaign.</p>
+                    <p style="padding:0 24px 16px;color:var(--text-secondary);line-height:1.7">After controlling for 7 macroeconomic variables using GARCH conditional variance as the dependent variable, none of the three hypotheses are supported in their predicted direction. H1 (&beta; = &minus;0.033, p = 0.026) and H2 (&beta; = &minus;0.233, p = 0.004) are statistically significant but <em>negative</em> &mdash; more attacks are associated with less volatility, not more. H3 chokepoint attacks are not significant (&beta; = &minus;0.128, p = 0.250). The significant negative coefficients for H1 and H2 provide direct evidence of market adaptation to the sustained Red Sea disruption campaign.</p>
                 </div>
                 <div class="mechanism-grid">
                     <div class="mechanism-card">
-                        <h4>CHOKEPOINT VULNERABILITY</h4>
-                        <p>Attacks at the Bab el-Mandeb strait represent irreducible geographic risk that markets cannot fully price away or diversify.</p>
+                        <h4>ADAPTATION, NOT FEAR</h4>
+                        <p>Both H1 and H2 show statistically significant negative coefficients &mdash; as attacks increased, volatility decreased. Markets adapted to Houthi operations rather than panicking.</p>
                     </div>
                     <div class="mechanism-card">
                         <h4>MACROECONOMIC DOMINANCE</h4>
-                        <p>DXY, OVX, China PMI, and Baker Hughes rig count explain ~46-49% of volatility variance, absorbing the effects of general attack volume.</p>
+                        <p>OVX (p &lt; 0.001), DXY (p = 0.001), Baker Hughes (p &lt; 0.001), and Russia-Ukraine (p = 0.038) explain ~46&ndash;49% of volatility variance, dominating attack variables.</p>
                     </div>
                     <div class="mechanism-card">
-                        <h4>MARKET ADAPTATION</h4>
-                        <p>The significant negative coefficients for H1 and H2 indicate that sustained Houthi operations have become priced into market expectations over the 24-month campaign.</p>
+                        <h4>TANKER TARGETING PARADOX</h4>
+                        <p>Tanker-specific attacks (&beta; = &minus;0.233, p = 0.004) show the strongest adaptation effect &mdash; markets specifically recalibrated to energy-sector targeting over the 24-month campaign.</p>
                     </div>
                 </div>
             </div>
