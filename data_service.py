@@ -186,7 +186,7 @@ _ACLED_DATE_RANGE = "2023-10-01|2026-12-31"
 def _df_to_event_records(df: pd.DataFrame) -> List[dict]:
     """Convert a DataFrame to a list of event dicts (vectorized, no iterrows)."""
     col_map = {c: c.lower() for c in df.columns}
-    df = df.rename(columns=col_map)
+    df = df.rename(columns=col_map).copy()
     str_cols = [c for c in _EVENT_COLUMNS if c not in ("latitude", "longitude", "fatalities")]
     for c in str_cols:
         if c in df.columns:
