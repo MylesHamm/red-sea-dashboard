@@ -20,6 +20,9 @@ let iranImpactData = null;
 let currentTab = 'overview';
 let _iranDataLoading = false;
 let _iranDataLoaded = false;
+let _acledLoaded = false;
+let _acledLoading = false;
+const _renderedTabs = new Set(['overview']);  // track which tabs have been rendered
 
 // ─── Tab Navigation ─────────────────────────────────────────────────────────
 
@@ -73,9 +76,12 @@ function switchTab(tab) {
         }
     }
 
-    // Re-render econometric charts when tab becomes visible
-    // (Chart.js needs visible parent for correct canvas sizing)
+    // Render econometric tab on first visit + re-render charts for correct sizing
     if (tab === 'econometric' && masterData && hypothesisData) {
+        if (!_renderedTabs.has('econometric')) {
+            _renderedTabs.add('econometric');
+            renderEconometric();
+        }
         setTimeout(() => {
             createModelComparisonChart(hypothesisData);
             createPriceWindowChart(masterData.price_windows);
@@ -83,16 +89,40 @@ function switchTab(tab) {
         }, 100);
     }
 
-    // Re-render correlation heatmap when controls tab becomes visible
-    // (canvas needs visible parent for correct sizing)
-    if (tab === 'controls' && masterData && masterData.correlation) {
-        setTimeout(() => createCorrelationChart(masterData.correlation), 100);
+    // Render controls tab on first visit + re-render heatmap for correct sizing
+    if (tab === 'controls' && masterData) {
+        if (!_renderedTabs.has('controls')) {
+            _renderedTabs.add('controls');
+            renderControls();
+        } else if (masterData.correlation) {
+            setTimeout(() => createCorrelationChart(masterData.correlation), 100);
+        }
+    }
+
+    // Render data table on first visit; lazy-load ACLED events for table
+    if (tab === 'data' && masterData) {
+        if (!_renderedTabs.has('data')) {
+            _renderedTabs.add('data');
+            renderDataTable();
+        }
+        if (!_acledLoaded && !_acledLoading) {
+            _acledLoading = true;
+            fetchJSON('/api/events').then(events => {
+                eventsData = events.data || [];
+                if (!thesisEventsData.length) thesisEventsData = eventsData;
+                _acledLoaded = true;
+                renderDataTable();
+            }).catch(() => {}).finally(() => { _acledLoading = false; });
+        }
     }
 
     // Initialize maritime embeds and charts on first tab visit
     if (tab === 'maritime') {
+        if (!_renderedTabs.has('maritime')) {
+            _renderedTabs.add('maritime');
+            renderMaritime();
+        }
         initMaritimeEmbeds();
-        // Defer chart creation until canvas is visible (avoids 0px sizing)
         setTimeout(() => {
             createSuezTransitChart();
             createBabElMandebChart();
@@ -168,12 +198,8 @@ async function loadAllData() {
         thesisEventsData = (thesisEvents && thesisEvents.data) ? thesisEvents.data : [];
         hypothesisData = hypothesis;
 
-        // Render core tabs immediately
+        // Render only the visible tab immediately — defer others to tab switch
         renderOverview();
-        renderEconometric();
-        renderControls();
-        renderDataTable();
-        renderMaritime();
 
         // If map tab is active, load thesis events now
         if (currentTab === 'geospatial' && thesisEventsData.length) {
@@ -183,19 +209,9 @@ async function loadAllData() {
         updateStatus('live', `Live — ${masterData.kpis.total_trading_days || masterData.timeseries.length} trading days loaded`);
         updateLastUpdated();
 
-        // Phase 2: Load ACLED events (for map) in background; Iran data loads on-demand
-        fetchJSON('/api/events').then(events => {
-            eventsData = events.data || [];
-            if (!thesisEventsData.length) thesisEventsData = eventsData;
-            if (currentTab === 'geospatial' && allMapEvents.length === 0 && thesisEventsData.length) {
-                loadMapEvents(thesisEventsData, true);
-            }
-            updateStatus('live', `Live — ${eventsData.length} events loaded`);
-        }).catch(() => {
-            updateStatus('live', 'Live — some data sources unavailable');
-        });
-
-        // If user is already on the Iran tab, load immediately
+        // Phase 2: Heavy API calls load on-demand when tabs are visited
+        // ACLED events only needed for Data Explorer tab — defer
+        // Iran data deferred to currentevents tab visit (_loadIranData)
         if (currentTab === 'currentevents') {
             _loadIranData();
         }

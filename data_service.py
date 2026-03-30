@@ -161,7 +161,7 @@ def _get_acled_token() -> str:
                 "client_id": "acled",
             },
             headers={**_BROWSER_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
-            timeout=15,
+            timeout=8,
         )
         if not resp.ok:
             raise requests.HTTPError(
@@ -414,7 +414,7 @@ def fetch_brent_prices() -> List[dict]:
                 "start": "2023-10-01",
                 "length": 5000,
             },
-            timeout=15,
+            timeout=10,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -479,71 +479,88 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
         "2026-03-28": 112.57,  # Houthis fire missiles at Israel; 82nd Airborne deploys
     }
 
-    # ── Layer 1: Yahoo Finance direct API ────────────────────────────────────
-    try:
-        last_dt = datetime.strptime(last_date, "%Y-%m-%d")
-        period1 = int(last_dt.timestamp())
-        period2 = int((datetime.now() + timedelta(days=1)).timestamp())
-        yf_url = (
-            f"https://query1.finance.yahoo.com/v8/finance/chart/BZ=F"
-            f"?period1={period1}&period2={period2}&interval=1d"
-        )
-        yf_resp = requests.get(yf_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
-        yf_resp.raise_for_status()
-        yf_data = yf_resp.json()
-        result = yf_data.get("chart", {}).get("result", [])
-        if result:
-            timestamps = result[0].get("timestamp", [])
-            closes = result[0]["indicators"]["quote"][0].get("close", [])
-            added = 0
-            for ts, close in zip(timestamps, closes):
-                if close is None:
-                    continue
-                d = datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
-                if d > last_date:
-                    by_date[d] = {"date": d, "price": round(float(close), 2)}
-                    added += 1
-            if added > 0:
-                logger.info(f"Brent Yahoo Finance API: supplemented {added} prices after {last_date}")
-    except Exception as e:
-        logger.warning(f"Yahoo Finance API failed: {e}")
+    # ── Layers 1-3: Run ALL live sources in parallel ──────────────────────────
+    # Yahoo Finance almost always fails from Render cloud IPs, so don't wait
+    # sequentially. FRED is the most reliable server-side source.
 
-    # ── Layer 2: yfinance library ────────────────────────────────────────────
-    live_dates_after = {d for d in by_date if d > last_date}
-    if not live_dates_after:
+    def _try_yahoo_direct():
+        """Layer 1: Yahoo Finance direct API."""
+        try:
+            last_dt = datetime.strptime(last_date, "%Y-%m-%d")
+            period1 = int(last_dt.timestamp())
+            period2 = int((datetime.now() + timedelta(days=1)).timestamp())
+            yf_url = (
+                f"https://query1.finance.yahoo.com/v8/finance/chart/BZ=F"
+                f"?period1={period1}&period2={period2}&interval=1d"
+            )
+            yf_resp = requests.get(yf_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=3)
+            yf_resp.raise_for_status()
+            yf_data = yf_resp.json()
+            result = yf_data.get("chart", {}).get("result", [])
+            prices = {}
+            if result:
+                timestamps = result[0].get("timestamp", [])
+                closes = result[0]["indicators"]["quote"][0].get("close", [])
+                for ts, close in zip(timestamps, closes):
+                    if close is None:
+                        continue
+                    d = datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+                    if d > last_date:
+                        prices[d] = {"date": d, "price": round(float(close), 2)}
+            return prices
+        except Exception as e:
+            logger.warning(f"Yahoo Finance API failed: {e}")
+            return {}
+
+    def _try_yfinance_lib():
+        """Layer 2: yfinance library."""
         try:
             import yfinance as yf
             df = yf.download("BZ=F", start=last_date, progress=False)
-            if not df.empty:
-                if isinstance(df.columns, pd.MultiIndex):
-                    df.columns = df.columns.get_level_values(0)
-                df_valid = df[df["Close"].notna()].copy()
-                df_valid["_date"] = df_valid.index.strftime("%Y-%m-%d")
-                df_valid = df_valid[df_valid["_date"] > last_date]
-                for d, price in zip(df_valid["_date"], df_valid["Close"]):
-                    by_date[d] = {"date": d, "price": round(float(price), 2)}
+            if df.empty:
+                return {}
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+            df_valid = df[df["Close"].notna()].copy()
+            df_valid["_date"] = df_valid.index.strftime("%Y-%m-%d")
+            df_valid = df_valid[df_valid["_date"] > last_date]
+            return {d: {"date": d, "price": round(float(p), 2)} for d, p in zip(df_valid["_date"], df_valid["Close"])}
         except Exception as e:
             logger.warning(f"Brent yfinance failed: {e}")
+            return {}
 
-    # ── Layer 3: FRED DCOILBRENTEU (auto-updates daily, ~1-day lag) ──────────
-    # This is the most reliable server-side source — fills any remaining gaps.
-    live_dates_after = {d for d in by_date if d > last_date}
-    if len(live_dates_after) < 3:  # Likely missing recent days
+    def _try_fred():
+        """Layer 3: FRED DCOILBRENTEU (most reliable, ~1-day lag)."""
         try:
             from fredapi import Fred
             fred = Fred(api_key=config.FRED_API_KEY)
             series = fred.get_series("DCOILBRENTEU", observation_start=last_date)
-            added = 0
+            prices = {}
             for idx, val in series.items():
                 if pd.notna(val):
                     d = idx.strftime("%Y-%m-%d")
-                    if d > last_date and d not in by_date:
-                        by_date[d] = {"date": d, "price": round(float(val), 2)}
-                        added += 1
-            if added > 0:
-                logger.info(f"FRED DCOILBRENTEU: supplemented {added} Brent prices after {last_date}")
+                    if d > last_date:
+                        prices[d] = {"date": d, "price": round(float(val), 2)}
+            return prices
         except Exception as e:
             logger.warning(f"FRED Brent (DCOILBRENTEU) failed: {e}")
+            return {}
+
+    # Run all 3 sources in parallel — first to return wins for each date
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        f_yahoo = pool.submit(_try_yahoo_direct)
+        f_yf = pool.submit(_try_yfinance_lib)
+        f_fred = pool.submit(_try_fred)
+
+    # Merge results: FRED first (most reliable), then overlay Yahoo/yfinance
+    for source_prices in [f_fred.result(), f_yf.result(), f_yahoo.result()]:
+        for d, rec in source_prices.items():
+            if d not in by_date:
+                by_date[d] = rec
+
+    live_added = sum(1 for d in by_date if d > last_date)
+    if live_added:
+        logger.info(f"Brent: {live_added} live prices supplemented after {last_date}")
 
     # ── Layer 4: Hardcoded fallback (last resort) ────────────────────────────
     for date_str, price in fallback_prices.items():
@@ -592,7 +609,7 @@ def fetch_spr_data() -> List[dict]:
                 "start": "2023-10-01",
                 "length": 5000,
             },
-            timeout=15,
+            timeout=10,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -1050,7 +1067,7 @@ def fetch_iran_news() -> List[dict]:
 
         def _fetch_rss(q):
             url = f"https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
-            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=6)
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=3)
             if resp.status_code != 200:
                 return []
             root = ET.fromstring(resp.text)
@@ -1184,7 +1201,7 @@ def _fetch_chokepoint_transits(chokepoint_key: str) -> List[dict]:
             "f": "json",
         }
         try:
-            resp = requests.get(_PORTWATCH_BASE, params=params, headers=_BROWSER_HEADERS, timeout=15)
+            resp = requests.get(_PORTWATCH_BASE, params=params, headers=_BROWSER_HEADERS, timeout=10)
             resp.raise_for_status()
             data = resp.json()
         except Exception as e:
@@ -1487,33 +1504,44 @@ def _promote_acled_events(acled_events: List[dict], curated_events: List[dict]) 
     return scored[:20]
 
 
-def get_merged_curated_events() -> List[dict]:
-    """Merge hardcoded curated events with auto-discovered OSINT events."""
+def get_merged_curated_events(include_news: bool = True) -> List[dict]:
+    """Merge hardcoded curated events with auto-discovered OSINT events.
+
+    Args:
+        include_news: If True, geocode live news headlines and merge.
+                      Set False when called from compute_iran_impact() to avoid
+                      blocking on Google News fetches.
+    """
     # 1. Hardcoded curated events
     curated = get_curated_iran_events()
     for e in curated:
         if "source_type" not in e:
             e["source_type"] = "curated"
 
-    # 2. Geocoded news events
-    try:
-        news = fetch_iran_news()
-        news_events = _geocode_news_events(news)
-        # Deduplicate news against curated (same date + nearby location)
-        curated_index = [(c["date"], c.get("lat", 0), c.get("lon", 0)) for c in curated]
-        deduped_news = []
-        for ne in news_events:
-            is_dup = False
-            for c_date, c_lat, c_lon in curated_index:
-                if ne["date"] == c_date and abs(ne["lat"] - c_lat) < 0.5 and abs(ne["lon"] - c_lon) < 0.5:
-                    is_dup = True
-                    break
-            if not is_dup:
-                deduped_news.append(ne)
-        news_events = deduped_news
-    except Exception as e:
-        logger.warning(f"News geocoding failed: {e}")
-        news_events = []
+    news_events = []
+
+    # 2. Geocoded news events (only if requested and cache is warm)
+    if include_news:
+        try:
+            # Only use cached news — never trigger a live fetch here
+            cached_news = _read_cache("iran_news", 1800)
+            if cached_news:
+                news_events = _geocode_news_events(cached_news)
+                # Deduplicate news against curated (same date + nearby location)
+                curated_index = [(c["date"], c.get("lat", 0), c.get("lon", 0)) for c in curated]
+                deduped_news = []
+                for ne in news_events:
+                    is_dup = False
+                    for c_date, c_lat, c_lon in curated_index:
+                        if ne["date"] == c_date and abs(ne["lat"] - c_lat) < 0.5 and abs(ne["lon"] - c_lon) < 0.5:
+                            is_dup = True
+                            break
+                    if not is_dup:
+                        deduped_news.append(ne)
+                news_events = deduped_news
+        except Exception as e:
+            logger.warning(f"News geocoding failed: {e}")
+            news_events = []
 
     # 3. Merge and sort (curated + news only; ACLED-promoted are internal Iranian
     #    conflicts like armed clashes/IEDs, not US-Iran tensions — excluded)
@@ -1551,8 +1579,8 @@ def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
             return price_map[sorted_dates[-1]]
         return None
 
-    # Get curated events for impact table (includes auto-discovered OSINT events)
-    curated = get_merged_curated_events()
+    # Get curated events for impact table (skip news fetch — avoid blocking)
+    curated = get_merged_curated_events(include_news=False)
 
     # Group curated events by TRADING day.
     # Weekend events (Sat/Sun) roll forward to the next Monday when markets
