@@ -1688,37 +1688,38 @@ def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
 
 
 def get_hypothesis_results() -> dict:
-    """Return hypothesis test results from the econometric analysis.
-    Updated 2026-03-17: Independent ACLED verification with all 7 control variables
-    (DXY, OVX, SPR, OPEC Dummy, Russia-Ukraine Dummy, China PMI, Baker Hughes Rigs).
+    """Return hypothesis test results from the thesis defense regression table.
+    Source: ThesisDefense_Hamm.pptx Slide 24 — OLS with HAC standard errors,
+    7 control variables (DXY, OVX, SPR, OPEC Dummy, Russia-Ukraine Dummy,
+    China PMI, Baker Hughes Rigs). 505 observations.
     """
     return {
         "h1": {
             "name": "H1: Attack Frequency",
             "description": "Higher frequency of Houthi maritime attacks increases Brent crude oil price volatility",
-            "coefficient": -0.0031,
-            "p_value": 0.802,
-            "r_squared": 0.642,
+            "coefficient": -0.033,
+            "p_value": 0.026,
+            "r_squared": 0.487,
             "supported": False,
-            "conclusion": "NOT SUPPORTED. After controlling for DXY, OVX, SPR, OPEC, Russia-Ukraine, China PMI, and rig count, the attack frequency coefficient is not statistically significant (β = −0.0031, p = 0.802), indicating that weekly attack frequency does not independently predict oil price volatility — consistent with market adaptation."
+            "conclusion": "NOT SUPPORTED. The coefficient is statistically significant but negative (β = −0.033, p = 0.026), meaning more attacks are associated with less volatility — the opposite of the fear premium hypothesis. This supports market adaptation: as attacks became routine, markets priced in the disruption rather than reacting with increased volatility."
         },
         "h2": {
             "name": "H2: Tanker Specificity",
             "description": "Attacks specifically targeting oil tankers have a greater impact on volatility than general maritime attacks",
-            "coefficient": -0.0811,
-            "p_value": 0.215,
-            "r_squared": 0.642,
+            "coefficient": -0.233,
+            "p_value": 0.004,
+            "r_squared": 0.464,
             "supported": False,
-            "conclusion": "NOT SUPPORTED. The tanker-specific coefficient is negative but not statistically significant (β = −0.0811, p = 0.215) after controlling for all 7 macroeconomic variables, suggesting markets have adapted to tanker-targeting attacks."
+            "conclusion": "NOT SUPPORTED. Tanker-specific attacks show the strongest adaptation effect (β = −0.233, p = 0.004). Despite targeting energy infrastructure directly, tanker attacks are associated with reduced volatility — markets specifically recalibrated to energy-sector targeting."
         },
         "h3": {
             "name": "H3: Chokepoint Geography",
             "description": "Attacks at the Bab el-Mandeb strait chokepoint have a disproportionate impact on oil price volatility",
-            "coefficient": 0.1684,
-            "p_value": 0.012,
-            "r_squared": 0.645,
+            "coefficient": -0.128,
+            "p_value": 0.250,
+            "r_squared": 0.459,
             "supported": False,
-            "conclusion": "NOT SUPPORTED in predicted direction. Chokepoint attacks show a positive and statistically significant coefficient (β = 0.1684, p = 0.012) after controlling for all 7 macroeconomic variables. While significant, this represents the only variable with marginal predictive power."
+            "conclusion": "NOT SUPPORTED. The chokepoint coefficient is not statistically significant (β = −0.128, p = 0.250). Despite 67% of attacks concentrating in a 200km corridor near Bab el-Mandeb, geographic proximity alone does not predict oil price volatility."
         },
         "garch_summary": {
             "model": "GJR-GARCH(1,1,1)",
@@ -1730,8 +1731,8 @@ def get_hypothesis_results() -> dict:
             "bic": 2086,
         },
         "model_comparison": {
-            "labels": ["H1 (Generic)", "H2 (Tanker)", "H3 (Chokepoint)"],
-            "r_squared": [0.642, 0.642, 0.645],
-            "finding": "With all 7 control variables and GARCH conditional variance as the dependent variable, models explain approximately 64% of volatility variance. Only H3 (chokepoint attacks) reaches statistical significance (p = 0.012), while H1 (p = 0.802) and H2 (p = 0.215) are not significant — suggesting oil markets have largely priced in Houthi maritime disruptions."
+            "labels": ["H1 (Attack Freq)", "H2 (Tanker)", "H3 (Chokepoint)"],
+            "r_squared": [0.487, 0.464, 0.459],
+            "finding": "With all 7 control variables and GARCH conditional variance as the dependent variable, models explain approximately 46–49% of volatility variance. H1 (p = 0.026) and H2 (p = 0.004) are statistically significant but negative — supporting market adaptation rather than a fear premium. H3 (p = 0.250) is not significant. Macroeconomic controls (OVX, DXY, Baker Hughes) dominate explanatory power."
         }
     }
