@@ -142,8 +142,11 @@ async def get_iran_events():
     if not acled_events:
         acled_events = await _run_sync(data_service.fetch_iran_events)
 
-    # News: use cache only (never block on live fetch)
-    news = data_service._read_cache("iran_news", 1800) or []
+    # News: use cache if available, otherwise fetch (but don't block on stale cache)
+    news = data_service._read_cache("iran_news", 7200) or []
+    if not news:
+        # Cold start: fetch synchronously so first visitor gets news
+        news = await _run_sync(data_service.fetch_iran_news)
 
     curated = data_service.get_merged_curated_events()
     result = {"count": len(acled_events), "data": acled_events, "curated": curated, "news": news}

@@ -1076,7 +1076,7 @@ def get_curated_iran_events() -> List[dict]:
 
 def fetch_iran_news() -> List[dict]:
     """Fetch live Iran/oil war news headlines from Google News RSS. No API key needed."""
-    cached = _read_cache("iran_news", 1800)  # 30-minute cache
+    cached = _read_cache("iran_news", 7200)  # 30-minute cache
     if cached:
         logger.info("Iran news: serving from cache")
         return cached
@@ -1552,7 +1552,7 @@ def get_merged_curated_events(include_news: bool = True) -> List[dict]:
     if include_news:
         try:
             # Only use cached news — never trigger a live fetch here
-            cached_news = _read_cache("iran_news", 1800)
+            cached_news = _read_cache("iran_news", 7200)
             if cached_news:
                 news_events = _geocode_news_events(cached_news)
                 # Deduplicate news against curated (same date + nearby location)
