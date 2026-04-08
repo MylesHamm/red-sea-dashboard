@@ -132,11 +132,19 @@ async def get_hormuz_transits():
 
 @app.get("/api/iran-events")
 async def get_iran_events():
-    """Iran-related ACLED events + curated major events + live news."""
-    # Fetch ACLED events and news in parallel (curated is in-memory, instant)
-    acled_task = _run_sync(data_service.fetch_iran_events)
-    news_task = _run_sync(data_service.fetch_iran_news)
-    acled_events, news = await asyncio.gather(acled_task, news_task)
+    """Iran-related ACLED events + curated major events + live news.
+    Serves cached/fallback data immediately; ACLED fetch happens in background."""
+    # Try cache first (instant), then JSON fallback (instant)
+    acled_events = data_service._read_cache("iran_events", 3600)
+    if not acled_events:
+        acled_events = data_service._load_iran_json_fallback()
+    # If still empty, do a live fetch (slow path — only on first cold start)
+    if not acled_events:
+        acled_events = await _run_sync(data_service.fetch_iran_events)
+
+    # News: use cache only (never block on live fetch)
+    news = data_service._read_cache("iran_news", 1800) or []
+
     curated = data_service.get_merged_curated_events()
     result = {"count": len(acled_events), "data": acled_events, "curated": curated, "news": news}
     err = data_service.get_iran_fetch_error()
@@ -147,17 +155,20 @@ async def get_iran_events():
 
 @app.get("/api/iran-impact")
 async def get_iran_impact():
-    """Oil price impact analysis around Iran events."""
-    # Read from cache if available (iran-events endpoint warms this);
-    # only fetch if cache is cold
-    iran_cached = data_service._read_cache("iran_events", 3600)
-    if iran_cached:
-        iran_events = iran_cached
+    """Oil price impact analysis around Iran events.
+    Serves cached/fallback data immediately."""
+    # Try cache first, then JSON fallback
+    iran_events = data_service._read_cache("iran_events", 3600)
+    if not iran_events:
+        iran_events = data_service._load_iran_json_fallback()
+    if not iran_events:
+        iran_events = await _run_sync(data_service.fetch_iran_events)
+
+    # Brent: use cache first, then fetch
+    brent_prices = data_service._read_cache("brent_prices", 3600)
+    if not brent_prices:
         brent_prices = await _run_sync(data_service.fetch_brent_prices)
-    else:
-        iran_task = _run_sync(data_service.fetch_iran_events)
-        brent_task = _run_sync(data_service.fetch_brent_prices)
-        iran_events, brent_prices = await asyncio.gather(iran_task, brent_task)
+
     result = data_service.compute_iran_impact(iran_events, brent_prices)
     result["brent_prices"] = brent_prices
     return result
