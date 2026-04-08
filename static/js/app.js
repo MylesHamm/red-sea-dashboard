@@ -366,6 +366,7 @@ function renderControls() {
     createDxyOvxChart(timeseries);
     createGeopoliticalChart(timeseries);
     createSprChart(timeseries);
+    if (hypothesisData) createControlCoefficientChart(hypothesisData);
 
     // Delay correlation chart to ensure canvas is visible
     setTimeout(() => createCorrelationChart(correlation), 200);

@@ -676,6 +676,86 @@ function createSprChart(timeseries) {
     });
 }
 
+function createControlCoefficientChart(hypothesisData) {
+    destroyChart('controlCoefficientChart');
+    const ctx = document.getElementById('controlCoefficientChart');
+    if (!ctx || !hypothesisData.control_coefficients) return;
+
+    const cc = hypothesisData.control_coefficients.h1;
+    // Use t-statistic (coeff / SE) as normalized effect size — comparable across variables
+    const tStats = cc.coefficients.map((c, i) => c / cc.std_errors[i]);
+
+    // Sort by absolute t-stat descending for visual impact
+    const indices = tStats.map((_, i) => i);
+    indices.sort((a, b) => Math.abs(tStats[b]) - Math.abs(tStats[a]));
+
+    const sortedLabels = indices.map(i => cc.labels[i]);
+    const sortedT = indices.map(i => tStats[i]);
+    const sortedSig = indices.map(i => cc.significant[i]);
+    const sortedCoeffs = indices.map(i => cc.coefficients[i]);
+    const sortedP = indices.map(i => cc.p_values[i]);
+    const sortedSE = indices.map(i => cc.std_errors[i]);
+
+    // Color: significant = cyan (positive) / red (negative), not significant = gray
+    const bgColors = sortedT.map((t, i) => {
+        if (!sortedSig[i]) return 'rgba(136, 146, 160, 0.3)';
+        return t >= 0 ? 'rgba(0, 212, 255, 0.7)' : 'rgba(255, 82, 82, 0.7)';
+    });
+    const borderColors = sortedT.map((t, i) => {
+        if (!sortedSig[i]) return 'rgba(136, 146, 160, 0.5)';
+        return t >= 0 ? '#00d4ff' : '#ff5252';
+    });
+
+    chartInstances['controlCoefficientChart'] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: sortedLabels,
+            datasets: [{
+                label: 't-statistic (H1 Model)',
+                data: sortedT.map(t => Math.round(t * 100) / 100),
+                backgroundColor: bgColors,
+                borderColor: borderColors,
+                borderWidth: 1,
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            ...CHART_DEFAULTS,
+            indexAxis: 'y',
+            scales: {
+                x: {
+                    ...CHART_DEFAULTS.scales.x,
+                    title: { display: true, text: 't-statistic (Coefficient / Std Error) — measures strength of evidence', font: { family: 'Inter', size: 11 }, color: '#8892a0' },
+                },
+                y: {
+                    ...CHART_DEFAULTS.scales.y,
+                    ticks: {
+                        ...CHART_DEFAULTS.scales.y.ticks,
+                        font: { family: 'Inter', size: 12, weight: '500' },
+                    }
+                }
+            },
+            plugins: {
+                ...CHART_DEFAULTS.plugins,
+                legend: { display: false },
+                tooltip: {
+                    ...CHART_DEFAULTS.plugins.tooltip,
+                    callbacks: {
+                        label: function(context) {
+                            const i = context.dataIndex;
+                            const coeff = sortedCoeffs[i];
+                            const p = sortedP[i];
+                            const se = sortedSE[i];
+                            const sig = sortedSig[i] ? (p < 0.01 ? '***' : p < 0.05 ? '**' : '*') : 'n.s.';
+                            return [`Coeff: ${coeff.toFixed(4)} (SE: ${se.toFixed(4)})`, `p = ${p.toFixed(4)} ${sig}`, `t = ${sortedT[i].toFixed(2)}`];
+                        }
+                    }
+                },
+            }
+        }
+    });
+}
+
 /* ─── Tab 6: Current Events (US-Iran) ───────────────────────────────────── */
 
 const IRAN_TYPE_COLORS = {

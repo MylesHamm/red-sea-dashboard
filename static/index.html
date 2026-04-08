@@ -302,6 +302,22 @@
                 </div>
             </div>
 
+            <!-- Control Variable Coefficients -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>What Actually Drives Oil Price Volatility? — Control Variable Coefficients</h3>
+                        <div class="chart-header-right">
+                            <span class="chart-badge">Key Finding</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">OLS regression coefficients from the H1 model with HAC standard errors. Colored bars are statistically significant (p &lt; 0.05). Cyan = positive effect on volatility, red = negative. Notice: Houthi attack frequency has the smallest coefficient — OVX, DXY, Baker Hughes rigs, and Russia-Ukraine events explain far more volatility than attacks do.</span></div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper" style="height:380px">
+                        <canvas id="controlCoefficientChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
             <!-- Correlation Heatmap -->
             <div class="chart-row">
                 <div class="chart-card full-width">
@@ -968,8 +984,8 @@
     </footer>
 
     <!-- Dashboard JS -->
-    <script src="/static/js/charts.js?v=20260329a"></script>
-    <script src="/static/js/map.js?v=20260329a"></script>
-    <script src="/static/js/app.js?v=20260329a"></script>
+    <script src="/static/js/charts.js?v=20260408a"></script>
+    <script src="/static/js/map.js?v=20260408a"></script>
+    <script src="/static/js/app.js?v=20260408a"></script>
 </body>
 </html>

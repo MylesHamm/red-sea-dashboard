@@ -477,6 +477,15 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
         "2026-03-26": 108.01,  # Iran rejects talks; IRGC confirms tollbooth system
         "2026-03-27": 105.32,  # Marines arrive; humanitarian corridor eases fears slightly
         "2026-03-28": 112.57,  # Houthis fire missiles at Israel; 82nd Airborne deploys
+        # Mar 29 (Sat) and Mar 30 (Sun) — no settlement
+        "2026-03-31": 115.24,  # Continued airstrikes; parliament rejects negotiations
+        "2026-04-01": 113.88,  # UK 35-nation Hormuz meeting; diplomatic push
+        "2026-04-02": 111.45,  # Trump says objectives nearly met; coalition diplomacy
+        "2026-04-03": 118.32,  # US F-15E shot down over Iran; escalation fears
+        "2026-04-04": 121.07,  # Bushehr nuclear plant struck; IAEA warning
+        # Apr 5 (Sat) and Apr 6 (Sun) — no settlement
+        "2026-04-07": 126.00,  # Trump 'civilization will die tonight'; ceasefire announced
+        "2026-04-08": 119.50,  # Islamabad Accords ceasefire takes effect; relief rally
     }
 
     # ── Layers 1-3: Run ALL live sources in parallel ──────────────────────────
@@ -1051,6 +1060,17 @@ def get_curated_iran_events() -> List[dict]:
         {"date": "2026-03-27", "title": "3,500 Marines Arrive on USS Tripoli; Humanitarian Ships Allowed", "type": "military", "description": "USS Tripoli arrives in Gulf of Oman with 3,500 Marines from 15th MEU. Pentagon announces humanitarian corridor through Hormuz for food and medical supplies. Iran allows passage of two humanitarian vessels as goodwill gesture while maintaining military blockade.", "severity": 2, "fatalities": 0, "lat": 25.0000, "lon": 57.5000, "location": "Gulf of Oman"},
         {"date": "2026-03-28", "title": "Houthis Fire Missiles at Israel; 82nd Airborne Deploys to Region", "type": "military", "description": "Houthis fire ballistic missiles at Israel for first time since war began — 11 injured from debris in southern Israel. Marks major Houthi escalation beyond Red Sea shipping attacks. 82nd Airborne Division deploys to region. Brent surges to $112.57. Renewed fears of Red Sea shipping strikes as Houthis re-enter direct combat.", "severity": 3, "fatalities": 0, "lat": 31.0461, "lon": 34.8516, "location": "Southern Israel"},
         {"date": "2026-03-29", "title": "Pentagon Prepares Ground Operations in Iran; 13 US KIA Total", "type": "military", "description": "Pentagon announces preparation for 'weeks of ground operations' targeting Qeshm Island and Kharg Island to permanently secure Hormuz and eliminate Iran's oil export capability. 82nd Airborne and Marine forces staging. Iran's IRGC threatens to 'rain fire' on any ground troops. US casualties now 13 KIA, 300+ wounded since Feb 28. Oil markets brace for further escalation.", "severity": 3, "fatalities": 0, "lat": 26.8500, "lon": 55.9000, "location": "Qeshm Island, Iran"},
+
+        # ── Days 32-40 (March 31 – April 8, 2026) ──
+        {"date": "2026-03-31", "title": "Continued Airstrikes Across Iran; Parliament Rejects Negotiations", "type": "military", "description": "US and Israeli air strikes continue with explosions reported in Tehran and Isfahan. Secretary Rubio says war objectives will be achieved in 'weeks, not months.' At least 4,700 Iranian security forces killed. Iranian Parliament Speaker Ghalibaf rejects negotiations, saying Iran cannot be forced into submission.", "severity": 3, "fatalities": 0, "lat": 35.6892, "lon": 51.3890, "location": "Tehran, Iran"},
+        {"date": "2026-04-01", "title": "UK Announces 35-Nation Hormuz Meeting; Argentina Designates IRGC Terrorist Org", "type": "diplomatic", "description": "Britain announces meeting of ~35 countries to discuss reopening the Strait of Hormuz. China and Pakistan propose five-point ceasefire plan. Argentina designates IRGC as terrorist organization. Ships continue paying Iran tolls in yuan and cryptocurrency for Hormuz passage.", "severity": 1, "fatalities": 0, "lat": 51.5074, "lon": -0.1278, "location": "London, UK"},
+        {"date": "2026-04-02", "title": "UK-Led 35-Nation Coalition Meets on Hormuz; Trump Says Objectives Nearly Met", "type": "diplomatic", "description": "UK Foreign Secretary Cooper chairs virtual meeting of ~35 countries to restore Hormuz freedom of navigation. US does not attend. PM Starmer calls for 'united front of military strength and diplomatic activity.' Trump states Washington close to achieving objectives. Hormuz evolves into dual-corridor system.", "severity": 1, "fatalities": 0, "lat": 51.5074, "lon": -0.1278, "location": "London, UK"},
+        {"date": "2026-04-03", "title": "US F-15E Shot Down Over Iran; Search and Rescue Launched", "type": "military", "description": "American F-15E Strike Eagle shot down by Iranian forces. One crew member rescued alive, search continues for weapons system officer. An A-10 supporting the rescue is also struck; pilot ejects over Kuwait. Two UH-60 Black Hawks hit with minor injuries. Separately, US-Israel strikes a medical research center and bridge near Tehran.", "severity": 3, "fatalities": 1, "lat": 33.0000, "lon": 52.0000, "location": "Central Iran"},
+        {"date": "2026-04-04", "title": "Projectile Strikes Near Bushehr Nuclear Plant; IAEA Issues Warning", "type": "nuclear", "description": "IAEA confirms projectile struck close to Bushehr nuclear power plant — fourth such incident. One protection staff member killed by fragment. No radiation increase detected. IAEA Director General Grossi: nuclear sites 'must never be attacked.' Russia evacuates 198 workers from facility.", "severity": 3, "fatalities": 1, "lat": 28.8333, "lon": 50.8833, "location": "Bushehr, Iran"},
+        {"date": "2026-04-05", "title": "Trump Threatens Iran's Power Grid; Downed Pilot Rescued; Iraqi Militia Attacks US Embassy", "type": "military", "description": "Trump threatens to attack Iran's power plants and bridges if Hormuz not reopened within two days. Iranian-backed Iraqi militia Saraya Awliya al-Dam attacks US diplomatic facilities in Baghdad. Second F-15E crew member rescued alive. Iranian UAVs and cruise missiles intercepted in Qatari airspace.", "severity": 3, "fatalities": 0, "lat": 33.3152, "lon": 44.3661, "location": "Baghdad, Iraq"},
+        {"date": "2026-04-06", "title": "Pakistan Proposes 'Islamabad Accord' — 45-Day Ceasefire Plan", "type": "diplomatic", "description": "Pakistan offers two-phased 45-day truce ('Islamabad Accord'). Pakistan army chief in contact with VP Vance, envoy Witkoff, and Iranian FM Araghchi. Iran 'positively reviewing' proposal but refuses to reopen Hormuz under temporary ceasefire. Houthis threaten to close Bab al-Mandeb strait — fears of second chokepoint crisis.", "severity": 2, "fatalities": 0, "lat": 33.6844, "lon": 73.0479, "location": "Islamabad, Pakistan"},
+        {"date": "2026-04-07", "title": "Trump: 'A Whole Civilization Will Die Tonight'; Ceasefire Announced Before Deadline", "type": "diplomatic", "description": "Trump sets 8 PM ET deadline, posts 'a whole civilization will die tonight.' White House denies nuclear weapon plans. Pakistan PM makes last-ditch appeal. ~90 minutes before deadline, Trump announces two-week ceasefire based on Pakistan-mediated 10-point proposal. Iran to reopen Strait of Hormuz.", "severity": 2, "fatalities": 0, "lat": 38.9072, "lon": -77.0369, "location": "Washington, DC"},
+        {"date": "2026-04-08", "title": "Islamabad Accords Ceasefire Takes Effect; Strait Still Blocked Initially", "type": "diplomatic", "description": "Two-week Islamabad Accords ceasefire takes effect. Iran's Supreme National Security Council confirms acceptance. Iran agrees to reopen Hormuz but strait remains largely blocked as shipowners assess safety — 800+ freighters stuck. Trump floats US-Iran 'joint venture' to charge Hormuz tolls. Brent peaked at $126/bbl during crisis. Netanyahu says ceasefire does not apply to Lebanon.", "severity": 1, "fatalities": 0, "lat": 33.6844, "lon": 73.0479, "location": "Islamabad, Pakistan"},
     ]
 
 
@@ -1742,5 +1762,14 @@ def get_hypothesis_results() -> dict:
             "labels": ["H1 (Attack Freq)", "H2 (Tanker)", "H3 (Chokepoint)"],
             "r_squared": [0.487, 0.464, 0.459],
             "finding": "With all 7 control variables and GARCH conditional variance as the dependent variable, models explain approximately 46–49% of volatility variance. H1 (p = 0.026) and H2 (p = 0.004) are statistically significant but negative — supporting market adaptation rather than a fear premium. H3 (p = 0.250) is not significant. Macroeconomic controls (OVX, DXY, Baker Hughes) dominate explanatory power."
+        },
+        "control_coefficients": {
+            "h1": {
+                "labels": ["Attack Freq (H1)", "DXY", "OVX", "SPR", "OPEC", "Russia-Ukraine", "China PMI", "Baker Hughes Rigs"],
+                "coefficients": [-0.033, -0.134, 0.105, 0.000001, -0.318, -0.432, 0.173, 0.025],
+                "std_errors": [0.015, 0.039, 0.013, 0.00000268, 0.256, 0.208, 0.162, 0.007],
+                "p_values": [0.026, 0.001, 0.0001, 0.70, 0.21, 0.038, 0.29, 0.0004],
+                "significant": [True, True, True, False, False, True, False, True]
+            }
         }
     }
