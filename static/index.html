@@ -78,37 +78,48 @@
                     <div class="kpi-value" id="kpi-brent">--</div>
                     <div class="kpi-change" id="kpi-brent-change"></div>
                     <div class="kpi-sub">USD / barrel</div>
-                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Current spot price of Brent crude oil, the global benchmark for petroleum pricing. Sourced live from the U.S. Energy Information Administration (EIA) API.</span></div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Current spot price of Brent crude oil, the global benchmark for petroleum pricing. Sourced from EIA / Yahoo Finance / FRED.</span></div>
                 </div>
                 <div class="kpi-card" data-accent="#C43D3D">
-                    <div class="kpi-label">Total ACLED Events</div>
-                    <div class="kpi-value" id="kpi-events">--</div>
-                    <div class="kpi-sub">Red Sea maritime events</div>
-                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Total ACLED-verified maritime conflict events in the Red Sea / Gulf of Aden region during the study period (Oct 2023 &ndash; present). These are the 726 events analyzed in the thesis regression models.</span></div>
+                    <div class="kpi-label">Iran War Day</div>
+                    <div class="kpi-value" id="kpi-war-day">--</div>
+                    <div class="kpi-sub">Since Feb 28, 2026</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Number of days since US-Israel air strikes on Iran began on February 28, 2026. The conflict has progressed through multiple phases: 12-day war, Hormuz blockade, ceasefire, and naval blockade.</span></div>
                 </div>
                 <div class="kpi-card" data-accent="#D4A843">
-                    <div class="kpi-label">Peak Daily Volatility</div>
-                    <div class="kpi-value" id="kpi-volatility">--</div>
-                    <div class="kpi-sub">Maximum observed</div>
-                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Highest single-day Brent crude price volatility observed during the study period, calculated as the absolute daily percentage change in closing price.</span></div>
+                    <div class="kpi-label">Hormuz Status</div>
+                    <div class="kpi-value" id="kpi-overview-hormuz">--</div>
+                    <div class="kpi-sub" id="kpi-overview-hormuz-sub">Strait of Hormuz</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Current operational status of the Strait of Hormuz, through which 21% of global oil flows. Based on IMF PortWatch transit data compared to pre-war baseline.</span></div>
                 </div>
                 <div class="kpi-card" data-accent="#C43D3D">
-                    <div class="kpi-label">Max Weekly Attacks</div>
-                    <div class="kpi-value" id="kpi-attacks">--</div>
-                    <div class="kpi-sub">Single week peak</div>
-                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Highest number of Houthi maritime-related attacks recorded in a single week during the study period. This is the primary independent variable in the regression model.</span></div>
+                    <div class="kpi-label">Houthi ACLED Events</div>
+                    <div class="kpi-value" id="kpi-events">--</div>
+                    <div class="kpi-sub">Red Sea thesis dataset</div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Total ACLED-verified maritime conflict events in the Red Sea / Gulf of Aden region analyzed in the thesis regression models (Oct 2023 &ndash; Oct 2025).</span></div>
                 </div>
                 <div class="kpi-card" data-accent="#7B68AE">
                     <div class="kpi-label">US Dollar Index (DXY)</div>
                     <div class="kpi-value" id="kpi-dxy">--</div>
                     <div class="kpi-sub">Latest reading</div>
-                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">The US Dollar Index measures the value of the dollar against a basket of major currencies. Used as a control variable since oil is priced in USD. Sourced from Yahoo Finance.</span></div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">The US Dollar Index measures the value of the dollar against a basket of major currencies. Used as a control variable since oil is priced in USD.</span></div>
                 </div>
                 <div class="kpi-card" data-accent="#E07B4C">
                     <div class="kpi-label">Oil Volatility (OVX)</div>
                     <div class="kpi-value" id="kpi-ovx">--</div>
                     <div class="kpi-sub">CBOE Crude Oil Volatility Index</div>
-                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">The CBOE Crude Oil Volatility Index measures market expectations of 30-day oil price volatility. Used as a control variable to isolate Houthi-specific effects from general market fear.</span></div>
+                    <div class="kpi-info"><span class="kpi-info-icon">i</span><span class="kpi-info-tooltip">Market expectations of 30-day oil price volatility. During the Houthi crisis, OVX was the dominant volatility driver. During the Iran war, the conflict itself drives OVX.</span></div>
+                </div>
+            </div>
+
+            <!-- Thesis vs Iran Context Banner -->
+            <div class="chart-row">
+                <div class="chart-card full-width" style="border-left: 4px solid #00d4ff;">
+                    <div class="chart-header"><h3>Two Crises, One Framework</h3></div>
+                    <p style="color: #c0c8d4; line-height: 1.7; margin: 0; font-size: 14px; padding: 0 0 12px;">
+                        This dashboard tracks two interconnected energy security crises. The <strong style="color:#4A90D9">Houthi Red Sea campaign</strong> (Oct 2023&ndash;Oct 2025) was the subject of the original thesis, which found that markets <em>adapted</em> to non-state maritime attacks with declining volatility over 24 months.
+                        The <strong style="color:#ff5252">US-Iran war</strong> (Feb 2026&ndash;present) tests whether that adaptation holds under state-actor escalation. It does not &mdash; Brent surged from $73 to $126 in weeks. Explore the <strong>Comparative Analysis</strong> tab for the full side-by-side breakdown.
+                    </p>
                 </div>
             </div>
 
@@ -120,14 +131,14 @@
                 <button class="crossfilter-clear" id="crossfilterClear">Clear</button>
             </div>
 
-            <!-- Chart Row 1: Price vs Attacks -->
+            <!-- Chart Row 1: Price vs Attacks (Houthi thesis period) -->
             <div class="chart-row">
                 <div class="chart-card full-width">
                     <div class="chart-header">
-                        <h3>Brent Crude Price vs Weekly Attack Frequency</h3>
+                        <h3>Houthi Thesis Period: Brent Price vs Weekly Attack Frequency</h3>
                         <div class="chart-header-right">
-                            <span class="chart-badge">Dual Axis</span>
-                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Overlays Brent crude spot price (left axis) with weekly Houthi attack frequency (right axis) to visualize the relationship between conflict intensity and oil prices. Click the doughnut chart to crossfilter by event type.</span></div>
+                            <span class="chart-badge">Thesis Data</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Overlays Brent crude spot price (left axis) with weekly Houthi attack frequency (right axis) from the thesis dataset (Oct 2023&ndash;Oct 2025). Click the doughnut chart to crossfilter by event type.</span></div>
                         </div>
                     </div>
                     <div class="chart-wrapper" style="height:400px">
@@ -141,7 +152,7 @@
                 <div class="chart-card">
                     <div class="chart-header">
                         <h3>Daily Volatility Over Time</h3>
-                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Absolute daily percentage change in Brent crude closing price. Spikes indicate days of heightened market uncertainty, often coinciding with major attack events or geopolitical escalations.</span></div>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Absolute daily percentage change in Brent crude closing price. Declining trend during Houthi period supports market adaptation hypothesis.</span></div>
                     </div>
                     <div class="chart-wrapper">
                         <canvas id="volatilityChart"></canvas>
@@ -150,7 +161,7 @@
                 <div class="chart-card">
                     <div class="chart-header">
                         <h3>Event Type Distribution</h3>
-                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Breakdown of ACLED conflict events in Yemen by category. Click any segment to crossfilter — the price and volatility charts will highlight periods matching that event type.</span></div>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Breakdown of ACLED conflict events in Yemen by category. Click any segment to crossfilter.</span></div>
                     </div>
                     <div class="chart-wrapper">
                         <canvas id="eventTypesChart"></canvas>
@@ -419,35 +430,53 @@
                     <div class="chart-header">
                         <h3>Hypothesis Retest: Does the Adaptation Model Hold?</h3>
                     </div>
-                    <div id="hypothesisRetestCards" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; padding: 16px;">
-                        <div class="hypothesis-card" style="border-left: 4px solid #ff5252;">
-                            <div class="hypothesis-header">
-                                <h4>H1: Attack Frequency → Volatility</h4>
+                    <div id="hypothesisRetestCards" style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 16px;">
+                        <div class="hypothesis-card" style="border-left: 4px solid #ff5252; display:flex; flex-direction:column;">
+                            <div class="hypothesis-header" style="text-align:center;">
+                                <h4>H1: Attack Frequency</h4>
                             </div>
-                            <div class="hypothesis-body">
-                                <div style="margin-bottom:8px"><strong style="color:#4A90D9">Houthi (Thesis):</strong> NOT SUPPORTED (β = −0.033, p = 0.026). More attacks → less volatility. Markets adapted.</div>
-                                <div style="margin-bottom:8px"><strong style="color:#ff5252">Iran (Observed):</strong> LIKELY SUPPORTED. Each escalation (strikes, Hormuz closure, ground ops) triggered immediate price spikes. No adaptation over 6 weeks — volatility remains elevated.</div>
-                                <div class="hypothesis-verdict verdict-not-supported" style="background: rgba(255,82,82,0.1); border-color: #ff5252;">Adaptation breaks down when non-state harassment escalates to state-actor war.</div>
-                            </div>
-                        </div>
-                        <div class="hypothesis-card" style="border-left: 4px solid #ff5252;">
-                            <div class="hypothesis-header">
-                                <h4>H2: Tanker Targeting → Volatility</h4>
-                            </div>
-                            <div class="hypothesis-body">
-                                <div style="margin-bottom:8px"><strong style="color:#4A90D9">Houthi (Thesis):</strong> NOT SUPPORTED (β = −0.233, p = 0.004). Strongest adaptation effect — markets recalibrated to energy-sector targeting.</div>
-                                <div style="margin-bottom:8px"><strong style="color:#ff5252">Iran (Observed):</strong> LIKELY SUPPORTED. IRGC directly attacked 21+ merchant ships. Complete Hormuz blockade eliminated the distinction between tanker-specific and general attacks.</div>
-                                <div class="hypothesis-verdict verdict-not-supported" style="background: rgba(255,82,82,0.1); border-color: #ff5252;">When the state controls the chokepoint, ALL ships are targets. Tanker specificity becomes irrelevant.</div>
+                            <div class="hypothesis-body" style="flex:1; display:flex; flex-direction:column;">
+                                <div style="margin-bottom:12px; padding:10px; background:rgba(74,144,217,0.08); border-radius:6px;">
+                                    <div style="font-size:11px; text-transform:uppercase; color:#4A90D9; font-weight:600; margin-bottom:4px;">Houthi (Thesis)</div>
+                                    <div style="color:#c0c8d4; font-size:13px;">NOT SUPPORTED (β = −0.033, p = 0.026). More attacks led to <em>less</em> volatility. Markets adapted.</div>
+                                </div>
+                                <div style="margin-bottom:12px; padding:10px; background:rgba(255,82,82,0.08); border-radius:6px;">
+                                    <div style="font-size:11px; text-transform:uppercase; color:#ff5252; font-weight:600; margin-bottom:4px;">Iran (Observed)</div>
+                                    <div style="color:#c0c8d4; font-size:13px;">SUPPORTED. Each escalation triggered immediate price spikes. No adaptation over 6 weeks &mdash; volatility remained elevated.</div>
+                                </div>
+                                <div class="hypothesis-verdict verdict-not-supported" style="background:rgba(255,82,82,0.1); border-color:#ff5252; margin-top:auto; text-align:center; font-size:12px;">Adaptation breaks down under state-actor war.</div>
                             </div>
                         </div>
-                        <div class="hypothesis-card" style="border-left: 4px solid #ff5252;">
-                            <div class="hypothesis-header">
-                                <h4>H3: Chokepoint Geography → Volatility</h4>
+                        <div class="hypothesis-card" style="border-left: 4px solid #ff5252; display:flex; flex-direction:column;">
+                            <div class="hypothesis-header" style="text-align:center;">
+                                <h4>H2: Tanker Targeting</h4>
                             </div>
-                            <div class="hypothesis-body">
-                                <div style="margin-bottom:8px"><strong style="color:#4A90D9">Houthi (Thesis):</strong> NOT SUPPORTED (β = −0.128, p = 0.250). Geographic proximity to Bab el-Mandeb didn't predict volatility.</div>
-                                <div style="margin-bottom:8px"><strong style="color:#ff5252">Iran (Observed):</strong> STRONGLY SUPPORTED. Hormuz closure (21% of global oil) caused $73→$126 price surge. Geography is decisive when a state actor physically controls the chokepoint.</div>
-                                <div class="hypothesis-verdict verdict-not-supported" style="background: rgba(255,82,82,0.1); border-color: #ff5252;">Chokepoint geography matters enormously — but only when an actor can enforce total closure, not just harass passing ships.</div>
+                            <div class="hypothesis-body" style="flex:1; display:flex; flex-direction:column;">
+                                <div style="margin-bottom:12px; padding:10px; background:rgba(74,144,217,0.08); border-radius:6px;">
+                                    <div style="font-size:11px; text-transform:uppercase; color:#4A90D9; font-weight:600; margin-bottom:4px;">Houthi (Thesis)</div>
+                                    <div style="color:#c0c8d4; font-size:13px;">NOT SUPPORTED (β = −0.233, p = 0.004). Strongest adaptation effect &mdash; markets recalibrated to energy-sector targeting.</div>
+                                </div>
+                                <div style="margin-bottom:12px; padding:10px; background:rgba(255,82,82,0.08); border-radius:6px;">
+                                    <div style="font-size:11px; text-transform:uppercase; color:#ff5252; font-weight:600; margin-bottom:4px;">Iran (Observed)</div>
+                                    <div style="color:#c0c8d4; font-size:13px;">SUPPORTED. IRGC attacked 21+ merchant ships. Complete Hormuz blockade eliminated the distinction between tanker-specific and general attacks.</div>
+                                </div>
+                                <div class="hypothesis-verdict verdict-not-supported" style="background:rgba(255,82,82,0.1); border-color:#ff5252; margin-top:auto; text-align:center; font-size:12px;">When the state controls the chokepoint, all ships are targets.</div>
+                            </div>
+                        </div>
+                        <div class="hypothesis-card" style="border-left: 4px solid #ff5252; display:flex; flex-direction:column;">
+                            <div class="hypothesis-header" style="text-align:center;">
+                                <h4>H3: Chokepoint Geography</h4>
+                            </div>
+                            <div class="hypothesis-body" style="flex:1; display:flex; flex-direction:column;">
+                                <div style="margin-bottom:12px; padding:10px; background:rgba(74,144,217,0.08); border-radius:6px;">
+                                    <div style="font-size:11px; text-transform:uppercase; color:#4A90D9; font-weight:600; margin-bottom:4px;">Houthi (Thesis)</div>
+                                    <div style="color:#c0c8d4; font-size:13px;">NOT SUPPORTED (β = −0.128, p = 0.250). Geographic proximity to Bab el-Mandeb did not predict volatility.</div>
+                                </div>
+                                <div style="margin-bottom:12px; padding:10px; background:rgba(255,82,82,0.08); border-radius:6px;">
+                                    <div style="font-size:11px; text-transform:uppercase; color:#ff5252; font-weight:600; margin-bottom:4px;">Iran (Observed)</div>
+                                    <div style="color:#c0c8d4; font-size:13px;">SUPPORTED. Hormuz closure (21% of global oil) caused $73&rarr;$126 surge. Geography is decisive when a state actor enforces total closure.</div>
+                                </div>
+                                <div class="hypothesis-verdict verdict-not-supported" style="background:rgba(255,82,82,0.1); border-color:#ff5252; margin-top:auto; text-align:center; font-size:12px;">Chokepoint geography matters when closure is enforced, not just harassed.</div>
                             </div>
                         </div>
                     </div>

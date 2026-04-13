@@ -288,10 +288,30 @@ function renderOverview() {
     // KPI cards
     animateValue('kpi-brent', `$${kpis.latest_brent_price}`);
     animateValue('kpi-events', thesisEventsData && thesisEventsData.length ? thesisEventsData.length : 726);
-    animateValue('kpi-volatility', kpis.peak_volatility != null ? `${kpis.peak_volatility.toFixed(2)}%` : '--');
-    animateValue('kpi-attacks', kpis.max_weekly_attacks);
     animateValue('kpi-dxy', kpis.latest_dxy || '--');
     animateValue('kpi-ovx', kpis.latest_ovx || '--');
+
+    // War day counter
+    const warStart = new Date('2026-02-28');
+    const today = new Date();
+    const warDay = Math.floor((today - warStart) / (1000 * 60 * 60 * 24));
+    if (warDay > 0) animateValue('kpi-war-day', `Day ${warDay}`);
+
+    // Hormuz status (async, non-blocking)
+    fetchJSON('/api/hormuz-status').then(hd => {
+        if (hd && hd.status) {
+            animateValue('kpi-overview-hormuz', hd.status);
+            const el = document.getElementById('kpi-overview-hormuz');
+            if (el) {
+                const colors = { BLOCKADE: '#ff5252', RESTRICTED: '#F09060', DISRUPTED: '#ffab00', OPEN: '#00e676', UNKNOWN: '#8892a0' };
+                el.style.color = colors[hd.status] || '#8892a0';
+            }
+            if (hd.pct_decline != null) {
+                const sub = document.getElementById('kpi-overview-hormuz-sub');
+                if (sub) sub.textContent = `${hd.pct_decline}% decline from baseline`;
+            }
+        }
+    }).catch(() => {});
 
     // Brent change indicator
     const changeEl = document.getElementById('kpi-brent-change');
