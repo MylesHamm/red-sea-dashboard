@@ -1958,6 +1958,135 @@ def get_comparative_data() -> dict:
     }
 
 
+def run_iran_regression() -> dict:
+    """Run OLS regression on Iran war data: daily volatility ~ conflict intensity.
+    Analogous to the thesis H1 model but for state-actor conflict.
+
+    Returns actual coefficients, p-values, and R² from the available data.
+    Uses scipy.stats.linregress for simple OLS, plus a multivariate model
+    with available controls using numpy least-squares.
+    """
+    from scipy import stats
+
+    # Get data
+    intensity = compute_iran_intensity()
+    brent = _read_cache("brent_prices", 7200) or []
+
+    if not intensity or len(brent) < 5:
+        return {"error": "Insufficient data", "n_obs": 0}
+
+    # Build Brent price map and compute daily volatility
+    price_map = {b["date"]: b["price"] for b in brent}
+    sorted_dates = sorted(price_map.keys())
+
+    vol_map = {}
+    for i in range(1, len(sorted_dates)):
+        d = sorted_dates[i]
+        prev = sorted_dates[i - 1]
+        change = abs((price_map[d] - price_map[prev]) / price_map[prev]) * 100
+        vol_map[d] = change
+
+    # Build intensity map
+    intensity_map = {i["date"]: i["weekly_intensity"] for i in intensity}
+    daily_intensity_map = {i["date"]: i["daily_intensity"] for i in intensity}
+
+    # War period only (Feb 28, 2026+)
+    war_dates = [d for d in sorted_dates if d >= "2026-02-28" and d in vol_map and d in intensity_map]
+
+    if len(war_dates) < 5:
+        return {"error": "Insufficient war-period observations", "n_obs": len(war_dates)}
+
+    y = np.array([vol_map[d] for d in war_dates])  # daily volatility
+    x_intensity = np.array([intensity_map[d] for d in war_dates])  # weekly intensity
+    x_daily = np.array([daily_intensity_map.get(d, 0) for d in war_dates])  # daily intensity
+
+    # ── Simple OLS: Volatility ~ Weekly Intensity ──
+    slope, intercept, r_value, p_value, std_err = stats.linregress(x_intensity, y)
+
+    simple_result = {
+        "coefficient": round(slope, 6),
+        "intercept": round(intercept, 4),
+        "std_error": round(std_err, 6),
+        "p_value": round(p_value, 4),
+        "r_squared": round(r_value ** 2, 4),
+        "n_obs": len(war_dates),
+    }
+
+    # ── Simple OLS: Volatility ~ Daily Intensity ──
+    slope_d, intercept_d, r_d, p_d, se_d = stats.linregress(x_daily, y)
+
+    daily_result = {
+        "coefficient": round(slope_d, 6),
+        "intercept": round(intercept_d, 4),
+        "std_error": round(se_d, 6),
+        "p_value": round(p_d, 4),
+        "r_squared": round(r_d ** 2, 4),
+    }
+
+    # ── Multivariate OLS with available controls ──
+    # Try to include DXY and OVX as controls if available
+    dxy_data = _read_cache("dxy", 7200) or []
+    ovx_data = _read_cache("ovx", 7200) or []
+    dxy_map = {d["date"]: d["value"] for d in dxy_data} if dxy_data else {}
+    ovx_map = {d["date"]: d["value"] for d in ovx_data} if ovx_data else {}
+
+    # Build multivariate dataset (only dates where all variables are available)
+    multi_dates = [d for d in war_dates if d in dxy_map and d in ovx_map]
+    multi_result = None
+
+    if len(multi_dates) >= 8:
+        y_m = np.array([vol_map[d] for d in multi_dates])
+        X = np.column_stack([
+            np.ones(len(multi_dates)),  # intercept
+            [intensity_map[d] for d in multi_dates],  # intensity
+            [dxy_map[d] for d in multi_dates],  # DXY
+            [ovx_map[d] for d in multi_dates],  # OVX
+        ])
+
+        try:
+            # OLS via numpy least squares
+            betas, residuals, rank, sv = np.linalg.lstsq(X, y_m, rcond=None)
+
+            # Compute statistics
+            y_hat = X @ betas
+            ss_res = np.sum((y_m - y_hat) ** 2)
+            ss_tot = np.sum((y_m - np.mean(y_m)) ** 2)
+            r_sq = 1 - ss_res / ss_tot if ss_tot > 0 else 0
+            n, k = X.shape
+            mse = ss_res / (n - k) if n > k else 0
+
+            # Standard errors
+            try:
+                cov = mse * np.linalg.inv(X.T @ X)
+                se = np.sqrt(np.diag(cov))
+                # t-statistics and p-values
+                t_stats = betas / se
+                p_vals = [2 * (1 - stats.t.cdf(abs(t), df=n - k)) for t in t_stats]
+            except np.linalg.LinAlgError:
+                se = [None] * k
+                p_vals = [None] * k
+
+            multi_result = {
+                "labels": ["Intercept", "Iran Intensity", "DXY", "OVX"],
+                "coefficients": [round(float(b), 6) for b in betas],
+                "std_errors": [round(float(s), 6) if s is not None else None for s in se],
+                "p_values": [round(float(p), 4) if p is not None else None for p in p_vals],
+                "r_squared": round(float(r_sq), 4),
+                "n_obs": len(multi_dates),
+            }
+        except Exception as e:
+            logger.warning(f"Multivariate regression failed: {e}")
+
+    return {
+        "simple": simple_result,
+        "daily": daily_result,
+        "multivariate": multi_result,
+        "war_dates": war_dates[:3] + ["..."] + war_dates[-3:] if len(war_dates) > 6 else war_dates,
+        "date_range": f"{war_dates[0]} to {war_dates[-1]}",
+        "caveat": f"Based on {len(war_dates)} trading days. Small sample — interpret with caution. Thesis used 505 observations over 24 months.",
+    }
+
+
 def get_hypothesis_results() -> dict:
     """Return hypothesis test results from the thesis defense regression table.
     Source: ThesisDefense_Hamm.pptx Slide 24 — OLS with HAC standard errors,

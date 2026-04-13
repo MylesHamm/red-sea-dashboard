@@ -197,6 +197,94 @@ function renderComparative(data) {
     createIranIntensityChart(data.iran_intensity || []);
     createChokepointCompareChart(data.bab_transits || [], data.hormuz_transits || []);
     createVolatilityCompareChart(data);
+
+    // Fetch and render Iran regression results
+    fetchJSON('/api/iran-regression').then(reg => {
+        const container = document.getElementById('iranRegressionResults');
+        if (!container || !reg || reg.error) {
+            if (container) container.innerHTML = `<div style="color:#ff5252; text-align:center; padding:16px;">${reg?.error || 'Regression failed'} (${reg?.n_obs || 0} observations)</div>`;
+            return;
+        }
+
+        const s = reg.simple;
+        const m = reg.multivariate;
+        const sigStar = (p) => p < 0.001 ? '***' : p < 0.01 ? '**' : p < 0.05 ? '*' : '';
+
+        let html = `<div style="display:grid; grid-template-columns: ${m ? '1fr 1fr' : '1fr'}; gap:20px;">`;
+
+        // Simple model
+        html += `<div style="background:rgba(255,82,82,0.05); border-radius:8px; padding:16px; border:1px solid rgba(255,82,82,0.15);">
+            <div style="font-size:13px; font-weight:700; color:#ff5252; margin-bottom:12px; text-align:center;">Simple OLS: Volatility ~ Iran Intensity</div>
+            <table style="width:100%; font-size:13px; color:#c0c8d4; border-collapse:collapse;">
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.08);">
+                    <td style="padding:6px 0; font-weight:600;">Iran Intensity</td>
+                    <td style="text-align:right; font-family:monospace;">${s.coefficient.toFixed(4)}${sigStar(s.p_value)}</td>
+                </tr>
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.08);">
+                    <td style="padding:6px 0;">Std Error</td>
+                    <td style="text-align:right; font-family:monospace;">(${s.std_error.toFixed(4)})</td>
+                </tr>
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.08);">
+                    <td style="padding:6px 0;">P-Value</td>
+                    <td style="text-align:right; font-family:monospace; color:${s.p_value < 0.05 ? '#00e676' : '#ffab00'}">${s.p_value.toFixed(4)}</td>
+                </tr>
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.08);">
+                    <td style="padding:6px 0;">R&sup2;</td>
+                    <td style="text-align:right; font-family:monospace;">${s.r_squared.toFixed(4)}</td>
+                </tr>
+                <tr>
+                    <td style="padding:6px 0;">Observations</td>
+                    <td style="text-align:right; font-family:monospace;">${s.n_obs}</td>
+                </tr>
+            </table>
+            <div style="margin-top:10px; font-size:11px; color:#8892a0; text-align:center;">
+                ${s.coefficient > 0 ? 'Positive coefficient: higher intensity → higher volatility' : 'Negative coefficient: higher intensity → lower volatility'}
+            </div>
+        </div>`;
+
+        // Multivariate model
+        if (m) {
+            html += `<div style="background:rgba(0,212,255,0.05); border-radius:8px; padding:16px; border:1px solid rgba(0,212,255,0.15);">
+                <div style="font-size:13px; font-weight:700; color:#00d4ff; margin-bottom:12px; text-align:center;">Multivariate OLS: + DXY & OVX Controls</div>
+                <table style="width:100%; font-size:13px; color:#c0c8d4; border-collapse:collapse;">`;
+            m.labels.forEach((label, i) => {
+                const p = m.p_values[i];
+                const pColor = p != null && p < 0.05 ? '#00e676' : '#ffab00';
+                html += `<tr style="border-bottom:1px solid rgba(255,255,255,0.08);">
+                    <td style="padding:5px 0; font-weight:${i === 1 ? '600' : '400'}">${label}</td>
+                    <td style="text-align:right; font-family:monospace;">${m.coefficients[i].toFixed(4)}${p != null ? sigStar(p) : ''}</td>
+                    <td style="text-align:right; font-family:monospace; font-size:11px; color:${pColor}">${p != null ? 'p=' + p.toFixed(3) : ''}</td>
+                </tr>`;
+            });
+            html += `<tr><td style="padding:6px 0; font-weight:600;">R&sup2;</td><td style="text-align:right; font-family:monospace;" colspan="2">${m.r_squared.toFixed(4)}</td></tr>
+                <tr><td style="padding:6px 0;">Observations</td><td style="text-align:right; font-family:monospace;" colspan="2">${m.n_obs}</td></tr>
+                </table></div>`;
+        }
+
+        html += `</div>`;
+
+        // Comparison with thesis
+        html += `<div style="margin-top:16px; display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+            <div style="background:rgba(74,144,217,0.08); border-radius:8px; padding:14px; text-align:center; border:1px solid rgba(74,144,217,0.15);">
+                <div style="font-size:11px; text-transform:uppercase; color:#4A90D9; font-weight:600; margin-bottom:6px;">Houthi Thesis (H1)</div>
+                <div style="font-size:22px; font-weight:700; color:#4A90D9; font-family:monospace;">&beta; = &minus;0.033*</div>
+                <div style="font-size:12px; color:#8892a0; margin-top:4px;">More attacks &rarr; less volatility</div>
+            </div>
+            <div style="background:rgba(255,82,82,0.08); border-radius:8px; padding:14px; text-align:center; border:1px solid rgba(255,82,82,0.15);">
+                <div style="font-size:11px; text-transform:uppercase; color:#ff5252; font-weight:600; margin-bottom:6px;">Iran War (Actual)</div>
+                <div style="font-size:22px; font-weight:700; color:#ff5252; font-family:monospace;">&beta; = ${s.coefficient > 0 ? '+' : ''}${s.coefficient.toFixed(4)}${sigStar(s.p_value)}</div>
+                <div style="font-size:12px; color:#8892a0; margin-top:4px;">${s.coefficient > 0 ? 'More intensity &rarr; more volatility' : 'More intensity &rarr; less volatility'}</div>
+            </div>
+        </div>`;
+
+        // Caveat
+        html += `<div style="margin-top:12px; font-size:11px; color:#8892a0; text-align:center; font-style:italic;">${reg.caveat} | ${reg.date_range}</div>`;
+
+        container.innerHTML = html;
+    }).catch(e => {
+        const container = document.getElementById('iranRegressionResults');
+        if (container) container.innerHTML = `<div style="color:#8892a0; text-align:center; padding:16px;">Regression not available</div>`;
+    });
 }
 
 async function _loadIranData() {

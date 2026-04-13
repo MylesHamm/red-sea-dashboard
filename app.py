@@ -203,6 +203,12 @@ async def get_war_phases():
     return data_service.get_war_phases()
 
 
+@app.get("/api/iran-regression")
+async def get_iran_regression():
+    """Run OLS regression on Iran war data."""
+    return await _run_sync(data_service.run_iran_regression)
+
+
 # ─── Data Refresh ─────────────────────────────────────────────────────────────
 
 _refresh_lock = threading.Lock()
