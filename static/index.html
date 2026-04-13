@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Red Sea Crisis Intelligence Dashboard</title>
+    <title>Middle East Energy Security Dashboard</title>
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -39,7 +39,7 @@
     <header class="header">
         <div class="header-content">
             <div class="header-left">
-                <h1>Red Sea Crisis Intelligence Dashboard</h1>
+                <h1>Middle East Energy Security Dashboard</h1>
                 <p class="header-subtitle">Houthi Maritime Attacks & Brent Crude Oil Volatility Analysis</p>
                 <p class="header-meta">Myles Hamm &middot; Mercyhurst University &middot; Master's Thesis 2025–2026</p>
             </div>
@@ -56,11 +56,12 @@
         <!-- Tab Navigation -->
         <nav class="tab-nav">
             <button class="tab-btn active" data-tab="overview">Executive Overview</button>
-            <button class="tab-btn" data-tab="geospatial">Geospatial Intelligence</button>
+            <button class="tab-btn" data-tab="currentevents">Iran War Intelligence</button>
+            <button class="tab-btn" data-tab="comparative">Comparative Analysis</button>
             <button class="tab-btn" data-tab="econometric">Econometric Analysis</button>
             <button class="tab-btn" data-tab="controls">Control Variables</button>
-            <button class="tab-btn" data-tab="currentevents">US-Iran Tensions</button>
             <button class="tab-btn" data-tab="maritime">Maritime Traffic</button>
+            <button class="tab-btn" data-tab="geospatial">Houthi Geospatial</button>
             <button class="tab-btn" data-tab="data">Data Explorer</button>
             <button class="tab-btn" data-tab="conclusion">Conclusion</button>
             <button class="tab-btn" data-tab="sources">Sources</button>
@@ -327,6 +328,141 @@
                     </div>
                     <div class="chart-wrapper" style="height:500px">
                         <canvas id="correlationChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ COMPARATIVE ANALYSIS ═══ -->
+    <section class="tab-content" id="tab-comparative">
+        <div class="container">
+            <!-- Thesis Finding Banner -->
+            <div class="chart-row">
+                <div class="chart-card full-width" style="border-left: 4px solid #00d4ff;">
+                    <div class="chart-header">
+                        <h3>Applying the Thesis Framework: Houthi Attacks vs. Iran War</h3>
+                    </div>
+                    <p style="color: #c0c8d4; line-height: 1.7; margin: 0; font-size: 14px;">
+                        The thesis found that <strong style="color:#00d4ff">Houthi maritime attacks had minimal impact on oil price volatility</strong> — markets adapted to non-state actor harassment over 24 months.
+                        The Iran-US war represents the opposite: <strong style="color:#ff5252">state-actor chokepoint closure causing the largest oil price shock since the 1979 Iranian Revolution</strong>.
+                        Brent surged from $73 to $126 (+72%) in weeks. This tab compares both crises to test whether the adaptation hypothesis holds when escalation shifts from sub-state harassment to full-scale war.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Summary Stats Cards -->
+            <div class="kpi-row" id="comparativeKpis">
+                <div class="kpi-card" data-accent="#4A90D9">
+                    <div class="kpi-label">Houthi Price Range</div>
+                    <div class="kpi-value" id="kpi-houthi-range">--</div>
+                    <div class="kpi-sub">24-month campaign</div>
+                </div>
+                <div class="kpi-card" data-accent="#E05555">
+                    <div class="kpi-label">Iran War Price Range</div>
+                    <div class="kpi-value" id="kpi-iran-range">--</div>
+                    <div class="kpi-sub">6 weeks of conflict</div>
+                </div>
+                <div class="kpi-card" data-accent="#F09060">
+                    <div class="kpi-label">Hormuz Status</div>
+                    <div class="kpi-value" id="kpi-hormuz-status">--</div>
+                    <div class="kpi-sub" id="kpi-hormuz-decline">--</div>
+                </div>
+                <div class="kpi-card" data-accent="#9B8EC4">
+                    <div class="kpi-label">Iran Price Impact</div>
+                    <div class="kpi-value" id="kpi-iran-impact">--</div>
+                    <div class="kpi-sub">Since war began</div>
+                </div>
+            </div>
+
+            <!-- Brent Price: Houthi vs Iran -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Brent Price: Houthi Campaign vs. Iran War</h3>
+                        <div class="chart-header-right">
+                            <span class="chart-badge">Side-by-Side</span>
+                            <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Brent crude oil prices indexed to Day 0 of each crisis. Houthi crisis (Oct 7, 2023) showed gradual adaptation with prices returning to baseline. Iran war (Feb 28, 2026) shows acute shock with prices surging 72% in weeks — no adaptation observed.</span></div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper" style="height:400px">
+                        <canvas id="comparativePriceChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Conflict Intensity + Chokepoint Comparison -->
+            <div class="chart-row two-col">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Iran Conflict Intensity Index</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Composite index built from ACLED events and curated war events. Weights: Battles/Explosions=3, Violence=2, Strategic=1. Curated events weighted by severity (1-5). Hormuz-proximate events get 2x multiplier. 7-day rolling sum shown.</span></div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="iranIntensityChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Chokepoint Transit Comparison</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">Monthly transit volumes at Bab el-Mandeb (Houthi target) vs. Strait of Hormuz (Iran blockade). Shows the relative disruption scale: Houthi attacks reduced Bab el-Mandeb traffic ~50%, while Iran's blockade has nearly eliminated Hormuz traffic.</span></div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="chokepointCompareChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hypothesis Retest -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Hypothesis Retest: Does the Adaptation Model Hold?</h3>
+                    </div>
+                    <div id="hypothesisRetestCards" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; padding: 16px;">
+                        <div class="hypothesis-card" style="border-left: 4px solid #ff5252;">
+                            <div class="hypothesis-header">
+                                <h4>H1: Attack Frequency → Volatility</h4>
+                            </div>
+                            <div class="hypothesis-body">
+                                <div style="margin-bottom:8px"><strong style="color:#4A90D9">Houthi (Thesis):</strong> NOT SUPPORTED (β = −0.033, p = 0.026). More attacks → less volatility. Markets adapted.</div>
+                                <div style="margin-bottom:8px"><strong style="color:#ff5252">Iran (Observed):</strong> LIKELY SUPPORTED. Each escalation (strikes, Hormuz closure, ground ops) triggered immediate price spikes. No adaptation over 6 weeks — volatility remains elevated.</div>
+                                <div class="hypothesis-verdict verdict-not-supported" style="background: rgba(255,82,82,0.1); border-color: #ff5252;">Adaptation breaks down when non-state harassment escalates to state-actor war.</div>
+                            </div>
+                        </div>
+                        <div class="hypothesis-card" style="border-left: 4px solid #ff5252;">
+                            <div class="hypothesis-header">
+                                <h4>H2: Tanker Targeting → Volatility</h4>
+                            </div>
+                            <div class="hypothesis-body">
+                                <div style="margin-bottom:8px"><strong style="color:#4A90D9">Houthi (Thesis):</strong> NOT SUPPORTED (β = −0.233, p = 0.004). Strongest adaptation effect — markets recalibrated to energy-sector targeting.</div>
+                                <div style="margin-bottom:8px"><strong style="color:#ff5252">Iran (Observed):</strong> LIKELY SUPPORTED. IRGC directly attacked 21+ merchant ships. Complete Hormuz blockade eliminated the distinction between tanker-specific and general attacks.</div>
+                                <div class="hypothesis-verdict verdict-not-supported" style="background: rgba(255,82,82,0.1); border-color: #ff5252;">When the state controls the chokepoint, ALL ships are targets. Tanker specificity becomes irrelevant.</div>
+                            </div>
+                        </div>
+                        <div class="hypothesis-card" style="border-left: 4px solid #ff5252;">
+                            <div class="hypothesis-header">
+                                <h4>H3: Chokepoint Geography → Volatility</h4>
+                            </div>
+                            <div class="hypothesis-body">
+                                <div style="margin-bottom:8px"><strong style="color:#4A90D9">Houthi (Thesis):</strong> NOT SUPPORTED (β = −0.128, p = 0.250). Geographic proximity to Bab el-Mandeb didn't predict volatility.</div>
+                                <div style="margin-bottom:8px"><strong style="color:#ff5252">Iran (Observed):</strong> STRONGLY SUPPORTED. Hormuz closure (21% of global oil) caused $73→$126 price surge. Geography is decisive when a state actor physically controls the chokepoint.</div>
+                                <div class="hypothesis-verdict verdict-not-supported" style="background: rgba(255,82,82,0.1); border-color: #ff5252;">Chokepoint geography matters enormously — but only when an actor can enforce total closure, not just harass passing ships.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Volatility Comparison -->
+            <div class="chart-row">
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3>Market Adaptation Test: Volatility Over Time</h3>
+                        <div class="chart-info"><span class="chart-info-icon">i</span><span class="chart-info-tooltip">If markets adapt, daily volatility should decline over the course of a crisis as traders price in the disruption. The Houthi crisis shows clear adaptation (declining volatility). Does the Iran war show the same pattern?</span></div>
+                    </div>
+                    <div class="chart-wrapper" style="height:350px">
+                        <canvas id="volatilityCompareChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -886,6 +1022,33 @@
                 </ul>
             </div>
 
+            <!-- IRAN WAR: POST-THESIS ASSESSMENT -->
+            <div class="conclusion-section" style="border-top: 2px solid #ff5252; padding-top: 24px;">
+                <h2 class="section-header" style="color:#ff5252">POST-THESIS: IRAN WAR ASSESSMENT</h2>
+                <div class="chart-card full-width" style="margin-bottom:20px; border-left: 4px solid #ff5252;">
+                    <div class="chart-header">
+                        <h3>THE ADAPTATION MODEL BREAKS DOWN</h3>
+                    </div>
+                    <p style="padding:0 24px 16px;color:var(--text-secondary);line-height:1.7">
+                        The US-Iran war (Feb 28, 2026&ndash;present) provides a natural experiment that tests the thesis finding. The adaptation hypothesis holds for <strong>sub-state actor harassment</strong> (Houthi attacks: &beta; = &minus;0.033, declining volatility over 24 months). It does <strong>not</strong> hold for <strong>state-actor chokepoint closure</strong> (Iran: Brent surged from $73 to $126 in weeks, no adaptation observed). This distinction &mdash; non-state harassment vs. state-controlled closure &mdash; represents the boundary condition of the adaptation model.
+                    </p>
+                </div>
+                <div class="mechanism-grid">
+                    <div class="mechanism-card" style="border-top: 3px solid #ff5252;">
+                        <h4>STATE vs. NON-STATE</h4>
+                        <p>Houthi attacks were probabilistic disruptions &mdash; ships could still transit with risk. Iran's IRGC physically controls Hormuz with naval assets, mines, and anti-ship missiles. This eliminates the probability-based pricing that enabled adaptation.</p>
+                    </div>
+                    <div class="mechanism-card" style="border-top: 3px solid #ff5252;">
+                        <h4>HARASSMENT vs. CLOSURE</h4>
+                        <p>Houthis damaged individual ships but never stopped traffic. Iran stopped 21% of global oil flow. The market can adapt to increased shipping costs; it cannot adapt to supply elimination.</p>
+                    </div>
+                    <div class="mechanism-card" style="border-top: 3px solid #ff5252;">
+                        <h4>CONTROL VARIABLES NOW DOMINATE DIFFERENTLY</h4>
+                        <p>During the Houthi crisis, OVX and DXY explained most volatility. During the Iran war, the conflict itself IS the dominant variable &mdash; OVX surged because of the war, not independent of it. The control variables are no longer exogenous.</p>
+                    </div>
+                </div>
+            </div>
+
             <!-- FUTURE RESEARCH -->
             <div class="conclusion-section">
                 <h2 class="section-header">FUTURE RESEARCH</h2>
@@ -895,6 +1058,8 @@
                     <li>Freight rate analysis as alternative dependent variable</li>
                     <li>Machine learning for nonlinear thresholds</li>
                     <li>Game theory modeling of adversary strategic timing</li>
+                    <li><strong>State-actor vs. non-state-actor disruption modeling</strong> &mdash; the Iran war confirms that the adaptation model has boundary conditions tied to actor type and escalation level</li>
+                    <li><strong>Structural break detection</strong> &mdash; applying Chow tests or regime-switching models to identify when market adaptation collapses under state-actor escalation</li>
                 </ol>
             </div>
 
@@ -984,8 +1149,8 @@
     </footer>
 
     <!-- Dashboard JS -->
-    <script src="/static/js/charts.js?v=20260408a"></script>
-    <script src="/static/js/map.js?v=20260408a"></script>
-    <script src="/static/js/app.js?v=20260408a"></script>
+    <script src="/static/js/charts.js?v=20260413a"></script>
+    <script src="/static/js/map.js?v=20260413a"></script>
+    <script src="/static/js/app.js?v=20260413a"></script>
 </body>
 </html>

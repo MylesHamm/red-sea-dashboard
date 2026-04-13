@@ -99,6 +99,14 @@ function switchTab(tab) {
         }
     }
 
+    // Render comparative analysis tab on first visit
+    if (tab === 'comparative') {
+        if (!_renderedTabs.has('comparative')) {
+            _renderedTabs.add('comparative');
+            _loadComparativeData();
+        }
+    }
+
     // Render data table on first visit; lazy-load ACLED events for table
     if (tab === 'data' && masterData) {
         if (!_renderedTabs.has('data')) {
@@ -140,6 +148,55 @@ async function fetchJSON(url) {
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     return resp.json();
+}
+
+let _comparativeData = null;
+async function _loadComparativeData() {
+    if (_comparativeData) return;
+    try {
+        _comparativeData = await fetchJSON('/api/comparative');
+        renderComparative(_comparativeData);
+    } catch (e) {
+        console.warn('Comparative data load failed:', e);
+    }
+}
+
+function renderComparative(data) {
+    if (!data) return;
+    const s = data.summary || {};
+
+    // KPIs
+    const houthiRange = s.houthi_price_range;
+    const iranRange = s.iran_price_range;
+    if (houthiRange) animateValue('kpi-houthi-range', `$${houthiRange[0]} – $${houthiRange[1]}`);
+    if (iranRange) animateValue('kpi-iran-range', `$${iranRange[0]} – $${iranRange[1]}`);
+    if (s.iran_price_change_pct != null) animateValue('kpi-iran-impact', `${s.iran_price_change_pct > 0 ? '+' : ''}${s.iran_price_change_pct}%`);
+
+    // Hormuz status
+    const hd = data.hormuz_disruption || {};
+    if (hd.status) {
+        animateValue('kpi-hormuz-status', hd.status);
+        const statusEl = document.getElementById('kpi-hormuz-status');
+        if (statusEl) {
+            const colors = { BLOCKADE: '#ff5252', RESTRICTED: '#F09060', DISRUPTED: '#ffab00', OPEN: '#00e676', UNKNOWN: '#8892a0' };
+            statusEl.style.color = colors[hd.status] || '#8892a0';
+        }
+    }
+    if (hd.pct_decline != null) {
+        const declineEl = document.getElementById('kpi-hormuz-decline');
+        if (declineEl) declineEl.textContent = `${hd.pct_decline}% decline from baseline`;
+    }
+
+    // Apply accent colors
+    document.querySelectorAll('#tab-comparative .kpi-card[data-accent]').forEach(card => {
+        card.style.borderTopColor = card.dataset.accent;
+    });
+
+    // Charts
+    createComparativePriceChart(data);
+    createIranIntensityChart(data.iran_intensity || []);
+    createChokepointCompareChart(data.bab_transits || [], data.hormuz_transits || []);
+    createVolatilityCompareChart(data);
 }
 
 async function _loadIranData() {

@@ -485,7 +485,12 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
         "2026-04-04": 121.07,  # Bushehr nuclear plant struck; IAEA warning
         # Apr 5 (Sat) and Apr 6 (Sun) — no settlement
         "2026-04-07": 126.00,  # Trump 'civilization will die tonight'; ceasefire announced
-        "2026-04-08": 119.50,  # Islamabad Accords ceasefire takes effect; relief rally
+        "2026-04-08": 93.76,   # Ceasefire crash — Brent drops ~13% from highs
+        "2026-04-09": 100.99,  # Rebound as Hormuz stays closed despite ceasefire
+        "2026-04-10": 97.78,   # Trump accuses Iran of poor Hormuz management
+        "2026-04-11": 95.71,   # US Navy enters Hormuz; Islamabad talks begin
+        # Apr 12 (Sat) — no settlement
+        "2026-04-13": 103.72,  # Surges 6.95% on US naval blockade announcement
     }
 
     # ── Layers 1-3: Run ALL live sources in parallel ──────────────────────────
@@ -1070,7 +1075,14 @@ def get_curated_iran_events() -> List[dict]:
         {"date": "2026-04-05", "title": "Trump Threatens Iran's Power Grid; Downed Pilot Rescued; Iraqi Militia Attacks US Embassy", "type": "military", "description": "Trump threatens to attack Iran's power plants and bridges if Hormuz not reopened within two days. Iranian-backed Iraqi militia Saraya Awliya al-Dam attacks US diplomatic facilities in Baghdad. Second F-15E crew member rescued alive. Iranian UAVs and cruise missiles intercepted in Qatari airspace.", "severity": 3, "fatalities": 0, "lat": 33.3152, "lon": 44.3661, "location": "Baghdad, Iraq"},
         {"date": "2026-04-06", "title": "Pakistan Proposes 'Islamabad Accord' — 45-Day Ceasefire Plan", "type": "diplomatic", "description": "Pakistan offers two-phased 45-day truce ('Islamabad Accord'). Pakistan army chief in contact with VP Vance, envoy Witkoff, and Iranian FM Araghchi. Iran 'positively reviewing' proposal but refuses to reopen Hormuz under temporary ceasefire. Houthis threaten to close Bab al-Mandeb strait — fears of second chokepoint crisis.", "severity": 2, "fatalities": 0, "lat": 33.6844, "lon": 73.0479, "location": "Islamabad, Pakistan"},
         {"date": "2026-04-07", "title": "Trump: 'A Whole Civilization Will Die Tonight'; Ceasefire Announced Before Deadline", "type": "diplomatic", "description": "Trump sets 8 PM ET deadline, posts 'a whole civilization will die tonight.' White House denies nuclear weapon plans. Pakistan PM makes last-ditch appeal. ~90 minutes before deadline, Trump announces two-week ceasefire based on Pakistan-mediated 10-point proposal. Iran to reopen Strait of Hormuz.", "severity": 2, "fatalities": 0, "lat": 38.9072, "lon": -77.0369, "location": "Washington, DC"},
-        {"date": "2026-04-08", "title": "Islamabad Accords Ceasefire Takes Effect; Strait Still Blocked Initially", "type": "diplomatic", "description": "Two-week Islamabad Accords ceasefire takes effect. Iran's Supreme National Security Council confirms acceptance. Iran agrees to reopen Hormuz but strait remains largely blocked as shipowners assess safety — 800+ freighters stuck. Trump floats US-Iran 'joint venture' to charge Hormuz tolls. Brent peaked at $126/bbl during crisis. Netanyahu says ceasefire does not apply to Lebanon.", "severity": 1, "fatalities": 0, "lat": 33.6844, "lon": 73.0479, "location": "Islamabad, Pakistan"},
+        {"date": "2026-04-08", "title": "Islamabad Accords Ceasefire Takes Effect; Israel Launches 'Eternal Darkness' on Lebanon", "type": "diplomatic", "description": "Two-week ceasefire takes effect. Iran's Supreme National Security Council confirms acceptance. Hezbollah announces pause. But Israel launches 'Operation Eternal Darkness' — 100 airstrikes on Lebanon in 10 minutes targeting Hezbollah HQ and missile infrastructure. Gulf states intercept missiles; fires at Abu Dhabi's Habshan gas complex and Saudi pipeline. Hormuz remains effectively closed — 800+ freighters stuck. Brent crashes ~13% from pre-ceasefire highs.", "severity": 2, "fatalities": 0, "lat": 33.6844, "lon": 73.0479, "location": "Islamabad, Pakistan"},
+
+        # ── Ceasefire Period (April 9-13, 2026) ──
+        {"date": "2026-04-09", "title": "Ceasefire Violations Begin; Hormuz Still Closed; Only 4 Ships Transit", "type": "military", "description": "No sign of Hormuz blockade lifting — Iran limits crossings, charges tolls over $1M per ship. Only 4 dry cargo ships pass through. Iran accuses US/Israel of ceasefire violations over Lebanon strikes. IDF's 98th Division takes Bint Jbeil in southern Lebanon. Hezbollah fires rockets at Kiryat Shmona. 230 loaded oil tankers stuck inside the Gulf. Brent at $100.99.", "severity": 2, "fatalities": 0, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
+        {"date": "2026-04-10", "title": "Trump Accuses Iran of 'Very Poor Job' on Hormuz; Only 15 Ships Through", "type": "diplomatic", "description": "Trump accuses Iran of doing 'very poor job' managing Hormuz oil flow, says situation is 'not the agreement we have.' Only 15 ships total have made it through strait since ceasefire. Israel strikes Lebanon in early morning; Hezbollah launches rockets at Metula. Sirens in Tel Aviv, Haifa, and Ashdod. Ceasefire effectively collapsing. Brent at $97.78.", "severity": 2, "fatalities": 0, "lat": 38.9072, "lon": -77.0369, "location": "Washington, DC"},
+        {"date": "2026-04-11", "title": "Vance Arrives in Islamabad for Peace Talks; US Navy Enters Hormuz", "type": "diplomatic", "description": "VP Vance, envoy Witkoff, and Jared Kushner arrive in Islamabad for talks with Iranian FM Araghchi and Parliament Speaker Ghalibaf. Several US Navy destroyers enter Strait of Hormuz for first time since war began — CENTCOM says mine clearance operations. Iran threatens to attack ships, accuses US of ceasefire violation. Trump announces US forces 'clearing' the strait.", "severity": 2, "fatalities": 0, "lat": 33.6844, "lon": 73.0479, "location": "Islamabad, Pakistan"},
+        {"date": "2026-04-12", "title": "Islamabad Talks Collapse After 21 Hours; Trump Declares Naval Blockade", "type": "diplomatic", "description": "Vance leaves Pakistan after 21-hour marathon talks without agreement. Iranian FM spokesman says 'gaps on several major issues.' Ghalibaf says US 'did not succeed in gaining trust.' Trump threatens 'full naval blockade' — CENTCOM announces blockade starting Monday 10 AM EDT targeting vessels from/to Iranian ports. Non-Iran traffic free to transit. Brent at $96.", "severity": 2, "fatalities": 0, "lat": 33.6844, "lon": 73.0479, "location": "Islamabad, Pakistan"},
+        {"date": "2026-04-13", "title": "US Naval Blockade Imminent; Oil Surges on Escalation Fears", "type": "military", "description": "Markets react to impending US naval blockade of Strait of Hormuz. Brent surges 6.95% to $103.72 as traders price in blockade risk. 500-700 vessels over 10,000 DWT stuck in Persian Gulf. Poll shows 63% of Israelis believe ceasefire does not extend to Lebanon. Ceasefire increasingly fragile ahead of Monday blockade deadline.", "severity": 2, "fatalities": 0, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
     ]
 
 
@@ -1712,6 +1724,237 @@ def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
         "kpis": kpis,
         "impact_by_type": impact_by_type,
         "event_table": event_table,
+    }
+
+
+# ─── Iran Conflict Intensity Index ─────────────────────────────────────────────
+
+def compute_iran_intensity() -> List[dict]:
+    """Build a daily/weekly Iran conflict intensity index from ACLED + curated events.
+    Analogous to WeeklyAttackFreq from the Houthi thesis analysis.
+
+    Scoring:
+      - ACLED events: Battles/Explosions=3, Violence against civilians=2, other=1
+      - Curated events: weighted by severity (1-5)
+      - Fatalities: log-scaled bonus
+      - Hormuz proximity (<200km): 2x multiplier
+    """
+    import math
+
+    # Get data sources
+    iran_acled = _read_cache("iran_events", 7200) or _load_iran_json_fallback() or []
+    curated = get_curated_iran_events()
+
+    # ACLED event type weights
+    acled_weights = {
+        "Battles": 3, "Explosions/Remote violence": 3,
+        "Violence against civilians": 2, "Strategic developments": 1,
+        "Protests": 1, "Riots": 1,
+    }
+
+    # Hormuz coordinates for proximity check
+    HORMUZ_LAT, HORMUZ_LON = 26.5667, 56.2500
+
+    def _haversine_km(lat1, lon1, lat2, lon2):
+        R = 6371
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+        return R * 2 * math.asin(math.sqrt(a))
+
+    # Build daily scores
+    daily_scores = {}
+
+    # Score ACLED events
+    for e in iran_acled:
+        date = (e.get("event_date") or "")[:10]
+        if not date or date < "2025-01-01":
+            continue
+        etype = e.get("event_type", "")
+        weight = acled_weights.get(etype, 1)
+        fatalities = int(e.get("fatalities", 0) or 0)
+        fat_bonus = math.log1p(fatalities) if fatalities > 0 else 0
+
+        # Proximity multiplier
+        try:
+            lat = float(e.get("latitude", 0))
+            lon = float(e.get("longitude", 0))
+            dist = _haversine_km(lat, lon, HORMUZ_LAT, HORMUZ_LON)
+            proximity = 2.0 if dist < 200 else 1.0
+        except (ValueError, TypeError):
+            proximity = 1.0
+
+        score = (weight + fat_bonus) * proximity
+        daily_scores[date] = daily_scores.get(date, 0) + score
+
+    # Score curated events (higher weight — these are confirmed major events)
+    for e in curated:
+        date = e["date"]
+        severity = e.get("severity", 1)
+        fatalities = e.get("fatalities", 0) or 0
+        fat_bonus = math.log1p(fatalities) if fatalities > 0 else 0
+
+        try:
+            lat = float(e.get("lat", 0))
+            lon = float(e.get("lon", 0))
+            dist = _haversine_km(lat, lon, HORMUZ_LAT, HORMUZ_LON)
+            proximity = 2.0 if dist < 200 else 1.0
+        except (ValueError, TypeError):
+            proximity = 1.0
+
+        score = (severity * 2 + fat_bonus) * proximity
+        daily_scores[date] = daily_scores.get(date, 0) + score
+
+    # Build time series with 7-day rolling sum
+    if not daily_scores:
+        return []
+
+    sorted_dates = sorted(daily_scores.keys())
+    start = datetime.strptime(sorted_dates[0], "%Y-%m-%d")
+    end = datetime.strptime(sorted_dates[-1], "%Y-%m-%d")
+
+    result = []
+    current = start
+    window = []
+    while current <= end:
+        ds = current.strftime("%Y-%m-%d")
+        daily = round(daily_scores.get(ds, 0), 2)
+        window.append(daily)
+        if len(window) > 7:
+            window.pop(0)
+        weekly = round(sum(window), 2)
+        result.append({"date": ds, "daily_intensity": daily, "weekly_intensity": weekly})
+        current += timedelta(days=1)
+
+    return result
+
+
+def compute_hormuz_disruption() -> dict:
+    """Compare current Hormuz transit rates to pre-war baseline."""
+    hormuz = _read_cache("hormuz_transits", 86400)
+    if not hormuz:
+        try:
+            hormuz = _fetch_chokepoint_transits("hormuz")
+        except Exception:
+            hormuz = []
+
+    if not hormuz or len(hormuz) < 3:
+        return {"status": "UNKNOWN", "baseline_transits": None, "current_transits": None, "pct_decline": None}
+
+    # Pre-war baseline: average of months before Feb 2026
+    pre_war = [m for m in hormuz if m["month"] < "2026-02"]
+    current = [m for m in hormuz if m["month"] >= "2026-02"]
+
+    if not pre_war or not current:
+        return {"status": "UNKNOWN", "baseline_transits": None, "current_transits": None, "pct_decline": None}
+
+    baseline_avg = sum(m["transits"] for m in pre_war) / len(pre_war)
+    current_avg = sum(m["transits"] for m in current) / len(current)
+    pct_decline = round((1 - current_avg / baseline_avg) * 100, 1) if baseline_avg > 0 else 0
+
+    # Tanker-specific if available
+    tanker_baseline = None
+    tanker_current = None
+    tanker_decline = None
+    if pre_war[0].get("tanker_transits") is not None:
+        tanker_baseline = sum(m.get("tanker_transits", 0) for m in pre_war) / len(pre_war)
+        tanker_current = sum(m.get("tanker_transits", 0) for m in current) / len(current)
+        tanker_decline = round((1 - tanker_current / tanker_baseline) * 100, 1) if tanker_baseline > 0 else 0
+
+    # Status classification
+    if pct_decline >= 80:
+        status = "BLOCKADE"
+    elif pct_decline >= 40:
+        status = "RESTRICTED"
+    elif pct_decline >= 10:
+        status = "DISRUPTED"
+    else:
+        status = "OPEN"
+
+    return {
+        "status": status,
+        "baseline_transits": round(baseline_avg),
+        "current_transits": round(current_avg),
+        "pct_decline": pct_decline,
+        "tanker_baseline": round(tanker_baseline) if tanker_baseline else None,
+        "tanker_current": round(tanker_current) if tanker_current else None,
+        "tanker_pct_decline": tanker_decline,
+        "months_data": hormuz,
+    }
+
+
+def get_war_phases() -> List[dict]:
+    """Return war phase definitions for timeline annotations."""
+    return [
+        {"phase": 1, "name": "Maximum Pressure Restored", "start": "2025-01-20", "end": "2026-02-27", "color": "#F09060"},
+        {"phase": 2, "name": "Twelve-Day War", "start": "2026-02-28", "end": "2026-03-11", "color": "#E05555"},
+        {"phase": 3, "name": "Hormuz Blockade & Escalation", "start": "2026-03-12", "end": "2026-03-19", "color": "#9B8EC4"},
+        {"phase": 4, "name": "Regional Spread", "start": "2026-03-20", "end": "2026-03-29", "color": "#D4B870"},
+        {"phase": 5, "name": "Ground Operations Prep", "start": "2026-03-30", "end": "2026-04-07", "color": "#E05555"},
+        {"phase": 6, "name": "Ceasefire & Islamabad Talks", "start": "2026-04-08", "end": "2026-04-12", "color": "#4A90D9"},
+        {"phase": 7, "name": "Naval Blockade", "start": "2026-04-13", "end": "2026-12-31", "color": "#E05555"},
+    ]
+
+
+def get_comparative_data() -> dict:
+    """Build Houthi vs Iran comparative analysis dataset."""
+    # Houthi data from master dataset CSV
+    thesis_df = None
+    try:
+        thesis_df = pd.read_csv(config.MYLES_DATASET_PATH)
+    except Exception as e:
+        logger.warning(f"Failed to load master dataset for comparative: {e}")
+    houthi_ts = []
+    if thesis_df is not None and not thesis_df.empty:
+        for _, row in thesis_df.iterrows():
+            houthi_ts.append({
+                "date": str(row.get("Date", ""))[:10],
+                "brent_price": float(row["Brent_Price"]) if pd.notna(row.get("Brent_Price")) else None,
+                "weekly_attacks": float(row["WeeklyAttackFreq"]) if pd.notna(row.get("WeeklyAttackFreq")) else None,
+                "daily_volatility": float(row["Daily_Volatility"]) if pd.notna(row.get("Daily_Volatility")) else None,
+            })
+
+    # Iran intensity data
+    iran_intensity = compute_iran_intensity()
+
+    # Brent prices (includes war period)
+    brent = _read_cache("brent_prices", 7200) or []
+
+    # Hormuz disruption
+    hormuz = compute_hormuz_disruption()
+
+    # Chokepoint transit comparison
+    bab_transits = _read_cache("bab_el_mandeb_transits", 86400) or []
+    hormuz_transits = hormuz.get("months_data", [])
+
+    # War phases
+    phases = get_war_phases()
+
+    # Houthi period stats
+    houthi_prices = [h["brent_price"] for h in houthi_ts if h["brent_price"]]
+    houthi_vol = [h["daily_volatility"] for h in houthi_ts if h["daily_volatility"]]
+
+    # Iran period stats (from curated events + Brent)
+    iran_brent = [b for b in brent if b["date"] >= "2026-02-28"]
+    iran_prices = [b["price"] for b in iran_brent]
+
+    return {
+        "houthi_timeseries": houthi_ts,
+        "iran_intensity": iran_intensity,
+        "iran_brent": iran_brent,
+        "bab_transits": bab_transits,
+        "hormuz_transits": hormuz_transits,
+        "hormuz_disruption": hormuz,
+        "war_phases": phases,
+        "summary": {
+            "houthi_period": "Oct 2023 – Oct 2025",
+            "houthi_price_range": [round(min(houthi_prices), 2), round(max(houthi_prices), 2)] if houthi_prices else None,
+            "houthi_avg_volatility": round(sum(houthi_vol) / len(houthi_vol), 4) if houthi_vol else None,
+            "iran_period": "Feb 28, 2026 – Present",
+            "iran_price_range": [round(min(iran_prices), 2), round(max(iran_prices), 2)] if iran_prices else None,
+            "iran_price_change_pct": round((iran_prices[-1] - iran_prices[0]) / iran_prices[0] * 100, 1) if len(iran_prices) >= 2 else None,
+            "thesis_finding": "Houthi attacks had minimal impact on oil volatility (market adaptation). Iran war caused massive price disruption — state-actor chokepoint closure breaks the adaptation model.",
+        },
     }
 
 

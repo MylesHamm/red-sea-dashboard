@@ -756,6 +756,189 @@ function createControlCoefficientChart(hypothesisData) {
     });
 }
 
+/* ─── Comparative Analysis Charts ──────────────────────────────────────── */
+
+function createComparativePriceChart(compData) {
+    destroyChart('comparativePriceChart');
+    const ctx = document.getElementById('comparativePriceChart');
+    if (!ctx) return;
+
+    // Build indexed price series (Day 0 = crisis start, normalized to 100)
+    const houthi = compData.houthi_timeseries.filter(d => d.brent_price && d.date >= '2023-10-07');
+    const iran = compData.iran_brent || [];
+
+    const houthiBase = houthi.length ? houthi[0].brent_price : 1;
+    const iranBase = iran.length ? iran[0].price : 1;
+
+    const maxDays = Math.max(houthi.length, iran.length);
+    const labels = Array.from({length: Math.min(maxDays, 200)}, (_, i) => `Day ${i}`);
+
+    const houthiIndexed = houthi.slice(0, 200).map(d => (d.brent_price / houthiBase) * 100);
+    const iranIndexed = iran.slice(0, 200).map(d => (d.price / iranBase) * 100);
+
+    chartInstances['comparativePriceChart'] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Houthi Crisis (Oct 2023)',
+                    data: houthiIndexed,
+                    borderColor: '#4A90D9',
+                    backgroundColor: 'rgba(74, 144, 217, 0.1)',
+                    borderWidth: 2, pointRadius: 0, tension: 0.3, fill: true,
+                },
+                {
+                    label: 'Iran War (Feb 2026)',
+                    data: iranIndexed,
+                    borderColor: '#ff5252',
+                    backgroundColor: 'rgba(255, 82, 82, 0.1)',
+                    borderWidth: 2.5, pointRadius: 0, tension: 0.3, fill: true,
+                }
+            ]
+        },
+        options: {
+            ...CHART_DEFAULTS,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: { ...CHART_DEFAULTS.scales.x, title: { display: true, text: 'Trading Days Since Crisis Start', font: { family: 'Inter', size: 11 }, color: '#8892a0' } },
+                y: { ...CHART_DEFAULTS.scales.y, title: { display: true, text: 'Price Index (Day 0 = 100)', font: { family: 'Inter', size: 11 }, color: '#8892a0' } }
+            }
+        }
+    });
+}
+
+function createIranIntensityChart(intensityData) {
+    destroyChart('iranIntensityChart');
+    const ctx = document.getElementById('iranIntensityChart');
+    if (!ctx || !intensityData.length) return;
+
+    // Filter to war period
+    const warData = intensityData.filter(d => d.date >= '2026-02-01');
+
+    chartInstances['iranIntensityChart'] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: warData.map(d => d.date),
+            datasets: [
+                {
+                    label: '7-Day Rolling Intensity',
+                    data: warData.map(d => d.weekly_intensity),
+                    borderColor: '#ff5252',
+                    backgroundColor: 'rgba(255, 82, 82, 0.15)',
+                    borderWidth: 2, pointRadius: 0, tension: 0.3, fill: true,
+                },
+                {
+                    label: 'Daily Intensity',
+                    data: warData.map(d => d.daily_intensity),
+                    borderColor: 'rgba(255, 171, 0, 0.5)',
+                    backgroundColor: 'transparent',
+                    borderWidth: 1, pointRadius: 0, tension: 0.1,
+                }
+            ]
+        },
+        options: {
+            ...CHART_DEFAULTS,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: { ...CHART_DEFAULTS.scales.x },
+                y: { ...CHART_DEFAULTS.scales.y, title: { display: true, text: 'Conflict Intensity Score', font: { family: 'Inter', size: 11 }, color: '#8892a0' } }
+            }
+        }
+    });
+}
+
+function createChokepointCompareChart(babData, hormuzData) {
+    destroyChart('chokepointCompareChart');
+    const ctx = document.getElementById('chokepointCompareChart');
+    if (!ctx) return;
+
+    // Merge months
+    const allMonths = new Set([...babData.map(d => d.month), ...hormuzData.map(d => d.month)]);
+    const months = [...allMonths].sort();
+    const babMap = Object.fromEntries(babData.map(d => [d.month, d.transits]));
+    const hormuzMap = Object.fromEntries(hormuzData.map(d => [d.month, d.transits]));
+
+    chartInstances['chokepointCompareChart'] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: months,
+            datasets: [
+                {
+                    label: 'Bab el-Mandeb (Houthi)',
+                    data: months.map(m => babMap[m] || null),
+                    borderColor: '#4A90D9',
+                    borderWidth: 2, pointRadius: 2, tension: 0.3,
+                },
+                {
+                    label: 'Strait of Hormuz (Iran)',
+                    data: months.map(m => hormuzMap[m] || null),
+                    borderColor: '#ff5252',
+                    borderWidth: 2, pointRadius: 2, tension: 0.3,
+                }
+            ]
+        },
+        options: {
+            ...CHART_DEFAULTS,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: { ...CHART_DEFAULTS.scales.x },
+                y: { ...CHART_DEFAULTS.scales.y, beginAtZero: true, title: { display: true, text: 'Monthly Transits', font: { family: 'Inter', size: 11 }, color: '#8892a0' } }
+            }
+        }
+    });
+}
+
+function createVolatilityCompareChart(compData) {
+    destroyChart('volatilityCompareChart');
+    const ctx = document.getElementById('volatilityCompareChart');
+    if (!ctx) return;
+
+    // Houthi volatility over time
+    const houthi = compData.houthi_timeseries.filter(d => d.daily_volatility != null && d.date >= '2023-10-07');
+    // Iran: compute daily % changes from brent prices
+    const iran = compData.iran_brent || [];
+    const iranVol = [];
+    for (let i = 1; i < iran.length; i++) {
+        const change = Math.abs((iran[i].price - iran[i-1].price) / iran[i-1].price * 100);
+        iranVol.push({ date: iran[i].date, volatility: Math.round(change * 100) / 100 });
+    }
+
+    const maxDays = Math.max(houthi.length, iranVol.length);
+    const labels = Array.from({length: Math.min(maxDays, 200)}, (_, i) => `Day ${i}`);
+
+    chartInstances['volatilityCompareChart'] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Houthi Crisis — Daily Volatility (%)',
+                    data: houthi.slice(0, 200).map(d => d.daily_volatility),
+                    borderColor: '#4A90D9',
+                    backgroundColor: 'rgba(74, 144, 217, 0.08)',
+                    borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: true,
+                },
+                {
+                    label: 'Iran War — Daily Volatility (%)',
+                    data: iranVol.slice(0, 200).map(d => d.volatility),
+                    borderColor: '#ff5252',
+                    backgroundColor: 'rgba(255, 82, 82, 0.08)',
+                    borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: true,
+                }
+            ]
+        },
+        options: {
+            ...CHART_DEFAULTS,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: { ...CHART_DEFAULTS.scales.x, title: { display: true, text: 'Trading Days Since Crisis Start', font: { family: 'Inter', size: 11 }, color: '#8892a0' } },
+                y: { ...CHART_DEFAULTS.scales.y, title: { display: true, text: 'Daily Price Change (%)', font: { family: 'Inter', size: 11 }, color: '#8892a0' } }
+            }
+        }
+    });
+}
+
 /* ─── Tab 6: Current Events (US-Iran) ───────────────────────────────────── */
 
 const IRAN_TYPE_COLORS = {

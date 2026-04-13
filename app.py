@@ -23,7 +23,7 @@ def _run_sync(fn, *args):
     loop = asyncio.get_running_loop()
     return loop.run_in_executor(None, fn if not args else partial(fn, *args))
 
-app = FastAPI(title="Red Sea Crisis Intelligence Dashboard")
+app = FastAPI(title="Middle East Energy Security Dashboard")
 
 # Serve static files (HTML, CSS, JS) with no-cache headers
 
@@ -175,6 +175,32 @@ async def get_iran_impact():
     result = data_service.compute_iran_impact(iran_events, brent_prices)
     result["brent_prices"] = brent_prices
     return result
+
+
+# ─── Comparative Analysis & Iran Intensity ─────────────────────────────────────
+
+@app.get("/api/comparative")
+async def get_comparative():
+    """Houthi vs Iran comparative analysis dataset."""
+    return await _run_sync(data_service.get_comparative_data)
+
+
+@app.get("/api/iran-intensity")
+async def get_iran_intensity():
+    """Iran conflict intensity time series."""
+    return await _run_sync(data_service.compute_iran_intensity)
+
+
+@app.get("/api/hormuz-status")
+async def get_hormuz_status():
+    """Hormuz disruption tracker."""
+    return await _run_sync(data_service.compute_hormuz_disruption)
+
+
+@app.get("/api/war-phases")
+async def get_war_phases():
+    """War phase definitions for timeline annotations."""
+    return data_service.get_war_phases()
 
 
 # ─── Data Refresh ─────────────────────────────────────────────────────────────
