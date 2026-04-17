@@ -4,6 +4,7 @@ Handles: ACLED, EIA (Brent + SPR), yfinance (DXY, OVX), FRED (China BCI)
 """
 import bisect
 import json
+import math
 import os
 import re
 import time
@@ -1739,8 +1740,6 @@ def compute_iran_intensity() -> List[dict]:
       - Fatalities: log-scaled bonus
       - Hormuz proximity (<200km): 2x multiplier
     """
-    import math
-
     # Get data sources
     iran_acled = _read_cache("iran_events", 7200) or _load_iran_json_fallback() or []
     curated = get_curated_iran_events()
@@ -1958,16 +1957,138 @@ def get_comparative_data() -> dict:
     }
 
 
+def _t_cdf_approx(t: float, df: int) -> float:
+    """Approximate Student's t-distribution CDF using a series expansion.
+    Good enough for p-value calculation without requiring scipy.
+
+    For df > 30, normal approximation is very accurate.
+    For smaller df, uses the relation to the incomplete beta function
+    via a continued fraction approximation.
+    """
+    if df <= 0:
+        return 0.5
+
+    # For large df, use normal approximation via erf
+    if df > 30:
+        return 0.5 * (1 + math.erf(t / math.sqrt(2)))
+
+    # For smaller df, use the relation: P(T <= t) = 1 - 0.5 * I(df/(df+t^2); df/2, 0.5)
+    # where I is the regularized incomplete beta function.
+    # We use an approximation from Abramowitz & Stegun.
+    x = df / (df + t * t)
+
+    # Regularized incomplete beta via continued fraction (Lentz's method)
+    def _incbeta(a, b, x):
+        if x <= 0:
+            return 0.0
+        if x >= 1:
+            return 1.0
+        # Use continued fraction
+        bt = math.exp(math.lgamma(a + b) - math.lgamma(a) - math.lgamma(b) +
+                      a * math.log(x) + b * math.log(1 - x))
+        if x < (a + 1) / (a + b + 2):
+            return bt * _betacf(a, b, x) / a
+        else:
+            return 1 - bt * _betacf(b, a, 1 - x) / b
+
+    def _betacf(a, b, x):
+        MAXIT = 200
+        EPS = 3e-7
+        qab = a + b
+        qap = a + 1
+        qam = a - 1
+        c = 1.0
+        d = 1.0 - qab * x / qap
+        if abs(d) < 1e-30:
+            d = 1e-30
+        d = 1.0 / d
+        h = d
+        for m in range(1, MAXIT + 1):
+            m2 = 2 * m
+            aa = m * (b - m) * x / ((qam + m2) * (a + m2))
+            d = 1.0 + aa * d
+            if abs(d) < 1e-30:
+                d = 1e-30
+            c = 1.0 + aa / c
+            if abs(c) < 1e-30:
+                c = 1e-30
+            d = 1.0 / d
+            h *= d * c
+            aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2))
+            d = 1.0 + aa * d
+            if abs(d) < 1e-30:
+                d = 1e-30
+            c = 1.0 + aa / c
+            if abs(c) < 1e-30:
+                c = 1e-30
+            d = 1.0 / d
+            dl = d * c
+            h *= dl
+            if abs(dl - 1.0) < EPS:
+                break
+        return h
+
+    try:
+        ib = _incbeta(df / 2, 0.5, x)
+        if t >= 0:
+            return 1 - 0.5 * ib
+        else:
+            return 0.5 * ib
+    except Exception:
+        # Fallback to normal approximation
+        return 0.5 * (1 + math.erf(t / math.sqrt(2)))
+
+
+def _two_sided_pvalue(t: float, df: int) -> float:
+    """Two-sided p-value for a t-statistic."""
+    cdf = _t_cdf_approx(abs(t), df)
+    return max(0.0, min(1.0, 2 * (1 - cdf)))
+
+
+def _ols_simple(x: np.ndarray, y: np.ndarray) -> dict:
+    """Pure-numpy simple linear regression. Returns slope, intercept, SE, p, R²."""
+    n = len(x)
+    if n < 3:
+        return None
+    x_mean = x.mean()
+    y_mean = y.mean()
+    ss_xx = ((x - x_mean) ** 2).sum()
+    ss_xy = ((x - x_mean) * (y - y_mean)).sum()
+    ss_yy = ((y - y_mean) ** 2).sum()
+
+    if ss_xx == 0 or ss_yy == 0:
+        return None
+
+    slope = ss_xy / ss_xx
+    intercept = y_mean - slope * x_mean
+    r_sq = (ss_xy ** 2) / (ss_xx * ss_yy)
+
+    # Residuals and standard error
+    y_hat = intercept + slope * x
+    residuals = y - y_hat
+    sse = (residuals ** 2).sum()
+    mse = sse / (n - 2) if n > 2 else 0
+    se_slope = math.sqrt(mse / ss_xx) if ss_xx > 0 else 0
+
+    # t-stat and p-value (two-sided)
+    t_stat = slope / se_slope if se_slope > 0 else 0
+    p_val = _two_sided_pvalue(t_stat, df=n - 2)
+
+    return {
+        "coefficient": float(slope),
+        "intercept": float(intercept),
+        "std_error": float(se_slope),
+        "t_stat": float(t_stat),
+        "p_value": float(p_val),
+        "r_squared": float(r_sq),
+        "n_obs": int(n),
+    }
+
+
 def run_iran_regression() -> dict:
     """Run OLS regression on Iran war data: daily volatility ~ conflict intensity.
-    Analogous to the thesis H1 model but for state-actor conflict.
-
-    Returns actual coefficients, p-values, and R² from the available data.
-    Uses scipy.stats.linregress for simple OLS, plus a multivariate model
-    with available controls using numpy least-squares.
+    Pure-numpy implementation — no scipy required.
     """
-    from scipy import stats
-
     # Get data
     intensity = compute_iran_intensity()
     brent = _read_cache("brent_prices", 7200) or []
@@ -1986,68 +2107,51 @@ def run_iran_regression() -> dict:
         change = abs((price_map[d] - price_map[prev]) / price_map[prev]) * 100
         vol_map[d] = change
 
-    # Build intensity map
     intensity_map = {i["date"]: i["weekly_intensity"] for i in intensity}
     daily_intensity_map = {i["date"]: i["daily_intensity"] for i in intensity}
 
-    # War period only (Feb 28, 2026+)
     war_dates = [d for d in sorted_dates if d >= "2026-02-28" and d in vol_map and d in intensity_map]
 
     if len(war_dates) < 5:
         return {"error": "Insufficient war-period observations", "n_obs": len(war_dates)}
 
-    y = np.array([vol_map[d] for d in war_dates])  # daily volatility
-    x_intensity = np.array([intensity_map[d] for d in war_dates])  # weekly intensity
-    x_daily = np.array([daily_intensity_map.get(d, 0) for d in war_dates])  # daily intensity
+    y = np.array([vol_map[d] for d in war_dates])
+    x_weekly = np.array([intensity_map[d] for d in war_dates])
+    x_daily = np.array([daily_intensity_map.get(d, 0) for d in war_dates])
 
-    # ── Simple OLS: Volatility ~ Weekly Intensity ──
-    slope, intercept, r_value, p_value, std_err = stats.linregress(x_intensity, y)
+    # Simple OLS models
+    simple_weekly = _ols_simple(x_weekly, y)
+    simple_daily = _ols_simple(x_daily, y)
 
-    simple_result = {
-        "coefficient": round(slope, 6),
-        "intercept": round(intercept, 4),
-        "std_error": round(std_err, 6),
-        "p_value": round(p_value, 4),
-        "r_squared": round(r_value ** 2, 4),
-        "n_obs": len(war_dates),
-    }
+    # Round for display
+    def _round_result(r):
+        if not r:
+            return None
+        return {k: (round(v, 6) if isinstance(v, float) else v) for k, v in r.items()}
 
-    # ── Simple OLS: Volatility ~ Daily Intensity ──
-    slope_d, intercept_d, r_d, p_d, se_d = stats.linregress(x_daily, y)
+    simple_result = _round_result(simple_weekly)
+    daily_result = _round_result(simple_daily)
 
-    daily_result = {
-        "coefficient": round(slope_d, 6),
-        "intercept": round(intercept_d, 4),
-        "std_error": round(se_d, 6),
-        "p_value": round(p_d, 4),
-        "r_squared": round(r_d ** 2, 4),
-    }
-
-    # ── Multivariate OLS with available controls ──
-    # Try to include DXY and OVX as controls if available
+    # ── Multivariate OLS with DXY and OVX controls ──
     dxy_data = _read_cache("dxy", 7200) or []
     ovx_data = _read_cache("ovx", 7200) or []
     dxy_map = {d["date"]: d["value"] for d in dxy_data} if dxy_data else {}
     ovx_map = {d["date"]: d["value"] for d in ovx_data} if ovx_data else {}
 
-    # Build multivariate dataset (only dates where all variables are available)
     multi_dates = [d for d in war_dates if d in dxy_map and d in ovx_map]
     multi_result = None
 
     if len(multi_dates) >= 8:
         y_m = np.array([vol_map[d] for d in multi_dates])
         X = np.column_stack([
-            np.ones(len(multi_dates)),  # intercept
-            [intensity_map[d] for d in multi_dates],  # intensity
-            [dxy_map[d] for d in multi_dates],  # DXY
-            [ovx_map[d] for d in multi_dates],  # OVX
+            np.ones(len(multi_dates)),
+            [intensity_map[d] for d in multi_dates],
+            [dxy_map[d] for d in multi_dates],
+            [ovx_map[d] for d in multi_dates],
         ])
 
         try:
-            # OLS via numpy least squares
-            betas, residuals, rank, sv = np.linalg.lstsq(X, y_m, rcond=None)
-
-            # Compute statistics
+            betas, _, _, _ = np.linalg.lstsq(X, y_m, rcond=None)
             y_hat = X @ betas
             ss_res = np.sum((y_m - y_hat) ** 2)
             ss_tot = np.sum((y_m - np.mean(y_m)) ** 2)
@@ -2055,13 +2159,11 @@ def run_iran_regression() -> dict:
             n, k = X.shape
             mse = ss_res / (n - k) if n > k else 0
 
-            # Standard errors
             try:
                 cov = mse * np.linalg.inv(X.T @ X)
                 se = np.sqrt(np.diag(cov))
-                # t-statistics and p-values
                 t_stats = betas / se
-                p_vals = [2 * (1 - stats.t.cdf(abs(t), df=n - k)) for t in t_stats]
+                p_vals = [_two_sided_pvalue(float(t), df=n - k) for t in t_stats]
             except np.linalg.LinAlgError:
                 se = [None] * k
                 p_vals = [None] * k
@@ -2072,7 +2174,7 @@ def run_iran_regression() -> dict:
                 "std_errors": [round(float(s), 6) if s is not None else None for s in se],
                 "p_values": [round(float(p), 4) if p is not None else None for p in p_vals],
                 "r_squared": round(float(r_sq), 4),
-                "n_obs": len(multi_dates),
+                "n_obs": int(n),
             }
         except Exception as e:
             logger.warning(f"Multivariate regression failed: {e}")
