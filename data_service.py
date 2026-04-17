@@ -501,6 +501,10 @@ def _supplement_brent_recent(eia_records: List[dict]) -> List[dict]:
         "2026-04-11": 95.71,   # US Navy enters Hormuz; Islamabad talks begin
         # Apr 12 (Sat) — no settlement
         "2026-04-13": 103.72,  # Surges 6.95% on US naval blockade announcement
+        "2026-04-14": 100.19,  # Blockade takes effect; Trump hints at resumed talks
+        "2026-04-15": 96.83,   # Diplomatic optimism — "very close to over"
+        "2026-04-16": 94.89,   # Lebanon 10-day truce announced; regional tensions ease
+        "2026-04-17": 93.50,   # Hormuz declared open during ceasefire — relief continues
     }
 
     # ── Layers 1-3: Run ALL live sources in parallel ──────────────────────────
@@ -1093,6 +1097,12 @@ def get_curated_iran_events() -> List[dict]:
         {"date": "2026-04-11", "title": "Vance Arrives in Islamabad for Peace Talks; US Navy Enters Hormuz", "type": "diplomatic", "description": "VP Vance, envoy Witkoff, and Jared Kushner arrive in Islamabad for talks with Iranian FM Araghchi and Parliament Speaker Ghalibaf. Several US Navy destroyers enter Strait of Hormuz for first time since war began — CENTCOM says mine clearance operations. Iran threatens to attack ships, accuses US of ceasefire violation. Trump announces US forces 'clearing' the strait.", "severity": 2, "fatalities": 0, "lat": 33.6844, "lon": 73.0479, "location": "Islamabad, Pakistan"},
         {"date": "2026-04-12", "title": "Islamabad Talks Collapse After 21 Hours; Trump Declares Naval Blockade", "type": "diplomatic", "description": "Vance leaves Pakistan after 21-hour marathon talks without agreement. Iranian FM spokesman says 'gaps on several major issues.' Ghalibaf says US 'did not succeed in gaining trust.' Trump threatens 'full naval blockade' — CENTCOM announces blockade starting Monday 10 AM EDT targeting vessels from/to Iranian ports. Non-Iran traffic free to transit. Brent at $96.", "severity": 2, "fatalities": 0, "lat": 33.6844, "lon": 73.0479, "location": "Islamabad, Pakistan"},
         {"date": "2026-04-13", "title": "US Naval Blockade Imminent; Oil Surges on Escalation Fears", "type": "military", "description": "Markets react to impending US naval blockade of Strait of Hormuz. Brent surges 6.95% to $103.72 as traders price in blockade risk. 500-700 vessels over 10,000 DWT stuck in Persian Gulf. Poll shows 63% of Israelis believe ceasefire does not extend to Lebanon. Ceasefire increasingly fragile ahead of Monday blockade deadline.", "severity": 2, "fatalities": 0, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
+
+        # ── Naval Blockade & Hormuz Reopening (April 14-17, 2026) ──
+        {"date": "2026-04-14", "title": "US Naval Blockade Takes Effect; Trump Hints Talks Could Resume", "type": "military", "description": "US naval blockade of Iranian ports goes into force at 10 AM ET. CENTCOM says blockade applies to vessels entering/departing Iranian ports but 'will not impede freedom of navigation for vessels transiting the Strait of Hormuz to and from non-Iranian ports.' Trump hints US-Iran talks could resume within two days. White House confirms more peace deal talks in discussion. Brent at $100.19.", "severity": 2, "fatalities": 0, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
+        {"date": "2026-04-15", "title": "Trump: Iran War 'Very Close to Over'; Israel-Lebanon Negotiations Advance", "type": "diplomatic", "description": "Day 47 of conflict. Trump says Iran war 'very close to over,' emphasizes Iran eager to make a deal and has 'agreed to things it hadn't two months ago.' Active Israel-Lebanon ceasefire negotiations underway. Brent drops to $96.83 on diplomatic optimism.", "severity": 1, "fatalities": 0, "lat": 38.9072, "lon": -77.0369, "location": "Washington, DC"},
+        {"date": "2026-04-16", "title": "13 Iranian Oil Tankers Intercepted; Israel-Lebanon 10-Day Truce Announced", "type": "diplomatic", "description": "Gen. Dan Caine (JCS Chairman) announces 13 oil tankers intercepted enforcing Iran blockade. Trump announces Israel-Lebanon 10-day truce — separate from Iran negotiations. Trump: Israel 'prohibited' from bombing Lebanon during truce. Brent ends at $94.89 as Lebanon ceasefire eases regional tensions.", "severity": 1, "fatalities": 0, "lat": 33.8938, "lon": 35.5018, "location": "Beirut, Lebanon"},
+        {"date": "2026-04-17", "title": "STRAIT OF HORMUZ REOPENED FOR COMMERCIAL SHIPPING", "type": "diplomatic", "description": "Iran FM Araghchi declares Strait of Hormuz 'completely open for commercial ships for remainder of ceasefire' — explicitly tied to Lebanon 10-day truce duration. US blockade of Iranian ports remains in full force pending peace deal. Starmer-Trump call on assembling diplomatic coalition for long-term Hormuz reopening. France/UK rally 40+ nations on defensive plan. Ceasefire continues. Partial breakthrough but full normalization contingent on broader peace deal.", "severity": 1, "fatalities": 0, "lat": 26.5667, "lon": 56.2500, "location": "Strait of Hormuz"},
     ]
 
 
@@ -1869,8 +1879,18 @@ def compute_hormuz_disruption() -> dict:
         tanker_current = sum(m.get("tanker_transits", 0) for m in current) / len(current)
         tanker_decline = round((1 - tanker_current / tanker_baseline) * 100, 1) if tanker_baseline > 0 else 0
 
-    # Status classification
-    if pct_decline >= 80:
+    # Status classification — PortWatch data lags. Override with current events.
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    # As of Apr 17, 2026: Iran declared Hormuz open for remainder of Lebanon ceasefire
+    status_note = None
+    if today >= "2026-04-17":
+        status = "CONDITIONAL"
+        status_note = "Iran declared Hormuz 'completely open for commercial ships' on Apr 17 (tied to 10-day Lebanon ceasefire). US blockade of Iranian ports remains in force pending peace deal."
+    elif today >= "2026-04-13":
+        status = "BLOCKADE"
+        status_note = "US naval blockade enforcing against Iranian ports (non-Iran traffic permitted in strait)."
+    elif pct_decline >= 80:
         status = "BLOCKADE"
     elif pct_decline >= 40:
         status = "RESTRICTED"
@@ -1881,6 +1901,7 @@ def compute_hormuz_disruption() -> dict:
 
     return {
         "status": status,
+        "status_note": status_note,
         "baseline_transits": round(baseline_avg),
         "current_transits": round(current_avg),
         "pct_decline": pct_decline,
@@ -1900,7 +1921,8 @@ def get_war_phases() -> List[dict]:
         {"phase": 4, "name": "Regional Spread", "start": "2026-03-20", "end": "2026-03-29", "color": "#D4B870"},
         {"phase": 5, "name": "Ground Operations Prep", "start": "2026-03-30", "end": "2026-04-07", "color": "#E05555"},
         {"phase": 6, "name": "Ceasefire & Islamabad Talks", "start": "2026-04-08", "end": "2026-04-12", "color": "#4A90D9"},
-        {"phase": 7, "name": "Naval Blockade", "start": "2026-04-13", "end": "2026-12-31", "color": "#E05555"},
+        {"phase": 7, "name": "Naval Blockade", "start": "2026-04-13", "end": "2026-04-16", "color": "#E05555"},
+        {"phase": 8, "name": "Hormuz Reopened (Conditional)", "start": "2026-04-17", "end": "2026-12-31", "color": "#00e676"},
     ]
 
 

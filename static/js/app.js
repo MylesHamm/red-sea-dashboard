@@ -178,13 +178,18 @@ function renderComparative(data) {
         animateValue('kpi-hormuz-status', hd.status);
         const statusEl = document.getElementById('kpi-hormuz-status');
         if (statusEl) {
-            const colors = { BLOCKADE: '#ff5252', RESTRICTED: '#F09060', DISRUPTED: '#ffab00', OPEN: '#00e676', UNKNOWN: '#8892a0' };
+            const colors = { BLOCKADE: '#ff5252', RESTRICTED: '#F09060', DISRUPTED: '#ffab00', CONDITIONAL: '#4A90D9', OPEN: '#00e676', UNKNOWN: '#8892a0' };
             statusEl.style.color = colors[hd.status] || '#8892a0';
+            if (hd.status === 'CONDITIONAL') statusEl.style.fontSize = '22px';
         }
     }
-    if (hd.pct_decline != null) {
-        const declineEl = document.getElementById('kpi-hormuz-decline');
-        if (declineEl) declineEl.textContent = `${hd.pct_decline}% decline from baseline`;
+    const declineEl = document.getElementById('kpi-hormuz-decline');
+    if (declineEl) {
+        if (hd.status === 'CONDITIONAL') {
+            declineEl.textContent = 'Open per Iran (Apr 17) — ceasefire-tied';
+        } else if (hd.pct_decline != null) {
+            declineEl.textContent = `${hd.pct_decline}% decline from baseline`;
+        }
     }
 
     // Apply accent colors
@@ -391,12 +396,17 @@ function renderOverview() {
             animateValue('kpi-overview-hormuz', hd.status);
             const el = document.getElementById('kpi-overview-hormuz');
             if (el) {
-                const colors = { BLOCKADE: '#ff5252', RESTRICTED: '#F09060', DISRUPTED: '#ffab00', OPEN: '#00e676', UNKNOWN: '#8892a0' };
+                const colors = { BLOCKADE: '#ff5252', RESTRICTED: '#F09060', DISRUPTED: '#ffab00', CONDITIONAL: '#4A90D9', OPEN: '#00e676', UNKNOWN: '#8892a0' };
                 el.style.color = colors[hd.status] || '#8892a0';
+                if (hd.status === 'CONDITIONAL') el.style.fontSize = '22px';  // shrink to fit
             }
-            if (hd.pct_decline != null) {
-                const sub = document.getElementById('kpi-overview-hormuz-sub');
-                if (sub) sub.textContent = `${hd.pct_decline}% decline from baseline`;
+            const sub = document.getElementById('kpi-overview-hormuz-sub');
+            if (sub) {
+                if (hd.status === 'CONDITIONAL') {
+                    sub.textContent = 'Open per Iran (Apr 17) — ceasefire-tied';
+                } else if (hd.pct_decline != null) {
+                    sub.textContent = `${hd.pct_decline}% decline from baseline`;
+                }
             }
         }
     }).catch(() => {});
