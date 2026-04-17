@@ -169,7 +169,16 @@ def _get_acled_token() -> str:
                 f"{resp.status_code} for {resp.url} | resp={resp.text[:300]}",
                 response=resp,
             )
-        token_data = resp.json()
+        try:
+            token_data = resp.json()
+        except Exception as e:
+            raise requests.HTTPError(f"ACLED token response not JSON: {resp.text[:300]}") from e
+
+        if "access_token" not in token_data:
+            # Log the response so we can see what ACLED returned
+            err_msg = token_data.get("error_description") or token_data.get("error") or str(token_data)[:300]
+            raise requests.HTTPError(f"ACLED token response missing access_token: {err_msg}")
+
         _acled_token = token_data["access_token"]
         _acled_token_expires = time.time() + token_data.get("expires_in", 86400) - 300
         logger.info("ACLED OAuth token acquired")
@@ -374,17 +383,17 @@ def load_thesis_events() -> List[dict]:
         return fetch_acled_events()
 
     try:
-        df = pd.read_csv(csv_path)
+        df = pd.read_csv(csv_path).copy()
         col_map = {c: c.lower() for c in df.columns}
-        df.rename(columns=col_map, inplace=True)
+        df = df.rename(columns=col_map)
 
         # Map CH6 column names to expected schema
         if "date" in df.columns and "event_date" not in df.columns:
-            df.rename(columns={"date": "event_date"}, inplace=True)
+            df = df.rename(columns={"date": "event_date"})
         if "event_id" in df.columns and "event_id_cnty" not in df.columns:
-            df.rename(columns={"event_id": "event_id_cnty"}, inplace=True)
+            df = df.rename(columns={"event_id": "event_id_cnty"})
 
-        records = _df_to_event_records(df)
+        records = _df_to_event_records(df.copy())
         _thesis_events_cache = records
         logger.info(f"Thesis dataset: loaded {len(records)} events from {csv_path.name}")
         return records
@@ -759,11 +768,11 @@ def load_master_dataset() -> dict:
         logger.error(f"Master dataset not found: {config.MYLES_DATASET_PATH}")
         return {"timeseries": [], "kpis": {}, "price_windows": {}, "correlation": []}
 
-    df = pd.read_csv(config.MYLES_DATASET_PATH)
+    df = pd.read_csv(config.MYLES_DATASET_PATH).copy()
     date_col = df.columns[0]
-    df.rename(columns={date_col: "Date"}, inplace=True)
+    df = df.rename(columns={date_col: "Date"}).copy()
     df["Date"] = pd.to_datetime(df["Date"])
-    df.sort_values("Date", inplace=True)
+    df = df.sort_values("Date").copy()
 
     # Time series records — vectorized (avoids slow iterrows)
     col_map = {
