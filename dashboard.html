@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chokepoint Intel — Maritime Flashpoint Monitor</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://d3js.org/topojson.v3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
+
+<link rel="stylesheet" href="assets/app.css?v=20260422e">
+</head>
+<body>
+
+<!-- ═══ HEADER / COMMAND BAR ═══ -->
+<header class="cmd-bar">
+  <div class="cmd-bar-inner">
+    <div class="cmd-left">
+      <div class="logo-mark">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M2 12h20 M12 2v20 M4 6q8 6 16 0 M4 18q8 -6 16 0" fill="none" stroke="currentColor" stroke-width="0.8" opacity="0.55"/>
+          <circle cx="12" cy="12" r="2.2" fill="currentColor"/>
+        </svg>
+      </div>
+      <div class="brand">
+        <div class="brand-title">CHOKEPOINT INTEL</div>
+        <div class="brand-sub">Maritime Flashpoint Monitor · <span class="brand-thesis">Mercyhurst · Hamm</span></div>
+      </div>
+    </div>
+
+    <div class="cmd-center">
+      <nav class="primary-nav" role="tablist">
+        <button class="nav-item active" data-tab="overview">
+          <span class="nav-num">01</span><span class="nav-label">Overview</span>
+        </button>
+        <button class="nav-item" data-tab="geospatial">
+          <span class="nav-num">02</span><span class="nav-label">Geospatial</span>
+        </button>
+        <button class="nav-item" data-tab="analysis">
+          <span class="nav-num">03</span><span class="nav-label">Analysis</span>
+        </button>
+        <button class="nav-item" data-tab="iran">
+          <span class="nav-num">04</span><span class="nav-label">US–Iran</span>
+        </button>
+      </nav>
+    </div>
+
+    <div class="cmd-right">
+      <button class="chip chip-data" id="dataExplorerBtn" title="Open data explorer">
+        <span class="chip-dot"></span>Data Explorer
+      </button>
+      <div class="status-stack">
+        <div class="status-line">
+          <span class="status-dot live"></span>
+          <span class="status-text">LIVE · ACLED + EIA</span>
+        </div>
+        <div class="status-time" id="statusTime">22 APR 2026 · 14:22Z</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Threat level strip -->
+  <div class="threat-strip" role="status" aria-label="Current threat assessment">
+    <div class="threat-strip-inner">
+      <span class="threat-label">THEATER STATUS</span>
+      <span class="threat-pill threat-critical">HORMUZ · CRITICAL</span>
+      <span class="threat-pill threat-high">BAB EL-MANDEB · HIGH</span>
+      <span class="threat-pill threat-elevated">SUEZ · DEGRADED</span>
+      <span class="threat-pill threat-safe">CAPE ROUTE · NOMINAL</span>
+      <span class="threat-divider"></span>
+      <span class="threat-meta">BRENT <b id="threatBrent">$94.20</b> <span class="delta-up">▲ +2.3%</span></span>
+      <span class="threat-meta">OVX <b id="threatOvx">58.4</b> <span class="delta-up">▲ +4.1</span></span>
+      <span class="threat-meta">WAR PREM <b>+1.8%</b></span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══ TAB: OVERVIEW ═══ -->
+<main class="tab-content active" id="tab-overview" data-screen-label="01 Overview">
+  <div class="container">
+
+    <!-- Hero narrative -->
+    <section class="hero-narrative">
+      <div class="hero-eyebrow">SITUATION REPORT · UPDATED HOURLY</div>
+      <h1 class="hero-headline">Two chokepoints. One conflict. <br><span class="hero-accent">29 mbd of oil at risk.</span></h1>
+      <p class="hero-body">
+        The US–Iran war has converged with ongoing Houthi maritime operations to place both Middle East oil chokepoints under simultaneous threat — the most severe dual-chokepoint crisis since the 1980s Tanker War. This dashboard quantifies the market response.
+      </p>
+    </section>
+
+    <!-- KPI Deck: 1 hero + 2 primary + 4 secondary -->
+    <section class="kpi-deck">
+      <!-- Hero KPI -->
+      <div class="kpi-hero">
+        <div class="kpi-hero-label">BRENT CRUDE · SPOT</div>
+        <div class="kpi-hero-value">
+          <span class="kpi-currency">$</span><span id="heroPrice">94.20</span>
+          <span class="kpi-hero-unit">/ bbl</span>
+        </div>
+        <div class="kpi-hero-change up">
+          <span class="change-arrow">▲</span> +$2.14 (+2.33%) · 24h
+        </div>
+        <!-- Sparkline -->
+        <svg class="kpi-spark" viewBox="0 0 200 50" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#00d4ff" stop-opacity="0.35"/>
+              <stop offset="100%" stop-color="#00d4ff" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <path id="sparkPath" d="" fill="url(#sparkFill)" stroke="none"/>
+          <path id="sparkLine" d="" fill="none" stroke="#00d4ff" stroke-width="1.5"/>
+        </svg>
+        <div class="kpi-hero-foot">
+          <span>30D RANGE <b>$76.40 — $119.00</b></span>
+          <span>SINCE WAR ONSET <b class="up">+21.9%</b></span>
+        </div>
+      </div>
+
+      <!-- Primary KPIs -->
+      <div class="kpi-primary kpi-primary-alert">
+        <div class="kpi-label">WEEKLY ATTACKS</div>
+        <div class="kpi-value">14</div>
+        <div class="kpi-trend">
+          <svg viewBox="0 0 60 20" width="60" height="20"><polyline points="0,16 8,14 16,15 24,10 32,12 40,8 48,6 60,4" fill="none" stroke="#ff5252" stroke-width="1.3"/></svg>
+          <span class="up-alert">+7 vs 4-wk avg</span>
+        </div>
+        <div class="kpi-foot">ACLED · maritime-flagged events</div>
+      </div>
+
+      <div class="kpi-primary kpi-primary-warn">
+        <div class="kpi-label">OIL FLOW AT RISK</div>
+        <div class="kpi-value">29.2 <span class="kpi-unit">mbd</span></div>
+        <div class="kpi-trend">
+          <svg viewBox="0 0 60 20" width="60" height="20"><polyline points="0,14 12,14 24,13 36,10 48,8 60,8" fill="none" stroke="#ffab00" stroke-width="1.3"/></svg>
+          <span class="warn">~29% global supply</span>
+        </div>
+        <div class="kpi-foot">Hormuz 21.0 + Bab el-Mandeb 8.2</div>
+      </div>
+
+      <!-- Secondary KPIs -->
+      <div class="kpi-sec">
+        <div class="kpi-sec-label">OVX VOLATILITY</div>
+        <div class="kpi-sec-value">58.4 <span class="up">▲</span></div>
+      </div>
+      <div class="kpi-sec">
+        <div class="kpi-sec-label">DXY</div>
+        <div class="kpi-sec-value">102.1 <span class="down">▼</span></div>
+      </div>
+      <div class="kpi-sec">
+        <div class="kpi-sec-label">SUEZ THROUGHPUT</div>
+        <div class="kpi-sec-value">−60% <span class="down">▼</span></div>
+      </div>
+      <div class="kpi-sec">
+        <div class="kpi-sec-label">PEAK DAILY VOL</div>
+        <div class="kpi-sec-value">8.7%</div>
+      </div>
+    </section>
+
+    <!-- Narrative chart block 1 -->
+    <section class="narrative-block">
+      <div class="nb-header">
+        <div class="nb-index">§ 01</div>
+        <div>
+          <h2 class="nb-title">Price vs. Attack Frequency</h2>
+          <p class="nb-subtitle">Weekly Houthi maritime strikes overlaid against Brent spot — clusters precede or coincide with every major price regime shift since Nov 2023.</p>
+        </div>
+        <div class="nb-badges">
+          <span class="badge badge-gold">DUAL AXIS</span>
+        </div>
+      </div>
+      <div class="chart-surface" style="height:400px">
+        <canvas id="priceAttackChart"></canvas>
+      </div>
+    </section>
+
+    <!-- Two-col narrative -->
+    <section class="narrative-row two-col">
+      <div class="narrative-block compact">
+        <div class="nb-header">
+          <div class="nb-index">§ 02</div>
+          <div>
+            <h2 class="nb-title">Daily Volatility</h2>
+            <p class="nb-subtitle">Absolute daily %-change in Brent close. Spikes cluster on conflict headlines.</p>
+          </div>
+        </div>
+        <div class="chart-surface"><canvas id="volatilityChart"></canvas></div>
+      </div>
+      <div class="narrative-block compact">
+        <div class="nb-header">
+          <div class="nb-index">§ 03</div>
+          <div>
+            <h2 class="nb-title">Event Type Mix</h2>
+            <p class="nb-subtitle">ACLED breakdown — click a wedge to cross-filter.</p>
+          </div>
+        </div>
+        <div class="chart-surface"><canvas id="eventTypesChart"></canvas></div>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<!-- ═══ TAB: GEOSPATIAL (globe + maps merged) ═══ -->
+<main class="tab-content" id="tab-geospatial" data-screen-label="02 Geospatial">
+  <div class="container-wide">
+
+    <!-- Section intro -->
+    <section class="hero-narrative compact">
+      <div class="hero-eyebrow">GEOSPATIAL INTELLIGENCE</div>
+      <h1 class="section-headline">Global chokepoints in one view.</h1>
+      <p class="section-body">Live shipping lanes color-coded by threat level. Click a chokepoint to inspect flow, vessels, and recent incidents. Scrub time to see routing collapse from 2023 baseline to current state.</p>
+    </section>
+
+    <!-- ─── GLOBE HERO ─── -->
+    <section class="globe-hero">
+      <div class="globe-stage">
+        <div class="globe-wrap" id="globeWrap">
+          <svg id="globeSvg" viewBox="0 0 720 720" preserveAspectRatio="xMidYMid meet"></svg>
+          <div class="globe-compass">
+            <span>N</span>
+            <span class="c-e">E</span>
+            <span class="c-s">S</span>
+            <span class="c-w">W</span>
+          </div>
+          <div class="globe-legend">
+            <div class="gl-row"><span class="gl-swatch gl-critical"></span>CRITICAL · Hormuz transit</div>
+            <div class="gl-row"><span class="gl-swatch gl-high"></span>HIGH · Bab el-Mandeb / Red Sea</div>
+            <div class="gl-row"><span class="gl-swatch gl-safe"></span>NOMINAL · Cape of Good Hope</div>
+            <div class="gl-row"><span class="gl-swatch gl-flow"></span>Baseline flow</div>
+          </div>
+          <div class="globe-hint" id="globeHint">CLICK A CHOKEPOINT · DRAG TO ROTATE</div>
+        </div>
+      </div>
+
+      <!-- Chokepoint detail panel -->
+      <aside class="globe-panel" id="globePanel">
+        <div class="gp-header">
+          <div class="gp-eyebrow">ACTIVE TARGET</div>
+          <h3 class="gp-title" id="gpTitle">Strait of Hormuz</h3>
+          <div class="gp-coords" id="gpCoords">26.57°N · 56.25°E</div>
+        </div>
+
+        <div class="gp-threat">
+          <div class="gp-threat-label">THREAT LEVEL</div>
+          <div class="gp-threat-bar">
+            <div class="gp-threat-fill" id="gpThreatFill" style="width:94%"></div>
+          </div>
+          <div class="gp-threat-tag" id="gpThreatTag">CRITICAL</div>
+        </div>
+
+        <div class="gp-stats">
+          <div class="gp-stat">
+            <div class="gp-stat-val" id="gpFlow">21.0</div>
+            <div class="gp-stat-lbl">MBD FLOW</div>
+          </div>
+          <div class="gp-stat">
+            <div class="gp-stat-val" id="gpWidth">21 <span>mi</span></div>
+            <div class="gp-stat-lbl">NARROWEST</div>
+          </div>
+          <div class="gp-stat">
+            <div class="gp-stat-val" id="gpVessels">47</div>
+            <div class="gp-stat-lbl">VESSELS IN ZONE</div>
+          </div>
+          <div class="gp-stat">
+            <div class="gp-stat-val" id="gpIncidents">12</div>
+            <div class="gp-stat-lbl">INCIDENTS · 30D</div>
+          </div>
+        </div>
+
+        <div class="gp-section">
+          <div class="gp-section-title">ROUTES AT RISK</div>
+          <ul class="gp-list" id="gpRoutes">
+            <li><span class="r-dot r-critical"></span>Ras Tanura → Singapore <b>8.4 mbd</b></li>
+            <li><span class="r-dot r-critical"></span>Kharg Island → China <b>1.6 mbd</b></li>
+            <li><span class="r-dot r-critical"></span>Basrah → Rotterdam <b>3.1 mbd</b></li>
+            <li><span class="r-dot r-critical"></span>Kuwait → S. Korea <b>2.4 mbd</b></li>
+          </ul>
+        </div>
+
+        <div class="gp-section">
+          <div class="gp-section-title">VESSELS IN KILL ZONE</div>
+          <div class="gp-vessels" id="gpVesselList">
+            <!-- populated by JS -->
+          </div>
+        </div>
+
+        <div class="gp-section">
+          <div class="gp-section-title">LATEST SIGINT</div>
+          <div class="gp-sigint">
+            <div class="sig-row"><span class="sig-time">14:08Z</span> IRGC small boats shadowing VLCC <b>EAGLE ESPERANZA</b></div>
+            <div class="sig-row"><span class="sig-time">11:41Z</span> GPS spoofing reported · 26.4°N 56.8°E</div>
+            <div class="sig-row"><span class="sig-time">04:22Z</span> Panamanian-flag tanker hailed by Iranian navy</div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <!-- Timeline scrubber -->
+    <section class="timeline-scrubber">
+      <div class="ts-header">
+        <div class="ts-left">
+          <span class="ts-eyebrow">TEMPORAL FILTER</span>
+          <span class="ts-date" id="tsDate">22 APR 2026</span>
+        </div>
+        <div class="ts-controls">
+          <button class="ts-btn" data-epoch="pre">PRE-CRISIS<span>Nov 2023</span></button>
+          <button class="ts-btn" data-epoch="houthi">HOUTHI CAMPAIGN<span>Dec 2023</span></button>
+          <button class="ts-btn" data-epoch="war">US–IRAN WAR<span>Feb 2026</span></button>
+          <button class="ts-btn active" data-epoch="now">CURRENT<span>Apr 2026</span></button>
+        </div>
+      </div>
+      <div class="ts-track-wrap">
+        <div class="ts-track">
+          <div class="ts-fill" id="tsFill"></div>
+          <div class="ts-thumb" id="tsThumb"></div>
+          <!-- Event markers -->
+          <div class="ts-event" style="left:2%" data-label="Oct 7, 2023 · Hamas attack"></div>
+          <div class="ts-event ts-event-major" style="left:8%" data-label="Nov 19, 2023 · Galaxy Leader hijack"></div>
+          <div class="ts-event" style="left:14%" data-label="Jan 2024 · US strikes in Yemen"></div>
+          <div class="ts-event" style="left:36%" data-label="Oct 2024 · Israel hits Iran"></div>
+          <div class="ts-event ts-event-major" style="left:78%" data-label="Feb 28, 2026 · US–Iran war begins"></div>
+          <div class="ts-event" style="left:84%" data-label="Mar 8, 2026 · Shahran depot struck"></div>
+          <div class="ts-event" style="left:96%" data-label="Apr 2026 · Now"></div>
+        </div>
+        <div class="ts-axis">
+          <span>2023</span><span>2024</span><span>2025</span><span>2026</span><span>Now</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Regional tactical map (existing Leaflet behavior, redesigned) -->
+    <section class="narrative-block">
+      <div class="nb-header">
+        <div class="nb-index">§ 02.1</div>
+        <div>
+          <h2 class="nb-title">Red Sea Tactical View</h2>
+          <p class="nb-subtitle">ACLED maritime incidents · Oct 2023 – Oct 2025 · N = 726 confirmed events. Markers below are illustrative campaign hotspots.</p>
+        </div>
+        <div class="nb-badges"><span class="badge badge-gold">ACLED · N=726</span></div>
+      </div>
+      <div class="tactical-map-shell">
+        <div class="tac-map" id="tacMap">
+          <svg id="tacMapSvg" viewBox="0 0 800 440" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block"></svg>
+        </div>
+        <aside class="tac-side">
+          <div class="tac-stat">
+            <div class="tac-stat-val" id="tacTotal">726</div>
+            <div class="tac-stat-lbl">TOTAL EVENTS · ACLED</div>
+          </div>
+          <div class="tac-stat">
+            <div class="tac-stat-val" id="tacSouthRS">88</div>
+            <div class="tac-stat-lbl">SOUTH RED SEA</div>
+          </div>
+          <div class="tac-stat">
+            <div class="tac-stat-val" id="tacGoA">51</div>
+            <div class="tac-stat-lbl">GULF OF ADEN</div>
+          </div>
+          <div class="tac-stat">
+            <div class="tac-stat-val tac-red" id="tacChoke">29</div>
+            <div class="tac-stat-lbl">BAB EL-MANDEB</div>
+          </div>
+          <div class="tac-divider"></div>
+          <div class="tac-toggles">
+            <label class="tac-toggle"><input type="checkbox" checked><span>Heatmap</span></label>
+            <label class="tac-toggle"><input type="checkbox" checked><span>Strike markers</span></label>
+            <label class="tac-toggle"><input type="checkbox" checked><span>Chokepoint zone</span></label>
+            <label class="tac-toggle"><input type="checkbox"><span>Tanker-only</span></label>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Chokepoint cards -->
+    <section class="chokepoint-cards">
+      <div class="cp-card cp-critical">
+        <div class="cp-head">
+          <span class="cp-risk">CRITICAL</span>
+          <span class="cp-code">HORMUZ-01</span>
+        </div>
+        <div class="cp-name">Strait of Hormuz</div>
+        <div class="cp-flow">21.0<span>mbd</span></div>
+        <div class="cp-body">21-mile-wide passage controlled by IRGC Navy. ~21% of global petroleum flows through daily. Tankers running at max speed since Feb 28.</div>
+        <div class="cp-meta">
+          <span><b>47</b> VESSELS</span>
+          <span><b>1.8%</b> PREMIUM</span>
+          <span><b>12</b> INCIDENTS/30D</span>
+        </div>
+      </div>
+
+      <div class="cp-card cp-high">
+        <div class="cp-head">
+          <span class="cp-risk">HIGH</span>
+          <span class="cp-code">BAB-02</span>
+        </div>
+        <div class="cp-name">Bab el-Mandeb</div>
+        <div class="cp-flow">8.2<span>mbd</span></div>
+        <div class="cp-body">Iranian proxy operations zone. Houthis have attacked 100+ commercial vessels since Nov 2023. Coordinated second-front pressure on shipping.</div>
+        <div class="cp-meta">
+          <span><b>22</b> VESSELS</span>
+          <span><b>0.9%</b> PREMIUM</span>
+          <span><b>31</b> INCIDENTS/30D</span>
+        </div>
+      </div>
+
+      <div class="cp-card cp-safe">
+        <div class="cp-head">
+          <span class="cp-risk">NOMINAL</span>
+          <span class="cp-code">CAPE-99</span>
+        </div>
+        <div class="cp-name">Cape of Good Hope</div>
+        <div class="cp-flow">+3,500<span>nm</span></div>
+        <div class="cp-body">The only safe route. Adds 10–14 sailing days, +$200–400 per TEU. ~50% of tankers have rerouted here. Vessel availability tightening.</div>
+        <div class="cp-meta">
+          <span><b>0</b> INCIDENTS</span>
+          <span><b>+14</b> DAYS</span>
+          <span><b>+$400</b>/TEU</span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<!-- ═══ TAB: ANALYSIS (merged Econometric + Controls) ═══ -->
+<main class="tab-content" id="tab-analysis" data-screen-label="03 Analysis">
+  <div class="container">
+
+    <section class="hero-narrative compact">
+      <div class="hero-eyebrow">ECONOMETRIC ANALYSIS</div>
+      <h1 class="section-headline">Three hypotheses. Three verdicts.</h1>
+      <p class="section-body">GJR-GARCH(1,1,1) volatility model with geopolitical and supply-side controls. Attack frequency explains a small but statistically significant share of Brent volatility variance; chokepoint attacks dominate.</p>
+    </section>
+
+    <!-- Hypothesis cards -->
+    <section class="hypothesis-row">
+      <div class="hyp-card">
+        <div class="hyp-tag">H1</div>
+        <div class="hyp-title">Attack Frequency → Price</div>
+        <div class="hyp-sub">Do more weekly attacks lift Brent?</div>
+        <div class="hyp-metrics">
+          <div><div class="hyp-m-lbl">β</div><div class="hyp-m-val">0.41</div></div>
+          <div><div class="hyp-m-lbl">p-VAL</div><div class="hyp-m-val">0.08</div></div>
+          <div><div class="hyp-m-lbl">R²</div><div class="hyp-m-val">0.12</div></div>
+        </div>
+        <div class="hyp-verdict hyp-weak">WEAKLY SUPPORTED</div>
+      </div>
+      <div class="hyp-card">
+        <div class="hyp-tag">H2</div>
+        <div class="hyp-title">Chokepoint Attacks → Volatility</div>
+        <div class="hyp-sub">Does proximity to Bab el-Mandeb matter?</div>
+        <div class="hyp-metrics">
+          <div><div class="hyp-m-lbl">β</div><div class="hyp-m-val">1.07</div></div>
+          <div><div class="hyp-m-lbl">p-VAL</div><div class="hyp-m-val">0.003</div></div>
+          <div><div class="hyp-m-lbl">R²</div><div class="hyp-m-val">0.29</div></div>
+        </div>
+        <div class="hyp-verdict hyp-supported">SUPPORTED</div>
+      </div>
+      <div class="hyp-card">
+        <div class="hyp-tag">H3</div>
+        <div class="hyp-title">Tanker-Specific → Spike</div>
+        <div class="hyp-sub">Do tanker targets produce sharper jumps?</div>
+        <div class="hyp-metrics">
+          <div><div class="hyp-m-lbl">β</div><div class="hyp-m-val">2.14</div></div>
+          <div><div class="hyp-m-lbl">p-VAL</div><div class="hyp-m-val">0.001</div></div>
+          <div><div class="hyp-m-lbl">R²</div><div class="hyp-m-val">0.34</div></div>
+        </div>
+        <div class="hyp-verdict hyp-supported">STRONGLY SUPPORTED</div>
+      </div>
+    </section>
+
+    <!-- Analysis charts -->
+    <section class="narrative-row two-col">
+      <div class="narrative-block compact">
+        <div class="nb-header">
+          <div class="nb-index">§ 04</div>
+          <div>
+            <h2 class="nb-title">Event-Study Window</h2>
+            <p class="nb-subtitle">Avg Brent, T−2 to T+5 trading days around major attacks.</p>
+          </div>
+        </div>
+        <div class="chart-surface"><canvas id="priceWindowChart"></canvas></div>
+      </div>
+      <div class="narrative-block compact">
+        <div class="nb-header">
+          <div class="nb-index">§ 05</div>
+          <div>
+            <h2 class="nb-title">Attacks vs Volatility</h2>
+            <p class="nb-subtitle">Each point = a week. Trendline = OLS fit.</p>
+          </div>
+        </div>
+        <div class="chart-surface"><canvas id="scatterChart"></canvas></div>
+      </div>
+    </section>
+
+    <!-- GARCH + controls -->
+    <section class="narrative-row two-col">
+      <div class="narrative-block compact garch-block">
+        <div class="nb-header">
+          <div class="nb-index">§ 06</div>
+          <div>
+            <h2 class="nb-title">GARCH Summary</h2>
+            <p class="nb-subtitle">GJR-GARCH(1,1,1) on daily log returns.</p>
+          </div>
+          <div class="nb-badges"><span class="badge badge-gold">ASYMMETRIC</span></div>
+        </div>
+        <div class="garch-grid">
+          <div class="garch-cell"><div class="gc-lbl">ω (CONSTANT)</div><div class="gc-val">0.008</div></div>
+          <div class="garch-cell"><div class="gc-lbl">α (ARCH)</div><div class="gc-val">0.064</div></div>
+          <div class="garch-cell"><div class="gc-lbl">β (GARCH)</div><div class="gc-val">0.901</div></div>
+          <div class="garch-cell"><div class="gc-lbl">γ (LEVERAGE)</div><div class="gc-val up-alert">0.118</div></div>
+          <div class="garch-cell"><div class="gc-lbl">LOG-LIKELIHOOD</div><div class="gc-val">−1824.6</div></div>
+          <div class="garch-cell"><div class="gc-lbl">AIC</div><div class="gc-val">3659.2</div></div>
+          <div class="garch-cell"><div class="gc-lbl">PERSISTENCE</div><div class="gc-val">0.965</div></div>
+          <div class="garch-cell"><div class="gc-lbl">HALF-LIFE</div><div class="gc-val">19.5d</div></div>
+        </div>
+      </div>
+      <div class="narrative-block compact">
+        <div class="nb-header">
+          <div class="nb-index">§ 07</div>
+          <div>
+            <h2 class="nb-title">DXY & OVX Controls</h2>
+            <p class="nb-subtitle">Dollar strength & implied vol — both isolate Houthi/Iran-specific effects.</p>
+          </div>
+        </div>
+        <div class="chart-surface"><canvas id="dxyOvxChart"></canvas></div>
+      </div>
+    </section>
+
+    <!-- Correlation matrix -->
+    <section class="narrative-block">
+      <div class="nb-header">
+        <div class="nb-index">§ 08</div>
+        <div>
+          <h2 class="nb-title">Correlation Matrix</h2>
+          <p class="nb-subtitle">Pairwise Pearson correlations — cyan = positive, crimson = negative. Used to validate variable independence.</p>
+        </div>
+      </div>
+      <div class="corr-matrix" id="corrMatrix"></div>
+    </section>
+
+  </div>
+</main>
+
+<!-- ═══ TAB: US–IRAN ═══ -->
+<main class="tab-content" id="tab-iran" data-screen-label="04 US-Iran">
+  <div class="container">
+    <section class="hero-narrative compact">
+      <div class="hero-eyebrow">ACTIVE CONFLICT · US–IRAN</div>
+      <h1 class="section-headline">Feb 28 → now: 54 days of market whiplash.</h1>
+      <p class="section-body">Curated event timeline overlaid with Brent settlement prices, T+1/T+3/T+5 reaction magnitudes, and scenario forecasts.</p>
+    </section>
+
+    <!-- Iran KPIs -->
+    <section class="kpi-deck iran-kpi-deck">
+      <div class="kpi-primary kpi-primary-alert">
+        <div class="kpi-label">TOTAL IRAN EVENTS</div>
+        <div class="kpi-value">284</div>
+        <div class="kpi-foot">ACLED · since Jan 2025</div>
+      </div>
+      <div class="kpi-primary kpi-primary-warn">
+        <div class="kpi-label">AVG 3-DAY MOVE</div>
+        <div class="kpi-value">$3.12</div>
+        <div class="kpi-foot">Post-event absolute</div>
+      </div>
+      <div class="kpi-primary">
+        <div class="kpi-label">PEAK 3-DAY MOVE</div>
+        <div class="kpi-value">$21.40</div>
+        <div class="kpi-foot">Mar 8 · Shahran strike</div>
+      </div>
+      <div class="kpi-primary">
+        <div class="kpi-label">EVENTS THIS MONTH</div>
+        <div class="kpi-value">47</div>
+        <div class="kpi-foot">Current pace</div>
+      </div>
+    </section>
+
+    <section class="narrative-block">
+      <div class="nb-header">
+        <div class="nb-index">§ 09</div>
+        <div>
+          <h2 class="nb-title">Brent vs US–Iran Events</h2>
+          <p class="nb-subtitle">Price with color-coded event markers. Military (red), diplomatic (blue), sanctions (orange), nuclear (purple), proxy (gold).</p>
+        </div>
+        <div class="nb-badges"><span class="badge badge-gold">EVENT OVERLAY</span></div>
+      </div>
+      <div class="chart-surface" style="height:420px">
+        <canvas id="iranTimelineChart"></canvas>
+      </div>
+      <div class="iran-legend">
+        <span><i class="dot" style="background:#ff5252"></i>Military</span>
+        <span><i class="dot" style="background:#3D99D4"></i>Diplomatic</span>
+        <span><i class="dot" style="background:#E07B4C"></i>Sanctions</span>
+        <span><i class="dot" style="background:#9B7BEE"></i>Nuclear</span>
+        <span><i class="dot" style="background:#C9A96E"></i>Proxy</span>
+      </div>
+    </section>
+
+    <!-- Scenario forecast -->
+    <section class="scenario-block">
+      <div class="nb-header">
+        <div class="nb-index">§ 10</div>
+        <div>
+          <h2 class="nb-title">30-Day Scenario Forecast</h2>
+          <p class="nb-subtitle">From current $94.20. Ranges derived from historical precedents: 1990 Gulf War, 1979 Revolution, 2019 Aramco.</p>
+        </div>
+        <div class="nb-badges"><span class="badge badge-red">FORECAST</span></div>
+      </div>
+      <div class="scenarios-grid">
+        <div class="sc-card sc-escalation">
+          <div class="sc-head">
+            <span class="sc-tag">ESCALATION</span>
+            <span class="sc-prob">P ≈ 25%</span>
+          </div>
+          <div class="sc-target">$140–160</div>
+          <div class="sc-body">Hormuz closed, war widens to Gulf infrastructure. ~13–15 mbd net disruption. 1990 Gulf War precedent.</div>
+          <div class="sc-bar"><div class="sc-fill" style="width:95%;background:#ff5252"></div></div>
+        </div>
+        <div class="sc-card sc-sustained">
+          <div class="sc-head">
+            <span class="sc-tag">SUSTAINED</span>
+            <span class="sc-prob">P ≈ 55%</span>
+          </div>
+          <div class="sc-target">$105–120</div>
+          <div class="sc-body">Partial blockade, insurance-driven disruption, SPR releases partially offset. Slow grind higher.</div>
+          <div class="sc-bar"><div class="sc-fill" style="width:65%;background:#ffab00"></div></div>
+        </div>
+        <div class="sc-card sc-ceasefire">
+          <div class="sc-head">
+            <span class="sc-tag">CEASEFIRE</span>
+            <span class="sc-prob">P ≈ 20%</span>
+          </div>
+          <div class="sc-target">$75–85</div>
+          <div class="sc-body">Diplomatic breakthrough, Hormuz reopens. Risk premium unwinds but remains above pre-war.</div>
+          <div class="sc-bar"><div class="sc-fill" style="width:35%;background:#00e676"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Live feed -->
+    <section class="narrative-block">
+      <div class="nb-header">
+        <div class="nb-index">§ 11</div>
+        <div>
+          <h2 class="nb-title">Live Intelligence Feed</h2>
+          <p class="nb-subtitle">Auto-curated headlines · refreshed every 30 min.</p>
+        </div>
+        <div class="nb-badges"><span class="badge badge-green">LIVE</span></div>
+      </div>
+      <div class="feed-list" id="feedList">
+        <!-- populated -->
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<!-- ═══ DATA EXPLORER SLIDE-OVER ═══ -->
+<div class="data-overlay" id="dataOverlay" aria-hidden="true">
+  <div class="data-panel">
+    <div class="data-panel-head">
+      <div>
+        <div class="dp-eyebrow">UTILITY</div>
+        <h2 class="dp-title">Data Explorer</h2>
+      </div>
+      <button class="dp-close" id="dpClose">×</button>
+    </div>
+    <div class="data-controls">
+      <div class="dc-group"><label>SEARCH</label><input type="text" placeholder="tanker, drone, missile…"></div>
+      <div class="dc-group"><label>TYPE</label><select><option>All</option><option>Battles</option><option>Explosions</option></select></div>
+      <div class="dc-group"><label>FROM</label><input type="date" value="2023-10-01"></div>
+      <div class="dc-group"><label>TO</label><input type="date" value="2026-04-22"></div>
+      <button class="btn-go">APPLY</button>
+      <button class="btn-ghost">EXPORT CSV</button>
+    </div>
+    <div class="dp-table">
+      <table id="dpTable">
+        <thead>
+          <tr><th>DATE</th><th>TYPE</th><th>SUB-EVENT</th><th>ACTOR</th><th>LOCATION</th><th>FATAL</th></tr>
+        </thead>
+        <tbody id="dpTbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="assets/api.js?v=20260422f"></script>
+<script src="assets/data.js?v=20260422f"></script>
+<script src="assets/hydrate.js?v=20260422f"></script>
+<script src="assets/globe.js?v=20260422f"></script>
+<script src="assets/tacmap.js?v=20260422f"></script>
+<script src="assets/charts.js?v=20260422f"></script>
+<script src="assets/app.js?v=20260422f"></script>
+</body>
+</html>

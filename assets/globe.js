@@ -1,0 +1,254 @@
+/* Rotating globe with shipping lanes — D3 orthographic projection
+   - Auto-rotate (paused on hover)
+   - Click chokepoint → dispatches 'chokepoint-select' event
+   - Drag to rotate manually
+*/
+
+(function(){
+  'use strict';
+
+  const WORLD_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json';
+
+  const svg = d3.select('#globeSvg');
+  if (svg.empty()) return;
+
+  const width = 720, height = 720;
+  const projection = d3.geoOrthographic()
+    .scale(320)
+    .translate([width/2, height/2])
+    .clipAngle(90)
+    .rotate([-50, -15]);
+
+  const path = d3.geoPath(projection);
+
+  // Defs: sphere gradient, glow filters
+  const defs = svg.append('defs');
+
+  const sphereGrad = defs.append('radialGradient')
+    .attr('id','sphereGrad').attr('cx','35%').attr('cy','35%').attr('r','75%');
+  sphereGrad.append('stop').attr('offset','0%').attr('stop-color','#0f1f30');
+  sphereGrad.append('stop').attr('offset','70%').attr('stop-color','#050a14');
+  sphereGrad.append('stop').attr('offset','100%').attr('stop-color','#02050b');
+
+  const glow = defs.append('filter').attr('id','glow')
+    .attr('x','-50%').attr('y','-50%').attr('width','200%').attr('height','200%');
+  glow.append('feGaussianBlur').attr('stdDeviation','2').attr('result','b');
+  const merge = glow.append('feMerge');
+  merge.append('feMergeNode').attr('in','b');
+  merge.append('feMergeNode').attr('in','SourceGraphic');
+
+  // Base sphere
+  svg.append('path')
+    .attr('class','globe-sphere')
+    .datum({type:'Sphere'})
+    .attr('d', path);
+
+  // Graticule
+  const graticule = d3.geoGraticule10();
+  svg.append('path')
+    .attr('class','globe-graticule')
+    .datum(graticule)
+    .attr('d', path);
+
+  const landLayer = svg.append('g').attr('class','land-layer');
+  const arcLayer = svg.append('g').attr('class','arc-layer');
+  const flowLayer = svg.append('g').attr('class','flow-layer');
+  const nodeLayer = svg.append('g').attr('class','node-layer');
+  const particleLayer = svg.append('g').attr('class','particle-layer');
+
+  // Load world
+  fetch(WORLD_URL).then(r => r.json()).then(world => {
+    const land = topojson.feature(world, world.objects.land);
+    landLayer.selectAll('path')
+      .data([land])
+      .enter().append('path')
+      .attr('class','globe-land')
+      .attr('d', path);
+    render();
+  }).catch(err => {
+    console.warn('World atlas failed to load, globe will render without landmasses', err);
+    render();
+  });
+
+  // Auto-rotate
+  let rotation = [-50, -15];
+  let autoRotate = true;
+  let speed = 0.12;
+  let lastTime = performance.now();
+
+  function tick(now){
+    const dt = now - lastTime; lastTime = now;
+    if (autoRotate) {
+      rotation[0] += speed * (dt / 16);
+      projection.rotate(rotation);
+      render();
+    }
+    animateParticles(now);
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // Pause on hover
+  const stage = document.getElementById('globeWrap');
+  stage.addEventListener('mouseenter', () => { autoRotate = false; });
+  stage.addEventListener('mouseleave', () => { autoRotate = true; lastTime = performance.now(); });
+
+  // Drag to rotate
+  let dragStart = null;
+  let dragRot = null;
+  svg.on('pointerdown', (event) => {
+    dragStart = [event.clientX, event.clientY];
+    dragRot = [...rotation];
+    autoRotate = false;
+  });
+  window.addEventListener('pointermove', (event) => {
+    if (!dragStart) return;
+    const dx = event.clientX - dragStart[0];
+    const dy = event.clientY - dragStart[1];
+    rotation[0] = dragRot[0] + dx * 0.35;
+    rotation[1] = Math.max(-85, Math.min(85, dragRot[1] - dy * 0.35));
+    projection.rotate(rotation);
+    render();
+  });
+  window.addEventListener('pointerup', () => {
+    if (dragStart) {
+      dragStart = null;
+      setTimeout(() => { autoRotate = true; lastTime = performance.now(); }, 1500);
+    }
+  });
+
+  // Helper: build an arc geojson from a list of [lon,lat]
+  function lineString(coords) {
+    return { type: 'LineString', coordinates: coords };
+  }
+
+  // Determine if a point is on the visible hemisphere
+  function isVisible(lonLat) {
+    const [lon, lat] = lonLat;
+    const [rx, ry] = rotation;
+    // great-circle distance from center of projection
+    const λ = (lon + rx) * Math.PI/180;
+    const φ1 = lat * Math.PI/180;
+    const φ2 = -ry * Math.PI/180;
+    const cos = Math.sin(φ1)*Math.sin(φ2) + Math.cos(φ1)*Math.cos(φ2)*Math.cos(λ);
+    return cos > 0;
+  }
+
+  // Particles (animate along critical arcs)
+  const particles = [];
+  (window.ARCS || []).forEach(arc => {
+    if (arc.risk === 'critical' || arc.risk === 'high') {
+      const count = arc.risk === 'critical' ? 3 : 2;
+      for (let i = 0; i < count; i++) {
+        particles.push({ arc, t: i / count, speed: 0.00018 + Math.random()*0.0001 });
+      }
+    } else if (arc.risk === 'safe') {
+      particles.push({ arc, t: Math.random(), speed: 0.0001 });
+    }
+  });
+
+  function pointOnArc(arc, t) {
+    const n = arc.path.length - 1;
+    const f = t * n;
+    const i = Math.floor(f);
+    const u = f - i;
+    const a = arc.path[Math.min(i, n)];
+    const b = arc.path[Math.min(i+1, n)];
+    return [ a[0] + (b[0]-a[0])*u, a[1] + (b[1]-a[1])*u ];
+  }
+
+  function animateParticles(now) {
+    particles.forEach(p => {
+      p.t += p.speed * 16;
+      if (p.t >= 1) p.t = 0;
+    });
+    particleLayer.selectAll('circle')
+      .data(particles)
+      .join('circle')
+      .each(function(p){
+        const pt = pointOnArc(p.arc, p.t);
+        const visible = isVisible(pt);
+        const [x, y] = projection(pt);
+        const sel = d3.select(this);
+        if (!visible || isNaN(x)) { sel.attr('r', 0); return; }
+        const color = p.arc.risk === 'critical' ? '#ff3d5e'
+                    : p.arc.risk === 'high' ? '#ff8c42'
+                    : '#00e690';
+        sel.attr('cx', x).attr('cy', y).attr('r', p.arc.risk === 'critical' ? 2.6 : 2)
+           .attr('fill', color)
+           .attr('style', `color:${color}`)
+           .attr('class', 'arc-particle');
+      });
+  }
+
+  // Render (re-project everything that depends on rotation)
+  function render(){
+    // land + graticule + sphere
+    svg.selectAll('.globe-sphere').attr('d', path);
+    svg.selectAll('.globe-graticule').attr('d', path);
+    landLayer.selectAll('.globe-land').attr('d', path);
+
+    // Arcs
+    const arcs = window.ARCS || [];
+    arcLayer.selectAll('path')
+      .data(arcs, d => d.id)
+      .join('path')
+      .attr('class', d => `globe-arc arc-${d.risk}`)
+      .attr('d', d => path(lineString(d.path)));
+
+    // Chokepoint + destination nodes
+    const nodeList = [];
+    Object.values(window.CHOKEPOINTS || {}).forEach(cp => {
+      if (cp.id === 'suez') return; // skip duplicate; still show as node? keep it.
+      nodeList.push({ ...cp, isChokepoint: true });
+    });
+    nodeList.push({ ...window.CHOKEPOINTS.suez, isChokepoint: true });
+    (window.NODES || []).forEach(n => nodeList.push({ ...n, isChokepoint: false }));
+
+    const nodes = nodeLayer.selectAll('g.globe-node')
+      .data(nodeList, d => d.id)
+      .join(enter => {
+        const g = enter.append('g').attr('class','globe-node');
+        g.append('circle').attr('class','node-pulse');
+        g.append('circle').attr('class','node-dot');
+        g.append('text').attr('class','node-label');
+        return g;
+      });
+
+    nodes.each(function(d){
+      const sel = d3.select(this);
+      const visible = isVisible([d.lon, d.lat]);
+      if (!visible) { sel.attr('display','none'); return; }
+      sel.attr('display', null);
+      const [x, y] = projection([d.lon, d.lat]);
+      const isCp = d.isChokepoint;
+      const fill = d.threat === 'critical' ? '#ff3d5e'
+                 : d.threat === 'high' ? '#ff8c42'
+                 : d.threat === 'elevated' ? '#ffab00'
+                 : d.threat === 'safe' ? '#00e690'
+                 : '#00d4ff';
+      sel.select('.node-dot')
+        .attr('cx', x).attr('cy', y)
+        .attr('r', isCp ? 5 : 3)
+        .attr('fill', fill);
+      if (isCp) {
+        sel.select('.node-pulse')
+          .attr('cx', x).attr('cy', y)
+          .attr('stroke', fill)
+          .attr('display', null);
+      } else {
+        sel.select('.node-pulse').attr('display','none');
+      }
+      sel.select('text')
+        .attr('x', x + 8).attr('y', y + 3)
+        .text(d.name || '');
+    });
+
+    // Click
+    nodes.on('click', (event, d) => {
+      if (!d.isChokepoint) return;
+      window.dispatchEvent(new CustomEvent('chokepoint-select', { detail: d.id }));
+    });
+  }
+
+})();

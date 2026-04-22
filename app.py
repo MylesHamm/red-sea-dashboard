@@ -30,14 +30,16 @@ app = FastAPI(title="Middle East Energy Security Dashboard")
 class NoCacheStaticMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         response = await call_next(request)
-        if request.url.path.startswith("/static"):
+        if request.url.path.startswith("/assets") or request.url.path == "/":
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
             response.headers["Pragma"] = "no-cache"
             response.headers["Expires"] = "0"
         return response
 
 app.add_middleware(NoCacheStaticMiddleware)
-app.mount("/static", StaticFiles(directory=config.BASE_DIR / "static"), name="static")
+# Serve /assets/* (JS, CSS) directly from the project's assets/ folder so the
+# same dashboard.html works locally (file://) and in production.
+app.mount("/assets", StaticFiles(directory=config.BASE_DIR / "assets"), name="assets")
 
 
 # ─── API Endpoints ───────────────────────────────────────────────────────────
@@ -322,7 +324,7 @@ async def preload_data():
 
 @app.get("/")
 def serve_dashboard():
-    response = FileResponse(config.BASE_DIR / "static" / "index.html")
+    response = FileResponse(config.BASE_DIR / "dashboard.html")
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return response
 
