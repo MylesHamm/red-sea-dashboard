@@ -144,12 +144,19 @@ function renderEventTypesChart(state) {
   const canvas = chartEl('eventTypesChart');
   if (!canvas) return;
 
-  const events = state.events || window.THESIS_EVENTS || [];
+  const events = (state.events && state.events.length) ? state.events : (window.THESIS_EVENTS || []);
   if (!events.length) {
-    // Wait for thesis events if main events didn't yield
+    // Events arrives in the background after the gate resolves — re-render
+    // when either the heavy /api/events payload OR the thesis-events feed
+    // becomes available.
+    window.addEventListener('events-ready',        () => renderEventTypesChart(window.CP.state), { once: true });
     window.addEventListener('thesis-events-ready', () => renderEventTypesChart(window.CP.state), { once: true });
-    return showChartEmpty(canvas, 'events unavailable');
+    return showChartEmpty(canvas, 'loading events…');
   }
+  // If we're re-rendering after events arrived, drop any prior empty overlay
+  const parent = canvas.parentElement;
+  const overlay = parent && parent.querySelector('.chart-empty');
+  if (overlay) overlay.remove();
 
   const counts = new Map();
   for (const e of events) {

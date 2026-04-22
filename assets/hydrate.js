@@ -325,6 +325,27 @@
   window.CP.hydrated = new Promise(r => { resolveHydrated = r; });
   window.CP.state = {};
 
+  // Fetch master with one retry — Render free tier sometimes drops the
+  // connection mid-stream and a quick retry usually succeeds against the
+  // now-warm in-memory cache.
+  async function fetchMasterWithRetry() {
+    try {
+      const m = await API.master();
+      if (m && m.timeseries && m.timeseries.length) return m;
+      // Empty / malformed → retry once
+      API.invalidate('/api/master');
+      return await API.master();
+    } catch (e) {
+      try {
+        API.invalidate('/api/master');
+        await new Promise(r => setTimeout(r, 800));
+        return await API.master();
+      } catch (e2) {
+        return null;
+      }
+    }
+  }
+
   async function loadOnce() {
     const S = window.CP.state;
     const errors = [];
@@ -334,21 +355,21 @@
       .then(() => setConnectionStatus(true))
       .catch(() => setConnectionStatus(false));
 
-    // Parallel fetch — tolerate individual failures
-    const [master, brent, events, iranResp, suez, bab, hormuz] = await Promise.all([
-      API.master().catch(e => (errors.push(e), null)),
+    // Parallel fetch of LIGHT endpoints — events is heavy (10MB+) so it's
+    // fetched separately below and never blocks the hydrated promise.
+    const [master, brent, iranResp, suez, bab, hormuz] = await Promise.all([
+      fetchMasterWithRetry(),
       API.brent().then(r => r && r.data).catch(e => (errors.push(e), null)),
-      API.events().then(r => r && r.data).catch(e => (errors.push(e), null)),
       API.iranEvents().catch(e => (errors.push(e), null)),
       API.suezTransits().then(r => r && r.data).catch(e => (errors.push(e), null)),
       API.babElMandeb().then(r => r && r.data).catch(e => (errors.push(e), null)),
       API.hormuzTransits().then(r => r && r.data).catch(e => (errors.push(e), null)),
     ]);
 
-    // Stash raw responses for chart code
+    // Stash raw responses for chart code (events arrives later, see below)
     S.master = master;
     S.brent  = brent;
-    S.events = events;
+    S.events = S.events || [];
     S.iran   = iranResp;
     S.suez   = suez;
     S.bab    = bab;
@@ -357,21 +378,14 @@
     // ── Chokepoints ──
     // Real-world flow estimates (EIA) — these are geophysical constants,
     // not analytical values. Flows through a strait don't vary by the day.
-    hydrateChokepoint('hormuz', hormuz, events, 21.0);
-    hydrateChokepoint('bab',    bab,    events,  8.2);
-    hydrateChokepoint('suez',   suez,   events,  5.5);
+    // Use whatever events we have so far; refine when /api/events resolves.
+    hydrateChokepoint('hormuz', hormuz, S.events, 21.0);
+    hydrateChokepoint('bab',    bab,    S.events,  8.2);
+    hydrateChokepoint('suez',   suez,   S.events,  5.5);
     hydrateCape(hormuz);
-
-    // ── Hotspots for globe ──
-    window.ATTACKS = buildAttackHotspots(events);
 
     // ── Iran timeline events ──
     hydrateIranEvents(iranResp);
-
-    // ── Thesis events (optional) ──
-    API.thesisEvents()
-      .then(r => { window.THESIS_EVENTS = (r && r.data) || []; window.dispatchEvent(new CustomEvent('thesis-events-ready')); })
-      .catch(() => {});
 
     // ── DOM updates ──
     hydrateHero(master, brent);
@@ -380,11 +394,42 @@
 
     if (errors.length) {
       console.warn('Hydrator: partial failure —', errors);
-      if (errors.length >= 5) setConnectionStatus(false, 'PARTIAL · some data stale');
+      if (errors.length >= 4) setConnectionStatus(false, 'PARTIAL · some data stale');
     }
 
+    // Resolve the gate IMMEDIATELY so charts can render with master/brent.
+    // Heavy /api/events arrives in the background.
     window.dispatchEvent(new CustomEvent('data-hydrated', { detail: S }));
     if (resolveHydrated) { resolveHydrated(S); resolveHydrated = null; }
+
+    // ── Background fetch: /api/events (heavy ACLED payload) ──
+    API.events()
+      .then(r => (r && r.data) || [])
+      .catch(() => [])
+      .then(events => {
+        S.events = events;
+        // Refresh chokepoint incident counts now that real events are in
+        ['hormuz', 'bab', 'suez'].forEach(k => {
+          const cp = window.CHOKEPOINTS[k];
+          if (cp) cp.incidents30d = countRecentIncidents(events, cp, 300, 30);
+        });
+        // Refresh aggregate incidents KPI
+        const incidentEl = document.querySelector('[data-kpi="incidents30"]');
+        if (incidentEl) {
+          incidentEl.textContent = String(
+            (window.CHOKEPOINTS.hormuz.incidents30d || 0) +
+            (window.CHOKEPOINTS.bab.incidents30d || 0)
+          );
+        }
+        // Update hotspots layer for globe
+        window.ATTACKS = buildAttackHotspots(events);
+        window.dispatchEvent(new CustomEvent('events-ready', { detail: { events } }));
+      });
+
+    // ── Thesis events (optional) ──
+    API.thesisEvents()
+      .then(r => { window.THESIS_EVENTS = (r && r.data) || []; window.dispatchEvent(new CustomEvent('thesis-events-ready')); })
+      .catch(() => {});
   }
 
   // ── Kick off ──────────────────────────────────────────────────────────────

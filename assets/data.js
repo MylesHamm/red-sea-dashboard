@@ -54,51 +54,84 @@ window.NODES = [
 // Shipping arcs — waypoints hand-tuned to stay over water. Geographic only;
 // risk is recomputed at runtime from live chokepoint status.
 //
-// Routing notes (do not edit a path without verifying against a real map):
-//   • Red Sea legs follow the central deep trough; the Saudi west coast sits
-//     near 41-42°E and the Eritrean/Yemen coast near 41°E, so a single offset
-//     of 0.5-1° picks the wrong country.
-//   • Hormuz → Bab el-Mandeb routes drop south through the Arabian Sea
-//     (lat ~12°N) before turning west, never cutting across mainland Yemen.
-//   • East Asia routes from the Strait of Malacca stay east of Vietnam (≥109°E),
-//     east of Hainan (Hainan = 108-111°E, 18-20°N), and run through the
-//     Taiwan Strait centerline (~119-121°E) — never over Taiwan or the
-//     Pescadores.
+// Routing notes (do NOT edit a path without verifying against a real map):
+//   • Suez approach: routes from the Red Sea must round the SOUTHERN tip of
+//     Sinai (Ras Muhammad ≈ 34.25°E, 27.73°N) on the WEST side, then transit
+//     the Gulf of Suez (centerline ~32.8-33.5°E, 28-30°N) up to Suez city
+//     (32.55°E, 29.95°N). A direct line from Hurghada to Suez slices through
+//     the Sinai mainland.
+//   • Western Mediterranean: the safe deep-water corridor runs ~38°N from
+//     south of Sardinia (39°N south coast) westward, staying NORTH of the
+//     Algerian coast (which sits at 36.6-36.9°N from Algiers to Annaba) and
+//     SOUTH of the Balearic Islands (39.3°N south coast). At lng ≈ 1-2°E a
+//     line dropping below 37°N will brush Algiers.
+//   • Strait of Sicily: pass through the Cape Bon-Sicily channel between
+//     Cape Bon (11°E, 37°N) and Pantelleria (12°E, 36.8°N) — centerline
+//     near (11.5°E, 37.4°N). Going through Pantelleria-Sicily gap is
+//     ~11 km wide; avoid.
+//   • English Channel: mid-channel runs ~50.3°N at lng=0, then the Strait
+//     of Dover funnels through ~(1.5°E, 51°N) between Dover (1.3°E, 51.13°N)
+//     and Calais (1.85°E, 50.95°N). Any waypoint at (0-1°E, 51.2°N) sits
+//     INSIDE Kent/SE England. Approach Rotterdam from the Strait of Dover
+//     up the southern North Sea staying north of the Belgian coast.
+//   • Brittany: Brittany sticks west to ~-5°W at lat 48.5°N. Stay west of
+//     -7°W until past lat 49°N before turning east into the Channel.
+//   • Sri Lanka: south coast at 5.95-6°N from lng 80-82°E. Routes from
+//     Mumbai/Hormuz to Malacca must pass at lat ≤ 5.5°N when crossing
+//     longitudes 79-83°E.
+//   • Taiwan: the island spans 120-122°E, 21.9-25.3°N. Routes to North China
+//     must use either (a) the Taiwan Strait centerline ~119°E west of the
+//     Pescadores (Penghu at 119.5°E, 23.5°N), or (b) the Pacific east of
+//     Taiwan at lng ≥ 122.5°E. Routes to Korea/Japan should use the eastern
+//     Pacific path. A diagonal cut at 120-122°E, 22-24°N goes THROUGH Taiwan.
 //   • Cape of Good Hope routes pass east of Madagascar (Madagascar = 43-50°E,
 //     12-26°S), then south of South Africa at ≥35°S before turning into the
 //     Atlantic. They never cross the Mozambique Channel.
-//   • All routes terminating in Rotterdam approach via the western entrance
-//     to the English Channel. Stay west of Iberia (≤-9°E to lat ~46°N), then
-//     west of Brittany (≤-7°E to lat ~49°N — Brittany sticks west to ~-5°E
-//     at lat 48.5°N), then turn east through the Channel above lat 50.5°N.
-//     A direct line from Bay of Biscay to Rotterdam will slice through
-//     Brittany and Normandy.
 window.ARCS = [
   // ═══ Arabian Gulf outflow via Strait of Hormuz ═══
+  // Ras Tanura → Singapore: Persian Gulf → Hormuz → Arabian Sea → south of Sri Lanka → Malacca → Singapore
   { id: 'ras-sing', from: 'ras', to: 'singapore', risk: 'critical',
-    path: [[50.17,26.64],[52,26.5],[55,26.3],[56.3,26.5],[58,25],[60,23],[62,20],[65,15],[70,10],[78,7],[88,5],[95,4],[100,3.2],[102.5,2],[103.83,1.26]] },
+    path: [[50.17,26.64],[52,26.5],[55,26.3],[56.3,26.5],[58,25],[60,23],[62,20],[65,15],[70,10],[76,6],[81,4.5],[88,4.2],[95,4],[100,3.2],[102.5,2],[103.83,1.26]] },
+  // Kharg → Ningbo: down through Singapore, then UP via Taiwan Strait centerline (west of Pescadores) to East China Sea
   { id: 'kharg-ningbo', from: 'kharg', to: 'ningbo', risk: 'critical',
-    path: [[50.32,29.23],[51,28.5],[53,27.5],[55,26.8],[56.3,26.5],[58,25],[60,22],[64,17],[72,10],[82,6],[92,5],[100,3.5],[103.83,1.26],[107,5],[111,10],[114,15],[117,19],[119,22],[120,25],[121,28],[121.54,29.87]] },
+    path: [[50.32,29.23],[51,28.5],[53,27.5],[55,26.8],[56.3,26.5],[58,25],[60,22],[64,17],[72,10],[80,5.5],[88,4.5],[95,4],[100,3.5],[103.83,1.26],[107,4],[111,9],[114,14],[117,18],[118,21],[118.7,23.5],[119,25.3],[120.3,27.5],[121.4,29],[121.54,29.87]] },
+  // Basrah → Rotterdam: Persian Gulf → Hormuz → Arabian Sea → Bab el-Mandeb → Red Sea → Gulf of Suez → Suez Canal → Mediterranean → Gibraltar → Atlantic → English Channel → Rotterdam
   { id: 'basrah-rotter', from: 'basrah', to: 'rotter', risk: 'critical',
-    path: [[47.82,30.5],[49,29.5],[51,28],[54,26.8],[56.3,26.5],[58,24.5],[59,21],[59,15],[57,12],[52,12],[48,12.3],[45,12.4],[43.3,12.6],[42.2,14],[41.3,16],[40.3,18],[39.3,20],[38.2,22],[37,24],[35.5,26],[34.2,27.8],[33,29.3],[32.55,29.95],[32.35,30.42],[32.3,31.3],[31,32],[25,33.5],[15,36],[6,37.5],[-1,36],[-5.5,36],[-9,37],[-10,42],[-10,46],[-9,49],[-5,50.5],[1,51.2],[3,51.7],[4.14,51.95]] },
+    path: [
+      [47.82,30.5],[49,29.5],[51,28],[54,26.8],[56.3,26.5],[58,24.5],[59,21],[59,15],[57,12],[52,12],[48,12.3],[45,12.4],[43.3,12.6],
+      [42.2,14],[41.3,16],[40.3,18],[39.3,20],[38.2,22],[37,24],[35.5,26],
+      [34.5,27.2],[33.7,27.9],[33.0,28.7],[32.7,29.5],[32.55,29.95],[32.45,30.5],[32.3,31.2],[31.5,32],
+      [25,33.5],[18,35],[15,36],[12.5,36.7],[11.5,37.4],[8,38],[3,38],[-1,37],[-3,36],[-5.5,36],[-7,36.3],[-9,36.7],
+      [-10,42],[-11,46],[-7,48.5],[-5,49.5],[0,50.3],[2,51],[3,51.6],[4.14,51.95]
+    ] },
+  // Basrah → Ulsan: down Hormuz, around to Pacific east of Taiwan, up to Korea
   { id: 'kuwait-ulsan', from: 'basrah', to: 'ulsan', risk: 'critical',
-    path: [[47.82,30.5],[49,29],[52,27.5],[55,26.8],[56.3,26.5],[58,24],[60,20],[65,13],[75,8],[88,5],[98,3.5],[103.83,1.26],[107,4],[111,9],[114,14],[117,18],[120,21.5],[122.5,24],[124,27],[126,30],[128,33],[129.36,35.49]] },
+    path: [[47.82,30.5],[49,29],[52,27.5],[55,26.8],[56.3,26.5],[58,24],[60,20],[65,13],[75,8],[88,5],[98,3.5],[103.83,1.26],[107,4],[111,9],[114,14],[117,18],[120,20],[122,22],[123,25],[125,28],[127,31],[128.5,33.5],[129.36,35.49]] },
 
   // ═══ Red Sea via Bab el-Mandeb → Suez → Europe ═══
   { id: 'jeddah-rotter', from: 'jeddah', to: 'rotter', risk: 'high',
-    path: [[39.19,21.49],[37.8,23],[36.5,25],[35,26.8],[33.8,28.2],[32.8,29.3],[32.55,29.95],[32.35,30.42],[32.3,31.3],[31,32],[25,33.5],[15,36],[6,37.5],[-1,36],[-5.5,36],[-9,37],[-10,42],[-10,46],[-9,49],[-5,50.5],[1,51.2],[3,51.7],[4.14,51.95]] },
+    path: [
+      [39.19,21.49],[37.8,23],[36.5,25],[35,26.8],
+      [34.5,27.2],[33.7,27.9],[33.0,28.7],[32.7,29.5],[32.55,29.95],[32.45,30.5],[32.3,31.2],[31.5,32],
+      [25,33.5],[18,35],[15,36],[12.5,36.7],[11.5,37.4],[8,38],[3,38],[-1,37],[-3,36],[-5.5,36],[-7,36.3],[-9,36.7],
+      [-10,42],[-11,46],[-7,48.5],[-5,49.5],[0,50.3],[2,51],[3,51.6],[4.14,51.95]
+    ] },
 
   // ═══ Cape of Good Hope alternative routes ═══
   { id: 'ras-houston-cape', from: 'ras', to: 'houston', risk: 'safe',
     path: [[50.17,26.64],[52,26.5],[55,26.3],[56.3,26.5],[58,24.5],[60,21],[62,15],[62,8],[58,0],[55,-10],[53,-20],[51,-28],[42,-35],[30,-37],[22,-36],[18.47,-34.35],[10,-34],[0,-32],[-10,-27],[-20,-20],[-30,-12],[-42,-2],[-55,8],[-68,15],[-80,20],[-88,23],[-93,27],[-95.28,29.72]] },
+  // Cape route to Rotterdam: round Cape, up West African coast (offshore), past Iberia (offshore), into English Channel via mid-channel, through Strait of Dover, into Rotterdam.
   { id: 'ras-rotter-cape', from: 'ras', to: 'rotter', risk: 'safe',
-    path: [[50.17,26.64],[52,26.5],[55,26.3],[56.3,26.5],[58,24],[60,19],[62,12],[60,0],[58,-12],[55,-22],[52,-30],[42,-35],[30,-37],[22,-36],[18.47,-34.35],[12,-30],[8,-20],[5,-10],[-2,0],[-10,10],[-17,20],[-18,30],[-12,38],[-12,44],[-10,48],[-6,50.5],[0,51.2],[3,51.7],[4.14,51.95]] },
+    path: [
+      [50.17,26.64],[52,26.5],[55,26.3],[56.3,26.5],[58,24],[60,19],[62,12],[60,0],[58,-12],[55,-22],[52,-30],[42,-35],[30,-37],[22,-36],[18.47,-34.35],
+      [12,-30],[8,-20],[5,-10],[-2,0],[-10,10],[-17,20],[-18,30],[-12,38],[-11,42],[-12,46],[-7,48.5],[-5,49.5],[0,50.3],[2,51],[3,51.6],[4.14,51.95]
+    ] },
 
   // ═══ Baseline regional flow ═══
   { id: 'ras-mumbai', from: 'ras', to: 'mumbai', risk: 'flow',
     path: [[50.17,26.64],[52,26.5],[55,26.3],[56.3,26.5],[58,24.5],[60,23],[63,21],[67,19.5],[71,19],[72.87,19.07]] },
   { id: 'jeddah-sing', from: 'jeddah', to: 'singapore', risk: 'flow',
-    path: [[39.19,21.49],[40.5,18.5],[41.5,16],[42.2,14],[43.3,12.6],[45,12.5],[48,12.5],[52,12.5],[58,10],[65,8],[75,7],[85,5],[95,4],[100,3.2],[103.83,1.26]] }
+    path: [[39.19,21.49],[40.5,18.5],[41.5,16],[42.2,14],[43.3,12.6],[45,12.5],[48,12.5],[52,12.5],[58,10],[65,8],[75,6],[81,4.8],[88,4.3],[95,4],[100,3.2],[103.83,1.26]] }
 ];
 
 // Runtime state — hydrated from backend. NO hardcoded values here.
