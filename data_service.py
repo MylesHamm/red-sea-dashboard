@@ -763,7 +763,41 @@ def fetch_china_pmi() -> List[dict]:
 # ─── Master Dataset (CSV Backbone) ──────────────────────────────────────────
 
 def load_master_dataset() -> dict:
-    """Load the master dataset CSV and return as structured JSON."""
+    """Load the master dataset CSV and return as structured JSON.
+
+    Fast path: if data/master_dataset.json (pre-computed at build / committed
+    to repo) exists, serve it directly. This avoids cold-start pandas work on
+    Render's free tier where the live computation can exceed Cloudflare's
+    edge timeout, leaving the cache permanently un-warmed. The static file
+    only needs to be regenerated when the underlying CSV changes — live
+    Brent / DXY / OVX KPIs are still pulled from their dedicated cached
+    endpoints by the frontend.
+    """
+    static_json = config.DATA_DIR / "master_dataset.json"
+    if static_json.exists():
+        try:
+            with open(static_json, "r") as f:
+                result = json.load(f)
+            # Refresh the live KPI fields from caches if available so the
+            # static file doesn't go stale on price snapshots.
+            try:
+                live_brent = _read_cache("brent_prices", config.CACHE_TTL_BRENT)
+                if live_brent and len(live_brent) >= 2:
+                    result.setdefault("kpis", {})
+                    result["kpis"]["latest_brent_price"] = round(live_brent[-1]["price"], 2)
+                    result["kpis"]["brent_price_change"] = round(live_brent[-1]["price"] - live_brent[-2]["price"], 2)
+                live_dxy = _read_cache("dxy", config.CACHE_TTL_YFINANCE)
+                if live_dxy:
+                    result.setdefault("kpis", {})["latest_dxy"] = round(live_dxy[-1]["value"], 2)
+                live_ovx = _read_cache("ovx", config.CACHE_TTL_YFINANCE)
+                if live_ovx:
+                    result.setdefault("kpis", {})["latest_ovx"] = round(live_ovx[-1]["value"], 2)
+            except Exception as e:
+                logger.warning(f"master_dataset.json: could not refresh live KPIs: {e}")
+            return result
+        except Exception as e:
+            logger.error(f"master_dataset.json read failed, falling back to live: {e}")
+
     cached = _read_cache("master_dataset", 1800)  # 30 min cache
     if cached:
         return cached
