@@ -127,6 +127,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let currentPct = 100; // default to "now"
 
+    // Era boundaries used by all temporal-aware renderers
+    const HOUTHI_START = new Date('2023-12-01').getTime();
+    const WAR_START    = new Date('2026-02-28').getTime();
+    function eraOf(ts) {
+      if (ts < HOUTHI_START) return 'pre';
+      if (ts < WAR_START)    return 'houthi';
+      return 'war';
+    }
+
     function setPct(pct, { fromButton = null, silent = false } = {}) {
       currentPct = Math.max(0, Math.min(100, pct));
       tsFill.style.width  = currentPct + '%';
@@ -142,10 +151,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
       try { localStorage.setItem('cp_timeline_pct', String(currentPct)); } catch (e) {}
+      // Publish timeline state to the global bus so consumers (charts, globe,
+      // tac-map, feed, KPIs) can read it synchronously without listening.
+      const ts = d.getTime();
+      window.CP = window.CP || {};
+      window.CP.timeline = {
+        pct: currentPct,
+        date: d.toISOString().slice(0, 10),
+        ts,
+        era: eraOf(ts),
+        // Is the current scrub at or near "today"? Used to suppress filtering
+        // when the user has not actually scrubbed back in time.
+        atNow: currentPct >= 99.5
+      };
       if (!silent) {
-        window.dispatchEvent(new CustomEvent('timeline-set', {
-          detail: { pct: currentPct, date: d.toISOString().slice(0,10), ts: d.getTime() }
-        }));
+        window.dispatchEvent(new CustomEvent('timeline-set', { detail: window.CP.timeline }));
       }
     }
 
@@ -223,7 +243,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const saved = parseFloat(localStorage.getItem('cp_timeline_pct'));
       if (!isNaN(saved)) initial = saved;
     } catch (e) {}
-    setPct(initial, { silent: true });
+    // Always broadcast the initial value so late-binding consumers (charts
+    // re-rendered after hydration, globe re-rendering, etc.) see it.
+    setPct(initial, { silent: false });
     // Highlight the preset that best matches initial
     let bestBtn = null, bestDiff = Infinity;
     tsButtons.forEach(b => {
@@ -285,13 +307,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const lbl = t.parentElement.textContent.trim().toLowerCase();
       state[lbl] = t.checked;
     });
+    // Era from temporal scrubber (default to 'now' when nothing scrubbed yet)
+    const era = (window.CP && window.CP.timeline && window.CP.timeline.era) || 'now';
+    const preCrisis = era === 'pre';
     // Heatmap
-    layers.heatLayer.style('display', state['heatmap'] ? null : 'none');
+    layers.heatLayer.style('display', (state['heatmap'] && !preCrisis) ? null : 'none');
     // Chokepoint zone
     layers.chokeLayer.style('display', state['chokepoint zone'] ? null : 'none');
-    // Strike markers + tanker-only
+    // Strike markers + tanker-only — pre-crisis era hides every marker because
+    // the Houthi maritime campaign hadn't started yet.
     const markers = layers.markerLayer.selectAll('g.atk');
-    if (!state['strike markers']) {
+    if (!state['strike markers'] || preCrisis) {
       markers.style('display', 'none');
     } else {
       markers.style('display', d => {
@@ -303,6 +329,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // thesis and are intentionally NOT recomputed from the visible illustrative
     // markers. Toggles only affect map layer visibility.
   }
+
+  // Expose for the timeline listener so scrubbing can re-run it
+  window.applyTacFilters = applyTacFilters;
+  window.addEventListener('timeline-set', () => applyTacFilters());
 
   // Run after tac map has loaded its data
   setTimeout(wireTacToggles, 800);

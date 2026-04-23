@@ -16,6 +16,32 @@ const C_CYAN = '#00d4ff', C_RED = '#ff3d5e', C_AMBER = '#ffab00',
 // ── Helpers ────────────────────────────────────────────────────────────────
 function chartEl(id) { return document.getElementById(id); }
 
+// ── Temporal cutoff helpers (driven by app.js scrubber → window.CP.timeline)
+//    All timeseries-driven render functions filter rows by this so scrubbing
+//    truncates the chart to <= the scrubbed date.
+function tlCutoffDate() {
+  const t = window.CP && window.CP.timeline;
+  if (!t || t.atNow) return null;          // no filter at "now"
+  return t.date || null;
+}
+function tlCutoffTs() {
+  const t = window.CP && window.CP.timeline;
+  if (!t || t.atNow) return null;
+  return t.ts || null;
+}
+function applyTimelineRows(rows) {
+  const c = tlCutoffDate();
+  if (!c || !rows || !rows.length) return rows || [];
+  return rows.filter(r => r.date && r.date <= c);
+}
+// Destroy any Chart bound to this canvas so re-renders don't error with
+// "Canvas is already in use".
+function destroyChartOn(canvas) {
+  if (!canvas || typeof Chart === 'undefined' || !Chart.getChart) return;
+  const prior = Chart.getChart(canvas);
+  if (prior) prior.destroy();
+}
+
 function showChartEmpty(canvas, msg) {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -62,8 +88,9 @@ document.addEventListener('DOMContentLoaded', renderAllCharts);
 function renderPriceVsAttacks(state) {
   const canvas = chartEl('priceAttackChart');
   if (!canvas) return;
+  destroyChartOn(canvas);
 
-  const ts = (state.master && state.master.timeseries) || [];
+  const ts = applyTimelineRows((state.master && state.master.timeseries) || []);
   if (!ts.length) return showChartEmpty(canvas, 'timeseries unavailable');
 
   // Weekly: sample every ~7 days from master timeseries
@@ -106,8 +133,9 @@ function renderPriceVsAttacks(state) {
 function renderVolatilityChart(state) {
   const canvas = chartEl('volatilityChart');
   if (!canvas) return;
+  destroyChartOn(canvas);
 
-  const ts = (state.master && state.master.timeseries) || [];
+  const ts = applyTimelineRows((state.master && state.master.timeseries) || []);
   if (!ts.length) return showChartEmpty(canvas, 'volatility unavailable');
 
   // Downsample to weekly
@@ -152,11 +180,21 @@ function renderEventTypesChart(state) {
   window.CP = window.CP || {};
   window.CP.filters = window.CP.filters || {};
 
-  const events = (state.events && state.events.length) ? state.events : (window.THESIS_EVENTS || []);
-  if (!events.length) {
+  const allEvents = (state.events && state.events.length) ? state.events : (window.THESIS_EVENTS || []);
+  if (!allEvents.length) {
     window.addEventListener('events-ready',        () => renderEventTypesChart(window.CP.state), { once: true });
     window.addEventListener('thesis-events-ready', () => renderEventTypesChart(window.CP.state), { once: true });
     return showChartEmpty(canvas, 'loading events…');
+  }
+  // Apply temporal scrubber: only count events at or before the scrubbed date
+  const tlCut = tlCutoffDate();
+  const events = tlCut
+    ? allEvents.filter(e => e.event_date && e.event_date <= tlCut)
+    : allEvents;
+  if (!events.length) {
+    // Pre-crisis era: nothing to show but the chart, not the loading state
+    destroyChartOn(canvas);
+    return showChartEmpty(canvas, 'no events in window');
   }
   const parent = canvas.parentElement;
   const overlay = parent && parent.querySelector('.chart-empty');
@@ -252,34 +290,71 @@ function renderEventTypesChart(state) {
   applyFilterVisual(window.CP.filters.eventType || null);
 }
 
-// ── Cross-filter consumer: update the incidents-30d KPI to show the
-// filtered event count when an event type is selected. Restores the
-// unfiltered chokepoint-aggregated count when the filter clears.
+// ── Cross-filter / timeline consumer: update the incidents-30d KPI to show
+// the count of events in the 30-day window ending at the scrubbed date,
+// optionally narrowed to the cross-filter event type. Falls back to the
+// chokepoint-aggregated count maintained by hydrate.js when no filters
+// are active and the scrubber sits at "now".
+function updateIncidentsKpi() {
+  const incidentEl = document.querySelector('[data-kpi="incidents30"]');
+  if (!incidentEl) return;
+  const sel = window.CP && window.CP.filters && window.CP.filters.eventType;
+  const tlTs = tlCutoffTs();
+  // No filters and scrubber at "now": defer to hydrate.js's pre-computed value
+  if (!sel && !tlTs) {
+    const cps = window.CHOKEPOINTS || {};
+    const n = ((cps.hormuz && cps.hormuz.incidents30d) || 0)
+            + ((cps.bab    && cps.bab.incidents30d)    || 0);
+    incidentEl.textContent = String(n);
+    return;
+  }
+  const events = (window.CP && window.CP.state && window.CP.state.events) || window.THESIS_EVENTS || [];
+  const endTs = tlTs || Date.now();
+  const startTs = endTs - 30 * 24 * 3600 * 1000;
+  let n = 0;
+  for (const ev of events) {
+    if (sel) {
+      const t = (ev.event_type || ev.sub_event_type || 'Other').toString();
+      if (t !== sel) continue;
+    }
+    const dt = ev.event_date ? Date.parse(ev.event_date) : NaN;
+    if (!isNaN(dt) && dt >= startTs && dt <= endTs) n++;
+  }
+  incidentEl.textContent = String(n);
+}
+
 (function wireCrossFilterIncidentsKpi() {
   if (window.__xfIncidentsWired) return;
   window.__xfIncidentsWired = true;
-  window.addEventListener('cross-filter-changed', (e) => {
-    const sel = e.detail && e.detail.eventType;
-    const incidentEl = document.querySelector('[data-kpi="incidents30"]');
-    if (!incidentEl) return;
-    if (!sel) {
-      // Restore the chokepoint-based count maintained by hydrate.js
-      const cps = window.CHOKEPOINTS || {};
-      const n = ((cps.hormuz && cps.hormuz.incidents30d) || 0)
-              + ((cps.bab    && cps.bab.incidents30d)    || 0);
-      incidentEl.textContent = String(n);
-      return;
-    }
-    const events = (window.CP && window.CP.state && window.CP.state.events) || window.THESIS_EVENTS || [];
-    const cutoff = Date.now() - 30 * 24 * 3600 * 1000;
-    let n = 0;
-    for (const ev of events) {
-      const t = (ev.event_type || ev.sub_event_type || 'Other').toString();
-      if (t !== sel) continue;
-      const dt = ev.event_date ? Date.parse(ev.event_date) : NaN;
-      if (!isNaN(dt) && dt >= cutoff) n++;
-    }
-    incidentEl.textContent = String(n);
+  window.addEventListener('cross-filter-changed', updateIncidentsKpi);
+  window.addEventListener('timeline-set',         updateIncidentsKpi);
+  // Refresh once events arrive in the background
+  window.addEventListener('events-ready',         updateIncidentsKpi);
+  window.addEventListener('thesis-events-ready',  updateIncidentsKpi);
+})();
+
+// ── Timeline-driven re-render of every chart that consumes timeseries or
+// dated events. Each render function destroys its prior Chart instance,
+// applies the cutoff, and rebuilds. Coalesce repeated scrubbing into one
+// re-render per animation frame so dragging stays smooth.
+(function wireTimelineRerender() {
+  if (window.__tlRerenderWired) return;
+  window.__tlRerenderWired = true;
+  let pending = false;
+  function flush() {
+    pending = false;
+    const state = (window.CP && window.CP.state) || {};
+    try { renderPriceVsAttacks(state); } catch (e) {}
+    try { renderVolatilityChart(state); } catch (e) {}
+    try { renderEventTypesChart(state); } catch (e) {}
+    try { renderScatter(state); } catch (e) {}
+    try { renderDxyOvx(state); } catch (e) {}
+    try { renderIranTimeline(state); } catch (e) {}
+  }
+  window.addEventListener('timeline-set', () => {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(flush);
   });
 })();
 
@@ -323,8 +398,9 @@ function renderPriceWindow(state) {
 function renderScatter(state) {
   const canvas = chartEl('scatterChart');
   if (!canvas) return;
+  destroyChartOn(canvas);
 
-  const ts = (state.master && state.master.timeseries) || [];
+  const ts = applyTimelineRows((state.master && state.master.timeseries) || []);
   if (!ts.length) return showChartEmpty(canvas, 'scatter unavailable');
 
   const pts = ts
@@ -352,9 +428,10 @@ function renderScatter(state) {
 function renderDxyOvx(state) {
   const canvas = chartEl('dxyOvxChart');
   if (!canvas) return;
+  destroyChartOn(canvas);
 
   // Pull from master timeseries (daily)
-  const ts = (state.master && state.master.timeseries) || [];
+  const ts = applyTimelineRows((state.master && state.master.timeseries) || []);
   if (!ts.length) return showChartEmpty(canvas, 'DXY/OVX unavailable');
 
   const step = Math.max(1, Math.floor(ts.length / 60));
@@ -447,13 +524,15 @@ function renderCorrelation(state) {
 function renderIranTimeline(state) {
   const canvas = chartEl('iranTimelineChart');
   if (!canvas) return;
+  destroyChartOn(canvas);
 
   const brent = state.brent || [];
-  const events = window.IRAN_EVENTS || [];
+  const tlCut = tlCutoffDate();
+  const events = (window.IRAN_EVENTS || []).filter(e => !tlCut || (e.date && e.date <= tlCut));
   if (!brent.length) return showChartEmpty(canvas, 'Brent prices unavailable');
 
-  // Filter Brent to Oct 2025 → latest
-  const filtered = brent.filter(r => r.date >= '2025-10-01');
+  // Filter Brent to Oct 2025 → (scrubbed cutoff or latest)
+  const filtered = brent.filter(r => r.date >= '2025-10-01' && (!tlCut || r.date <= tlCut));
   const labels = filtered.map(r => r.date);
   const prices = filtered.map(r => r.price);
 

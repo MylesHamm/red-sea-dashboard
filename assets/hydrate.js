@@ -287,9 +287,24 @@
   function hydrateFeed(news) {
     const feed = $('feedList');
     if (!feed) return;
-    const items = (Array.isArray(news) ? news : []).slice(0, 10);
+    // Cache the unfiltered list so the temporal scrubber can re-render
+    // without needing a refetch.
+    if (Array.isArray(news)) window.__feedRaw = news;
+    const raw = Array.isArray(news) ? news : (window.__feedRaw || []);
+    // Apply temporal scrubber: drop items published after the scrubbed date.
+    const tl = window.CP && window.CP.timeline;
+    const cutoffMs = (tl && !tl.atNow) ? tl.ts : null;
+    const filtered = cutoffMs
+      ? raw.filter(n => {
+          if (!n.published_at) return true;
+          const t = Date.parse(n.published_at);
+          return isNaN(t) || t <= cutoffMs;
+        })
+      : raw;
+    const items = filtered.slice(0, 10);
     if (!items.length) {
-      feed.innerHTML = '<div class="feed-empty">No recent news.</div>';
+      feed.innerHTML = '<div class="feed-empty">No news in this window.</div>';
+      window.FEED = [];
       return;
     }
     feed.innerHTML = items.map(n => {
@@ -305,6 +320,13 @@
         </div>`;
     }).join('');
     window.FEED = items;
+  }
+  // Re-render the feed when the temporal scrubber moves.
+  if (typeof window !== 'undefined' && !window.__feedTlWired) {
+    window.__feedTlWired = true;
+    window.addEventListener('timeline-set', () => {
+      if (window.__feedRaw) hydrateFeed(window.__feedRaw);
+    });
   }
 
   // ── Iran curated events timeline (for chart + event markers) ──────────────

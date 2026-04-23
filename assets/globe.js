@@ -122,6 +122,32 @@
     return { type: 'LineString', coordinates: coords };
   }
 
+  // ── Temporal era → arc-risk mapping ────────────────────────────────────
+  // The static arc.risk in data.js represents the CURRENT (war-era) state.
+  // When the user scrubs the temporal filter back, we re-classify each arc
+  // to reflect what the threat picture actually looked like at that date.
+  function currentEra() {
+    const t = window.CP && window.CP.timeline;
+    return (t && t.era) || 'war';
+  }
+  function adjustedRisk(arc, era) {
+    if (era === 'pre') {
+      // No active maritime crisis in Oct–Nov 2023. Cape detours don't
+      // exist yet (Suez+Hormuz both nominal); everything else is baseline.
+      if (arc.risk === 'safe') return 'hidden';
+      return 'flow';
+    }
+    if (era === 'houthi') {
+      // Dec 2023 → Jan 2026: Houthi maritime campaign — Bab/Red Sea routes
+      // become high-risk, Cape detours come online, Hormuz still nominal.
+      if (arc.id === 'jeddah-rotter' || arc.id === 'basrah-rotter') return 'high';
+      if (arc.risk === 'critical') return 'flow';   // Hormuz wasn't a war zone yet
+      return arc.risk;                              // 'safe' (Cape) and 'flow' pass through
+    }
+    // 'war' / 'now': use original risk
+    return arc.risk;
+  }
+
   // Determine if a point is on the visible hemisphere
   function isVisible(lonLat) {
     const [lon, lat] = lonLat;
@@ -158,6 +184,7 @@
   }
 
   function animateParticles(now) {
+    const era = currentEra();
     particles.forEach(p => {
       p.t += p.speed * 16;
       if (p.t >= 1) p.t = 0;
@@ -170,16 +197,24 @@
         const visible = isVisible(pt);
         const [x, y] = projection(pt);
         const sel = d3.select(this);
-        if (!visible || isNaN(x)) { sel.attr('r', 0); return; }
-        const color = p.arc.risk === 'critical' ? '#ff3d5e'
-                    : p.arc.risk === 'high' ? '#ff8c42'
-                    : '#00e690';
-        sel.attr('cx', x).attr('cy', y).attr('r', p.arc.risk === 'critical' ? 2.6 : 2)
+        const eraRisk = adjustedRisk(p.arc, era);
+        // Hide particles for arcs that are not active in this era
+        if (!visible || isNaN(x) || eraRisk === 'hidden') { sel.attr('r', 0); return; }
+        const color = eraRisk === 'critical' ? '#ff3d5e'
+                    : eraRisk === 'high'     ? '#ff8c42'
+                    : eraRisk === 'safe'     ? '#00e690'
+                    : '#00d4ff';
+        sel.attr('cx', x).attr('cy', y).attr('r', eraRisk === 'critical' ? 2.6 : 2)
            .attr('fill', color)
            .attr('style', `color:${color}`)
            .attr('class', 'arc-particle');
       });
   }
+
+  // Re-render arcs/particles when the temporal scrubber moves. The animation
+  // tick will pick up the next state on its own, but we trigger an immediate
+  // render() so the user sees the change without waiting for autoRotate.
+  window.addEventListener('timeline-set', () => render());
 
   // Render (re-project everything that depends on rotation)
   function render(){
@@ -188,12 +223,16 @@
     svg.selectAll('.globe-graticule').attr('d', path);
     landLayer.selectAll('.globe-land').attr('d', path);
 
-    // Arcs
-    const arcs = window.ARCS || [];
+    // Arcs — apply era-adjusted risk class, drop arcs that are 'hidden' for
+    // the current era (e.g. Cape detours in pre-crisis era).
+    const era = currentEra();
+    const arcs = (window.ARCS || [])
+      .map(a => ({ ...a, _era: adjustedRisk(a, era) }))
+      .filter(a => a._era !== 'hidden');
     arcLayer.selectAll('path')
       .data(arcs, d => d.id)
       .join('path')
-      .attr('class', d => `globe-arc arc-${d.risk}`)
+      .attr('class', d => `globe-arc arc-${d._era}`)
       .attr('d', d => path(lineString(d.path)));
 
     // Chokepoint + destination nodes
