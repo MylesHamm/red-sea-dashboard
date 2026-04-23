@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
 
-<link rel="stylesheet" href="assets/app.css?v=20260423a">
+<link rel="stylesheet" href="assets/app.css?v=20260423b">
 </head>
 <body>
 
@@ -442,12 +442,23 @@
             </div>
             <span class="vt-live"><span class="vt-live-dot"></span>LIVE · AIS</span>
           </div>
+          <div class="vt-filter" data-vt-filter="hormuz"
+               data-base="https://www.marinetraffic.com/en/ais/embed/zoom:9/centery:26.57/centerx:56.25/maptype:4/shownames:false/mmsi:0/shipid:0/fleet:/fleet_id:0/showmenu:false/remember:false/fs:true">
+            <span class="vt-filter-label">VESSEL CLASS</span>
+            <div class="vt-chip-row" role="group" aria-label="Vessel type filter">
+              <button class="vt-chip active" data-vtypes="7">TANKERS</button>
+              <button class="vt-chip" data-vtypes="8">CARGO</button>
+              <button class="vt-chip" data-vtypes="6">PASSENGER</button>
+              <button class="vt-chip" data-vtypes="7|8">TANKER+CARGO</button>
+              <button class="vt-chip" data-vtypes="">ALL</button>
+            </div>
+          </div>
           <div class="vt-frame-wrap" id="vtHormuzWrap">
             <iframe
               class="vt-frame"
               id="vtHormuzFrame"
               title="Live vessel traffic — Strait of Hormuz"
-              src="https://www.marinetraffic.com/en/ais/embed/zoom:9/centery:26.57/centerx:56.25/maptype:4/shownames:false/mmsi:0/shipid:0/fleet:/fleet_id:0/vtypes:/showmenu:false/remember:false/fs:true"
+              src="https://www.marinetraffic.com/en/ais/embed/zoom:9/centery:26.57/centerx:56.25/maptype:4/shownames:false/mmsi:0/shipid:0/fleet:/fleet_id:0/vtypes:7/showmenu:false/remember:false/fs:true"
               referrerpolicy="no-referrer-when-downgrade"
               allow="geolocation"
               loading="lazy"
@@ -472,12 +483,23 @@
             </div>
             <span class="vt-live"><span class="vt-live-dot"></span>LIVE · AIS</span>
           </div>
+          <div class="vt-filter" data-vt-filter="bab"
+               data-base="https://www.marinetraffic.com/en/ais/embed/zoom:8/centery:12.58/centerx:43.33/maptype:4/shownames:false/mmsi:0/shipid:0/fleet:/fleet_id:0/showmenu:false/remember:false/fs:true">
+            <span class="vt-filter-label">VESSEL CLASS</span>
+            <div class="vt-chip-row" role="group" aria-label="Vessel type filter">
+              <button class="vt-chip active" data-vtypes="7">TANKERS</button>
+              <button class="vt-chip" data-vtypes="8">CARGO</button>
+              <button class="vt-chip" data-vtypes="6">PASSENGER</button>
+              <button class="vt-chip" data-vtypes="7|8">TANKER+CARGO</button>
+              <button class="vt-chip" data-vtypes="">ALL</button>
+            </div>
+          </div>
           <div class="vt-frame-wrap" id="vtBabWrap">
             <iframe
               class="vt-frame"
               id="vtBabFrame"
               title="Live vessel traffic — Bab el-Mandeb"
-              src="https://www.marinetraffic.com/en/ais/embed/zoom:8/centery:12.58/centerx:43.33/maptype:4/shownames:false/mmsi:0/shipid:0/fleet:/fleet_id:0/vtypes:/showmenu:false/remember:false/fs:true"
+              src="https://www.marinetraffic.com/en/ais/embed/zoom:8/centery:12.58/centerx:43.33/maptype:4/shownames:false/mmsi:0/shipid:0/fleet:/fleet_id:0/vtypes:7/showmenu:false/remember:false/fs:true"
               referrerpolicy="no-referrer-when-downgrade"
               allow="geolocation"
               loading="lazy"
@@ -764,12 +786,12 @@
 </div>
 
 <!-- Scripts -->
-<script src="assets/api.js?v=20260423a"></script>
-<script src="assets/data.js?v=20260423a"></script>
-<script src="assets/hydrate.js?v=20260423a"></script>
-<script src="assets/globe.js?v=20260423a"></script>
-<script src="assets/tacmap.js?v=20260423a"></script>
-<script src="assets/charts.js?v=20260423a"></script>
-<script src="assets/app.js?v=20260423a"></script>
+<script src="assets/api.js?v=20260423b"></script>
+<script src="assets/data.js?v=20260423b"></script>
+<script src="assets/hydrate.js?v=20260423b"></script>
+<script src="assets/globe.js?v=20260423b"></script>
+<script src="assets/tacmap.js?v=20260423b"></script>
+<script src="assets/charts.js?v=20260423b"></script>
+<script src="assets/app.js?v=20260423b"></script>
 </body>
 </html>

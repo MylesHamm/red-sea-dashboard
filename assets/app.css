@@ -1344,6 +1344,58 @@ button { font-family: inherit; cursor: pointer; }
   box-shadow: 0 0 8px var(--green);
   animation: pulse 1.5s infinite;
 }
+.vt-filter {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 18px 12px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(0,0,0,0.18);
+  flex-wrap: wrap;
+}
+.vt-filter-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--text-mute);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.vt-chip-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.vt-chip {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 1.4px;
+  color: var(--text-mute);
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 5px 9px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.vt-chip:hover {
+  color: var(--cyan);
+  border-color: rgba(0,212,255,0.4);
+}
+.vt-chip.active {
+  color: var(--bg);
+  background: var(--cyan);
+  border-color: var(--cyan);
+}
+.vt-panel[data-cp="hormuz"] .vt-chip.active {
+  background: var(--red);
+  border-color: var(--red);
+}
+.vt-panel[data-cp="bab"] .vt-chip.active {
+  background: var(--orange);
+  border-color: var(--orange);
+}
 .vt-frame-wrap {
   position: relative;
   width: 100%;

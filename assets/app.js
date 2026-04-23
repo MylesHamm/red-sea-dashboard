@@ -452,4 +452,40 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   wireVesselEmbed('vtHormuzFrame', 'vtHormuzWrap');
   wireVesselEmbed('vtBabFrame',    'vtBabWrap');
+
+  // ── Vessel-class filter chips (MarineTraffic vtypes) ──
+  // The MarineTraffic embed accepts a `vtypes:N/` segment in the URL path that
+  // restricts the rendered fleet to specific AIS ship types. Codes used here:
+  //   6 = passenger, 7 = tankers, 8 = cargo. Pipe-separate to combine
+  //   ("vtypes:7|8" → tankers + cargo). Empty string = no filter (all vessels).
+  // We swap the iframe `src` on chip click so the embed reloads with the
+  // selected filter applied.
+  function wireVesselFilters() {
+    const filters = document.querySelectorAll('.vt-filter');
+    filters.forEach(filter => {
+      const base = filter.dataset.base;
+      if (!base) return;
+      const panel = filter.closest('.vt-panel');
+      const frame = panel && panel.querySelector('iframe.vt-frame');
+      if (!frame) return;
+      const chips = filter.querySelectorAll('.vt-chip');
+      chips.forEach(chip => {
+        chip.addEventListener('click', () => {
+          // Toggle active state
+          chips.forEach(c => c.classList.toggle('active', c === chip));
+          const vtypes = chip.dataset.vtypes || '';
+          // Inject `vtypes:X/` segment before `showmenu:false` (or append if
+          // empty filter — i.e. "ALL"). The data-base template intentionally
+          // omits any vtypes segment so we can rebuild it cleanly each time.
+          let nextSrc = base;
+          if (vtypes) {
+            nextSrc = base.replace('/showmenu:false/', `/vtypes:${vtypes}/showmenu:false/`);
+          }
+          // Force reload by replacing src wholesale
+          frame.src = nextSrc;
+        });
+      });
+    });
+  }
+  wireVesselFilters();
 });
