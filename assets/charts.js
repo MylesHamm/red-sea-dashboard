@@ -35,11 +35,17 @@ function applyTimelineRows(rows) {
   return rows.filter(r => r.date && r.date <= c);
 }
 // Destroy any Chart bound to this canvas so re-renders don't error with
-// "Canvas is already in use".
+// "Canvas is already in use". Also strip any prior .chart-empty overlay so
+// a successful re-render isn't obscured by a stale "unavailable" message.
 function destroyChartOn(canvas) {
-  if (!canvas || typeof Chart === 'undefined' || !Chart.getChart) return;
-  const prior = Chart.getChart(canvas);
-  if (prior) prior.destroy();
+  if (!canvas) return;
+  if (typeof Chart !== 'undefined' && Chart.getChart) {
+    const prior = Chart.getChart(canvas);
+    if (prior) prior.destroy();
+  }
+  const parent = canvas.parentElement;
+  const overlay = parent && parent.querySelector('.chart-empty');
+  if (overlay) overlay.remove();
 }
 
 function showChartEmpty(canvas, msg) {
@@ -336,14 +342,22 @@ function updateIncidentsKpi() {
 // ── Timeline-driven re-render of every chart that consumes timeseries or
 // dated events. Each render function destroys its prior Chart instance,
 // applies the cutoff, and rebuilds. Coalesce repeated scrubbing into one
-// re-render per animation frame so dragging stays smooth.
+// re-render per animation frame so dragging stays smooth. Suppressed until
+// after the initial hydrated render has populated window.CP.state — the
+// initial 'timeline-set' fires before hydration, and re-rendering with an
+// empty state would paint "data unavailable" overlays that stick.
 (function wireTimelineRerender() {
   if (window.__tlRerenderWired) return;
   window.__tlRerenderWired = true;
   let pending = false;
+  function isStateReady() {
+    const s = window.CP && window.CP.state;
+    return !!(s && (s.master || (s.brent && s.brent.length)));
+  }
   function flush() {
     pending = false;
-    const state = (window.CP && window.CP.state) || {};
+    if (!isStateReady()) return; // skip — initial paint will pick up the timeline anyway
+    const state = window.CP.state;
     try { renderPriceVsAttacks(state); } catch (e) {}
     try { renderVolatilityChart(state); } catch (e) {}
     try { renderEventTypesChart(state); } catch (e) {}
