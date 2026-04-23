@@ -232,7 +232,13 @@ _MARITIME_KEYWORDS = [
 
 
 def _paginated_acled_fetch(token: str, params: dict, label: str, max_pages: int = 10) -> List[dict]:
-    """Fetch paginated ACLED results."""
+    """Fetch paginated ACLED results.
+
+    Timeout: 30s. ACLED's multi-year paginated queries (limit=5000) routinely
+    take 5-15s per page, and Render's free-tier egress is slower than a dev
+    laptop, so a 10s timeout silently fell through to the frozen fallback on
+    every live fetch. 30s leaves headroom without pinning threads indefinitely.
+    """
     results = []
     for page in range(1, max_pages + 1):
         p = {**params, "page": page}
@@ -240,7 +246,7 @@ def _paginated_acled_fetch(token: str, params: dict, label: str, max_pages: int 
             config.ACLED_DATA_URL,
             headers={**_BROWSER_HEADERS, "Authorization": f"Bearer {token}"},
             params=p,
-            timeout=10,
+            timeout=30,
         )
         resp.raise_for_status()
         batch = resp.json().get("data", [])
@@ -1009,7 +1015,7 @@ def fetch_iran_events() -> List[dict]:
                     params={"_format": "json", "country": "Iran",
                             "event_date": "2025-01-01|2026-12-31", "event_date_where": "BETWEEN",
                             "fields": iran_fields, "limit": 5000, "page": page},
-                    timeout=10,
+                    timeout=30,
                 )
                 resp.raise_for_status()
                 batch = resp.json().get("data", [])
@@ -1029,7 +1035,7 @@ def fetch_iran_events() -> List[dict]:
                         "actor2": actor2, "actor2_where": "LIKE",
                         "event_date": "2025-01-01|2026-12-31", "event_date_where": "BETWEEN",
                         "fields": iran_fields, "limit": 5000},
-                timeout=10,
+                timeout=30,
             )
             resp.raise_for_status()
             bilateral = resp.json().get("data", [])
