@@ -142,6 +142,9 @@ _acled_token = None
 _acled_token_expires = 0
 _acled_token_lock = threading.Lock()
 _iran_fetch_error = None  # Store last error for debugging
+_acled_fetch_error = None  # Store last ACLED (main) fetch error for debugging
+_acled_fetch_source = None  # 'api' | 'cache' | 'fallback' | None
+_acled_fetch_ts = 0.0
 
 
 def _get_acled_token() -> str:
@@ -274,6 +277,7 @@ def fetch_acled_events() -> List[dict]:
     512MB free tier two concurrent parses are enough to OOM the worker).
     """
     global _acled_events_memo, _acled_events_memo_ts
+    global _acled_fetch_error, _acled_fetch_source, _acled_fetch_ts
     # Fast path: serve from in-process memo (re-check after acquiring the lock
     # in case another thread populated it while we were waiting).
     if _acled_events_memo is not None and time.time() - _acled_events_memo_ts < 600:
@@ -284,6 +288,9 @@ def fetch_acled_events() -> List[dict]:
         with _acled_events_memo_lock:
             _acled_events_memo = cached
             _acled_events_memo_ts = time.time()
+        _acled_fetch_source = "cache"
+        _acled_fetch_ts = time.time()
+        _acled_fetch_error = None
         logger.info("ACLED: serving from cache")
         return cached
 
@@ -354,11 +361,18 @@ def fetch_acled_events() -> List[dict]:
             with _acled_events_memo_lock:
                 _acled_events_memo = all_events
                 _acled_events_memo_ts = time.time()
+            _acled_fetch_source = "api"
+            _acled_fetch_ts = time.time()
+            _acled_fetch_error = None
             logger.info(f"ACLED: total {len(all_events)} unique events fetched and cached")
             return all_events
+        else:
+            _acled_fetch_error = "ACLED API returned 0 events for every query"
+            logger.warning(_acled_fetch_error)
 
     except Exception as e:
-        logger.warning(f"ACLED API failed: {e}")
+        _acled_fetch_error = f"{type(e).__name__}: {e}"
+        logger.warning(f"ACLED API failed: {_acled_fetch_error}")
 
     fallback = _load_acled_fallback()
     # Memoize the fallback too — it's the same 13MB blob
@@ -366,7 +380,23 @@ def fetch_acled_events() -> List[dict]:
         with _acled_events_memo_lock:
             _acled_events_memo = fallback
             _acled_events_memo_ts = time.time()
+        _acled_fetch_source = "fallback"
+        _acled_fetch_ts = time.time()
     return fallback
+
+
+def get_acled_fetch_error() -> Optional[str]:
+    return _acled_fetch_error
+
+
+def get_acled_fetch_meta() -> dict:
+    """Diagnostic metadata about the most recent ACLED fetch."""
+    return {
+        "source": _acled_fetch_source,
+        "ts": _acled_fetch_ts,
+        "error": _acled_fetch_error,
+        "credentials_configured": bool(config.ACLED_USERNAME and config.ACLED_PASSWORD),
+    }
 
 
 def _load_acled_fallback() -> List[dict]:

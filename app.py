@@ -50,6 +50,45 @@ async def health_check():
     return {"status": "ok"}
 
 
+@app.get("/api/diag")
+async def diagnostic():
+    """Diagnostic snapshot: data freshness + last fetch errors.
+
+    Safe to expose publicly — does not leak credentials, only boolean flags.
+    Use to verify Render env vars are set and surface silent ACLED failures.
+    """
+    from datetime import datetime, timezone
+
+    def _date_range(events, key):
+        dates = sorted(e.get(key, "") for e in events if e.get(key))
+        return {"count": len(events), "min": dates[0] if dates else None, "max": dates[-1] if dates else None}
+
+    acled_meta = data_service.get_acled_fetch_meta()
+    # Read memos only — never trigger a fetch here.
+    acled_events = data_service._acled_events_memo or []
+    iran_events = data_service._iran_fallback_memo or []
+
+    def _iso(ts):
+        if not ts:
+            return None
+        return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+
+    return {
+        "server_time_utc": datetime.now(timezone.utc).isoformat(),
+        "acled": {
+            "credentials_configured": acled_meta["credentials_configured"],
+            "last_fetch_source": acled_meta["source"],
+            "last_fetch_utc": _iso(acled_meta["ts"]),
+            "last_fetch_error": acled_meta["error"],
+            **_date_range(acled_events, "event_date"),
+        },
+        "iran_events": {
+            "last_fetch_error": data_service.get_iran_fetch_error(),
+            **_date_range(iran_events, "event_date"),
+        },
+    }
+
+
 @app.get("/api/master")
 async def get_master_data():
     """Full master dataset: timeseries, KPIs, price windows, correlation."""
