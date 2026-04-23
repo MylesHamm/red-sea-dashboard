@@ -79,9 +79,29 @@
     return 2 * R * Math.asin(Math.sqrt(a));
   }
 
+  // The ACLED fallback dataset is frozen at the thesis observation window
+  // (ends early 2025). Anchoring "last 30 days" to wall-clock `Date.now()`
+  // collapses the KPI to 0 once real time passes the dataset's end. Instead,
+  // anchor to the most recent event date in the dataset so the window means
+  // "last 30 days of observation". If the data is later refreshed past the
+  // current date, this naturally tracks real time again.
+  function dataNowTs(events) {
+    if (!Array.isArray(events) || !events.length) return Date.now();
+    let max = 0;
+    for (const e of events) {
+      const d = e.event_date || e.date;
+      if (!d) continue;
+      const t = Date.parse(d);
+      if (!isNaN(t) && t > max) max = t;
+    }
+    // If the dataset extends past "now" (hypothetical) stay on real-time.
+    return max ? Math.min(max, Date.now()) : Date.now();
+  }
+
   function countRecentIncidents(events, cp, km = 300, days = 30) {
     if (!Array.isArray(events)) return 0;
-    const cutoff = Date.now() - days * 86400000;
+    const anchor = dataNowTs(events);
+    const cutoff = anchor - days * 86400000;
     let n = 0;
     for (const e of events) {
       const lat = +e.latitude, lon = +e.longitude;
@@ -89,11 +109,14 @@
       const d = e.event_date || e.date;
       if (!d) continue;
       const t = Date.parse(d);
-      if (isNaN(t) || t < cutoff) continue;
+      if (isNaN(t) || t < cutoff || t > anchor) continue;
       if (haversineKm(lat, lon, cp.lat, cp.lon) <= km) n++;
     }
     return n;
   }
+
+  // Expose for charts.js so its scrubber-aware KPI uses the same anchor.
+  window.__dataNowTs = dataNowTs;
 
   function hydrateChokepoint(key, transitData, events, flowMbd) {
     const cp = window.CHOKEPOINTS[key];
@@ -447,12 +470,15 @@
   function hydrateIranEvents(iranResp) {
     const curated = (iranResp && Array.isArray(iranResp.curated)) ? iranResp.curated : [];
     // Normalize to shape used by charts.js
+    // Note: the backend's curated events don't carry brent_price — the chart
+    // looks up the nearest Brent trading-day price at render time. So we only
+    // require a valid date here, not a pre-joined price.
     window.IRAN_EVENTS = curated.map(e => ({
       date:  e.date,
       type:  (e.type || e.category || 'diplomatic').toLowerCase(),
       label: e.label || e.title || e.name || '',
       price: e.brent_price != null ? +e.brent_price : null,
-    })).filter(e => e.date && e.price != null).sort((a, b) => a.date.localeCompare(b.date));
+    })).filter(e => e.date).sort((a, b) => a.date.localeCompare(b.date));
   }
 
   // ── Tactical-side stats (Geospatial tab) — count events by region.

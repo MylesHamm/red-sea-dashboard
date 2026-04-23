@@ -374,7 +374,13 @@ function updateIncidentsKpi() {
   // Compute current 30-day count and prior 30-day count for the delta display.
   // Even when scrubber is at "now" we want the delta vs the prior 30 days, so
   // count from events directly rather than deferring to the chokepoint sum.
-  const endTs = tlTs || Date.now();
+  // When no scrubber cut is active, anchor the window to the dataset's most
+  // recent event (the ACLED fallback is frozen post-thesis, so `Date.now()`
+  // would collapse the 30-day window to 0 events).
+  const anchorNow = (typeof window.__dataNowTs === 'function')
+    ? window.__dataNowTs(events)
+    : Date.now();
+  const endTs = tlTs || anchorNow;
   const startTs = endTs - 30 * 24 * 3600 * 1000;
   const priorEnd = startTs;
   const priorStart = priorEnd - 30 * 24 * 3600 * 1000;
@@ -406,6 +412,18 @@ function updateIncidentsKpi() {
     deltaEl.textContent = `${sign}${Math.abs(d)} vs prior 30D`;
     deltaEl.classList.toggle('up-alert', d > 0);
     deltaEl.classList.toggle('down', d < 0);
+  }
+
+  // Foot: make the anchor date explicit so a frozen fallback dataset doesn't
+  // look like a live feed gone silent. Only overwrite once we actually have
+  // events and we're anchored to the dataset (not a live real-time window).
+  const footEl = document.querySelector('[data-kpi-foot="incidents30"]');
+  if (footEl && events.length) {
+    const anchorDate = new Date(endTs);
+    const y = anchorDate.getUTCFullYear();
+    const m = String(anchorDate.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(anchorDate.getUTCDate()).padStart(2, '0');
+    footEl.textContent = `ACLED · 30D ending ${y}-${m}-${d}`;
   }
 }
 
@@ -671,6 +689,26 @@ function renderIranTimeline(state) {
   const labels = filtered.map(r => r.date);
   const prices = filtered.map(r => r.price);
 
+  // Build a sorted Brent date→price map so we can join each curated event to
+  // the nearest trading-day price (events may fall on weekends/holidays, or
+  // the backend's curated list may omit brent_price entirely — both cases
+  // used to make markers silently disappear).
+  const brentByDate = new Map();
+  for (const r of filtered) brentByDate.set(r.date, +r.price);
+  const brentDates = labels; // already sorted ascending
+  function nearestBrent(dateStr) {
+    if (brentByDate.has(dateStr)) return { date: dateStr, price: brentByDate.get(dateStr) };
+    // Binary search for the most recent trading day on or before the event.
+    let lo = 0, hi = brentDates.length - 1, best = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (brentDates[mid] <= dateStr) { best = mid; lo = mid + 1; } else { hi = mid - 1; }
+    }
+    if (best === -1) return null;  // event precedes Brent window
+    const d = brentDates[best];
+    return { date: d, price: brentByDate.get(d) };
+  }
+
   const eventColor = t =>
     t === 'military'    ? C_RED :
     t === 'nuclear'     ? C_PURPLE :
@@ -683,11 +721,20 @@ function renderIranTimeline(state) {
   const xf = xfActiveType();
   showXfBanner(canvas, xf);
   const eventDatasets = events.map(e => {
+    // Prefer the event's own price if the backend supplied one; otherwise
+    // snap to the nearest Brent trading day in the chart's window.
+    let x = e.date, y = (e.price != null ? +e.price : null);
+    if (y == null || !brentByDate.has(e.date)) {
+      const row = nearestBrent(e.date);
+      if (!row) return null;          // event before Brent window — skip
+      x = row.date;                   // snap to an existing category label
+      if (y == null) y = row.price;
+    }
     const match = xfMatchesIranType(xf, e.type);
     return {
       label: e.label,
       type: 'scatter',
-      data: [{ x: e.date, y: +e.price }],
+      data: [{ x, y }],
       backgroundColor: match ? eventColor(e.type) : (eventColor(e.type) + '30'),
       borderColor: match ? '#fff' : 'rgba(255,255,255,0.2)',
       borderWidth: 1.5,
@@ -696,7 +743,7 @@ function renderIranTimeline(state) {
       pointStyle: 'circle',
       order: 0
     };
-  });
+  }).filter(Boolean);
 
   new Chart(canvas, {
     type: 'line',
@@ -732,12 +779,15 @@ function renderIranTimeline(state) {
         x: {
           ticks: {
             color: '#556475', maxTicksLimit: 8,
+            // Parse the ISO label directly — `new Date('2025-10-01')` parses
+            // as UTC midnight and local TZ shifts to the prior day/month, so
+            // the first tick rendered as "Sep 25" instead of "Oct 25".
             callback: function (v) {
               const lbl = this.getLabelForValue(v);
-              const d = new Date(lbl);
-              if (isNaN(d)) return lbl;
+              const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(lbl));
+              if (!m) return lbl;
               const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-              return `${months[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`;
+              return `${months[parseInt(m[2], 10) - 1]} ${parseInt(m[3], 10)}`;
             }
           },
           grid: { color: 'rgba(0,212,255,0.05)' }
