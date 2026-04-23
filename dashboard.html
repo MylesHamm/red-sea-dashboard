@@ -426,6 +426,77 @@
       </div>
     </section>
 
+    <!-- ─── LIVE VESSEL TRAFFIC · AIS ─── -->
+    <section class="vessel-traffic">
+      <div class="vt-intro">
+        <span class="vt-eyebrow">§ 02.2 · LIVE VESSEL TRAFFIC</span>
+        <span class="vt-caption">Real-time AIS positions · MarineTraffic feed · updated every ~60s</span>
+      </div>
+      <div class="vt-grid">
+
+        <div class="vt-panel" data-cp="hormuz">
+          <div class="vt-head">
+            <div class="vt-title-group">
+              <span class="vt-code">HORMUZ-AIS</span>
+              <span class="vt-name">Strait of Hormuz</span>
+            </div>
+            <span class="vt-live"><span class="vt-live-dot"></span>LIVE · AIS</span>
+          </div>
+          <div class="vt-frame-wrap" id="vtHormuzWrap">
+            <iframe
+              class="vt-frame"
+              id="vtHormuzFrame"
+              title="Live vessel traffic — Strait of Hormuz"
+              src="https://www.marinetraffic.com/en/ais/embed/zoom:9/centery:26.57/centerx:56.25/maptype:4/shownames:false/mmsi:0/shipid:0/fleet:/fleet_id:0/vtypes:/showmenu:false/remember:false/fs:true"
+              referrerpolicy="no-referrer-when-downgrade"
+              allow="geolocation"
+              loading="lazy"
+              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+            ></iframe>
+            <div class="vt-frame-fallback">
+              <div>AIS EMBED BLOCKED BY BROWSER</div>
+              <a class="vt-foot-link" href="https://www.marinetraffic.com/en/ais/home/centerx:56.25/centery:26.57/zoom:9" target="_blank" rel="noopener">OPEN IN MARINETRAFFIC ↗</a>
+            </div>
+          </div>
+          <div class="vt-foot">
+            <span class="vt-foot-meta"><b>26.57°N · 56.25°E</b> · 21-mile narrowest point</span>
+            <a class="vt-foot-link" href="https://www.marinetraffic.com/en/ais/home/centerx:56.25/centery:26.57/zoom:9" target="_blank" rel="noopener">FULLSCREEN ↗</a>
+          </div>
+        </div>
+
+        <div class="vt-panel" data-cp="bab">
+          <div class="vt-head">
+            <div class="vt-title-group">
+              <span class="vt-code">BAB-AIS</span>
+              <span class="vt-name">Bab el-Mandeb</span>
+            </div>
+            <span class="vt-live"><span class="vt-live-dot"></span>LIVE · AIS</span>
+          </div>
+          <div class="vt-frame-wrap" id="vtBabWrap">
+            <iframe
+              class="vt-frame"
+              id="vtBabFrame"
+              title="Live vessel traffic — Bab el-Mandeb"
+              src="https://www.marinetraffic.com/en/ais/embed/zoom:8/centery:12.58/centerx:43.33/maptype:4/shownames:false/mmsi:0/shipid:0/fleet:/fleet_id:0/vtypes:/showmenu:false/remember:false/fs:true"
+              referrerpolicy="no-referrer-when-downgrade"
+              allow="geolocation"
+              loading="lazy"
+              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+            ></iframe>
+            <div class="vt-frame-fallback">
+              <div>AIS EMBED BLOCKED BY BROWSER</div>
+              <a class="vt-foot-link" href="https://www.marinetraffic.com/en/ais/home/centerx:43.33/centery:12.58/zoom:8" target="_blank" rel="noopener">OPEN IN MARINETRAFFIC ↗</a>
+            </div>
+          </div>
+          <div class="vt-foot">
+            <span class="vt-foot-meta"><b>12.58°N · 43.33°E</b> · 18-mile strait · Yemen/Djibouti</span>
+            <a class="vt-foot-link" href="https://www.marinetraffic.com/en/ais/home/centerx:43.33/centery:12.58/zoom:8" target="_blank" rel="noopener">FULLSCREEN ↗</a>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
   </div>
 </main>
 

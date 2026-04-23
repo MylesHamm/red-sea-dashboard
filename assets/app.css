@@ -1260,6 +1260,153 @@ button { font-family: inherit; cursor: pointer; }
 }
 .cp-meta b { color: var(--text); font-weight: 700; margin-right: 4px; }
 
+/* ═══ LIVE VESSEL TRAFFIC · AIS EMBED ═══ */
+.vessel-traffic {
+  margin-bottom: 28px;
+}
+.vt-intro {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 14px;
+  padding: 0 2px;
+}
+.vt-intro .vt-eyebrow {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 2.5px;
+  color: var(--cyan);
+  font-weight: 600;
+}
+.vt-intro .vt-caption {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-mute);
+  letter-spacing: 1px;
+}
+.vt-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.vt-panel {
+  background: linear-gradient(165deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--cyan);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.vt-panel[data-cp="hormuz"] { border-top-color: var(--red); }
+.vt-panel[data-cp="bab"]    { border-top-color: var(--orange); }
+.vt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--line);
+  gap: 12px;
+}
+.vt-title-group { display: flex; flex-direction: column; gap: 2px; }
+.vt-code {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--text-mute);
+  font-weight: 600;
+}
+.vt-name {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  color: var(--text);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.vt-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--green);
+  font-weight: 700;
+  padding: 4px 8px;
+  border: 1px solid rgba(0,230,144,0.3);
+  border-radius: 3px;
+  background: rgba(0,230,144,0.08);
+}
+.vt-live-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: pulse 1.5s infinite;
+}
+.vt-frame-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #050a12;
+  overflow: hidden;
+}
+.vt-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  /* Nudge the embed toward the dashboard palette: slight cyan cast,
+     crush blacks so it blends with our surface. No cyan cast for Hormuz
+     since the red border already contextualizes it. */
+  filter: contrast(1.05) saturate(0.85) brightness(0.95);
+}
+.vt-frame-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+  color: var(--text-mute);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.vt-frame-wrap.embed-blocked .vt-frame-fallback { opacity: 1; pointer-events: auto; }
+.vt-frame-wrap.embed-blocked .vt-frame { opacity: 0.1; }
+.vt-foot {
+  padding: 10px 18px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+}
+.vt-foot-meta { color: var(--text-mute); }
+.vt-foot-meta b { color: var(--text-dim); font-weight: 600; }
+.vt-foot-link {
+  color: var(--cyan);
+  text-decoration: none;
+  border: 1px solid var(--line-2);
+  padding: 4px 10px;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+.vt-foot-link:hover {
+  background: var(--cyan-dim);
+  border-color: var(--line-3);
+}
+
 /* ═══ HYPOTHESIS CARDS ═══ */
 
 .hypothesis-row {
@@ -1667,6 +1814,7 @@ button { font-family: inherit; cursor: pointer; }
   .kpi-hero { grid-column: span 2; grid-row: auto; }
   .kpi-primary { grid-row: auto; }
   .chokepoint-cards { grid-template-columns: 1fr; }
+  .vt-grid { grid-template-columns: 1fr; }
   .hypothesis-row { grid-template-columns: 1fr; }
   .scenarios-grid { grid-template-columns: 1fr; }
   .narrative-row.two-col { grid-template-columns: 1fr; }

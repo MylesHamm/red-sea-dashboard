@@ -424,4 +424,32 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   updateClock();
   setInterval(updateClock, 30000);
+
+  // ── Live vessel traffic (AIS embeds) ──
+  // MarineTraffic's free embed sometimes gets blocked by strict CSP /
+  // X-Frame-Options on corporate networks. We can't read the inner document
+  // cross-origin, but we CAN time-out: if `load` hasn't fired within a
+  // window the frame is almost certainly blocked, so reveal the fallback.
+  // When it does load, we keep the fallback hidden.
+  function wireVesselEmbed(frameId, wrapId) {
+    const frame = document.getElementById(frameId);
+    const wrap  = document.getElementById(wrapId);
+    if (!frame || !wrap) return;
+    let loaded = false;
+    frame.addEventListener('load', () => {
+      loaded = true;
+      wrap.classList.remove('embed-blocked');
+    });
+    frame.addEventListener('error', () => {
+      wrap.classList.add('embed-blocked');
+    });
+    // Safety net: if no load event after 8s, assume the embed was blocked
+    // (e.g. `frame-ancestors` CSP, corporate proxy). Don't mark earlier —
+    // MarineTraffic's embed can take a few seconds to paint on slow links.
+    setTimeout(() => {
+      if (!loaded) wrap.classList.add('embed-blocked');
+    }, 8000);
+  }
+  wireVesselEmbed('vtHormuzFrame', 'vtHormuzWrap');
+  wireVesselEmbed('vtBabFrame',    'vtBabWrap');
 });
