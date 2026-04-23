@@ -36,14 +36,21 @@
   }
 
   // ── Connection indicator ──────────────────────────────────────────────────
-  function setConnectionStatus(ok, label) {
+  // severity: 'live' (default when ok), 'warn' (some sources stale), 'err'.
+  // Three tiers so DEGRADED looks different from full OFFLINE.
+  function setConnectionStatus(ok, label, severity) {
     const dot = document.querySelector('.status-dot');
     const txt = document.querySelector('.status-text');
+    const sev = severity || (ok ? 'live' : 'err');
     if (dot) {
-      dot.classList.toggle('live', !!ok);
-      dot.classList.toggle('err', !ok);
+      dot.classList.remove('live', 'warn', 'err');
+      dot.classList.add(sev);
     }
-    if (txt) txt.textContent = label || (ok ? 'LIVE · ACLED + EIA' : 'OFFLINE · using cache');
+    if (txt) {
+      txt.classList.remove('warn', 'err');
+      if (sev !== 'live') txt.classList.add(sev);
+      txt.textContent = label || (ok ? 'LIVE · ACLED + EIA' : 'OFFLINE · using cache');
+    }
   }
 
   // ── CHOKEPOINT STATUS FROM LIVE TRANSITS + EVENTS ─────────────────────────
@@ -138,6 +145,36 @@
     }
   }
 
+  // ── Threat-strip pills (header) — re-classify text + color from CHOKEPOINTS ──
+  // The static markup says CRITICAL/HIGH/DEGRADED/NOMINAL but the real threat
+  // is computed from transit decline. Sync the pill text + class so the strip
+  // doesn't lie when the backend reclassifies.
+  const PILL_CLASS = {
+    critical: 'threat-pill threat-critical',
+    high:     'threat-pill threat-high',
+    elevated: 'threat-pill threat-elevated',
+    safe:     'threat-pill threat-safe',
+    flow:     'threat-pill threat-safe',
+    pending:  'threat-pill',
+  };
+  const PILL_LABEL = {
+    critical: 'CRITICAL', high: 'HIGH', elevated: 'DEGRADED',
+    safe: 'NOMINAL', flow: 'NOMINAL', pending: '—',
+  };
+  function hydrateThreatPills() {
+    const pills = document.querySelectorAll('.threat-pill[data-cp]');
+    pills.forEach(el => {
+      const key = el.getAttribute('data-cp');
+      const cp = key && window.CHOKEPOINTS && window.CHOKEPOINTS[key];
+      if (!cp) return;
+      const t = cp.threat || 'pending';
+      // Preserve original display name (everything before the · separator)
+      const orig = el.textContent.split('·')[0].trim() || (cp.name || key.toUpperCase());
+      el.className = PILL_CLASS[t] || PILL_CLASS.pending;
+      el.textContent = `${orig} · ${PILL_LABEL[t] || t.toUpperCase()}`;
+    });
+  }
+
   // ── Build ATTACKS heatmap points for the globe ────────────────────────────
   function buildAttackHotspots(events) {
     if (!Array.isArray(events) || !events.length) return [];
@@ -186,15 +223,15 @@
       }
     }
 
-    // 30-day range foot row
+    // 30-day range foot row + war-onset % (also surfaced in threat-strip below)
+    let warPct = null;
     const foot = document.querySelector('.kpi-hero-foot');
-    if (foot && Array.isArray(brent) && brent.length) {
+    if (Array.isArray(brent) && brent.length) {
       const last30 = brent.slice(-30).map(r => r.price).filter(v => v != null);
-      if (last30.length) {
+      const warStart = brent.find(r => r.date >= '2026-02-28');
+      warPct = (warStart && latest != null) ? ((latest - warStart.price) / warStart.price * 100) : null;
+      if (foot && last30.length) {
         const lo = Math.min(...last30), hi = Math.max(...last30);
-        // Since war onset (Feb 28 2026) — find first price on or after
-        const warStart = brent.find(r => r.date >= '2026-02-28');
-        const warPct = (warStart && latest != null) ? ((latest - warStart.price) / warStart.price * 100) : null;
         foot.innerHTML = `
           <span>30D RANGE <b>$${lo.toFixed(2)} — $${hi.toFixed(2)}</b></span>
           <span>SINCE WAR ONSET <b class="${warPct>=0?'up':'down'}">${warPct!=null?(warPct>=0?'+':'')+warPct.toFixed(1)+'%':'—'}</b></span>`;
@@ -204,6 +241,45 @@
     // Header threat-bar KPIs
     setText('threatBrent', latest != null ? '$' + latest.toFixed(2) : '—');
     setText('threatOvx',   kpis.latest_ovx != null ? kpis.latest_ovx.toFixed(1) : '—');
+
+    // Threat-strip Brent delta (24h $-change) and OVX delta (vs prior session)
+    const brentDeltaEl = $('threatBrentDelta');
+    if (brentDeltaEl) {
+      if (pct24 == null) {
+        brentDeltaEl.textContent = '—';
+        brentDeltaEl.className = '';
+      } else {
+        const arrow = pct24 > 0 ? '▲' : pct24 < 0 ? '▼' : '•';
+        const sign  = pct24 > 0 ? '+' : '';
+        brentDeltaEl.textContent = `${arrow} ${sign}${pct24.toFixed(1)}%`;
+        brentDeltaEl.className = pct24 >= 0 ? 'delta-up' : 'delta-down';
+      }
+    }
+    const ovxDeltaEl = $('threatOvxDelta');
+    if (ovxDeltaEl) {
+      // Prior OVX from master.timeseries if present (we don't fetch /api/ovx separately here)
+      const ts = (master && master.timeseries) || [];
+      let prevOvx = null;
+      for (let i = ts.length - 2; i >= 0; i--) {
+        if (ts[i].ovx != null) { prevOvx = ts[i].ovx; break; }
+      }
+      const cur = kpis.latest_ovx;
+      if (cur != null && prevOvx != null) {
+        const d = cur - prevOvx;
+        const arrow = d > 0 ? '▲' : d < 0 ? '▼' : '•';
+        const sign = d > 0 ? '+' : '';
+        ovxDeltaEl.textContent = `${arrow} ${sign}${d.toFixed(1)}`;
+        ovxDeltaEl.className = d >= 0 ? 'delta-up' : 'delta-down';
+      } else {
+        ovxDeltaEl.textContent = '—';
+        ovxDeltaEl.className = '';
+      }
+    }
+    // WAR PREM = % vs Feb-28-2026 onset (defined above)
+    const warPremEl = $('threatWarPrem');
+    if (warPremEl) {
+      warPremEl.textContent = warPct == null ? '—' : (warPct >= 0 ? '+' : '') + warPct.toFixed(1) + '%';
+    }
 
     // Sparkline path
     const sparkLine = $('sparkLine'), sparkPath = $('sparkPath');
@@ -232,24 +308,21 @@
     const kpis = (master && master.kpis) || {};
 
     // OVX
-    const ovxEl = document.querySelector('.kpi-sec:nth-of-type(1) .kpi-sec-value') ||
-                  document.querySelector('[data-kpi="ovx"]');
+    const ovxEl = document.querySelector('[data-kpi="ovx"]');
     if (ovxEl && kpis.latest_ovx != null) {
       const arrow = kpis.latest_ovx > 40 ? '<span class="up">▲</span>' : '<span class="down">▼</span>';
       ovxEl.innerHTML = `${kpis.latest_ovx.toFixed(1)} ${arrow}`;
     }
 
     // DXY
-    const dxyEl = document.querySelector('.kpi-sec:nth-of-type(2) .kpi-sec-value') ||
-                  document.querySelector('[data-kpi="dxy"]');
+    const dxyEl = document.querySelector('[data-kpi="dxy"]');
     if (dxyEl && kpis.latest_dxy != null) {
       const arrow = kpis.latest_dxy > 100 ? '<span class="up">▲</span>' : '<span class="down">▼</span>';
       dxyEl.innerHTML = `${kpis.latest_dxy.toFixed(1)} ${arrow}`;
     }
 
     // Suez throughput % change vs pre-war
-    const suezEl = document.querySelector('.kpi-sec:nth-of-type(3) .kpi-sec-value') ||
-                   document.querySelector('[data-kpi="suez"]');
+    const suezEl = document.querySelector('[data-kpi="suez"]');
     if (suezEl && Array.isArray(suezTransits) && suezTransits.length >= 3) {
       const sorted = suezTransits.slice().sort((a, b) => a.month.localeCompare(b.month));
       const pre = sorted.filter(m => m.month < '2023-11');
@@ -267,7 +340,8 @@
     }
 
     // Flow at risk: aggregate of Hormuz + Bab el-Mandeb in mbd (fixed geophysical estimate)
-    const flowEl = document.querySelector('.kpi-primary-warn .kpi-value');
+    const flowEl = document.querySelector('[data-kpi="flowAtRisk"]') ||
+                   document.querySelector('.kpi-primary-warn .kpi-value');
     if (flowEl && window.CHOKEPOINTS.hormuz.flowMbd != null && window.CHOKEPOINTS.bab.flowMbd != null) {
       const total = window.CHOKEPOINTS.hormuz.flowMbd + window.CHOKEPOINTS.bab.flowMbd;
       flowEl.innerHTML = `${total.toFixed(1)} <span class="kpi-unit">mbd</span>`;
@@ -275,11 +349,13 @@
       if (foot) foot.textContent = `Hormuz ${window.CHOKEPOINTS.hormuz.flowMbd.toFixed(1)} + Bab el-Mandeb ${window.CHOKEPOINTS.bab.flowMbd.toFixed(1)}`;
     }
 
-    // Incidents KPI row (count of maritime events in last 30d)
+    // Incidents KPI row (count of maritime events in last 30d). Guard against
+    // null sums when CHOKEPOINTS aren't yet hydrated (NaN would render as text).
     const incidentEl = document.querySelector('[data-kpi="incidents30"]');
     if (incidentEl) {
-      const n = window.CHOKEPOINTS.hormuz.incidents30d + window.CHOKEPOINTS.bab.incidents30d;
-      incidentEl.textContent = String(n);
+      const h = (window.CHOKEPOINTS.hormuz && window.CHOKEPOINTS.hormuz.incidents30d) || 0;
+      const b = (window.CHOKEPOINTS.bab    && window.CHOKEPOINTS.bab.incidents30d)    || 0;
+      incidentEl.textContent = String(h + b);
     }
   }
 
@@ -294,14 +370,47 @@
     // Apply temporal scrubber: drop items published after the scrubbed date.
     const tl = window.CP && window.CP.timeline;
     const cutoffMs = (tl && !tl.atNow) ? tl.ts : null;
-    const filtered = cutoffMs
+    const tlFiltered = cutoffMs
       ? raw.filter(n => {
           if (!n.published_at) return true;
           const t = Date.parse(n.published_at);
           return isNaN(t) || t <= cutoffMs;
         })
       : raw;
+    // Apply cross-filter: keep items whose category fuzzy-matches the active
+    // ACLED filter. If that wipes out the list (no overlap in taxonomies),
+    // fall back to the time-filtered set so the panel never goes blank.
+    const xf = (window.CP && window.CP.filters && window.CP.filters.eventType) || null;
+    let filtered = tlFiltered;
+    let xfBanner = null;
+    if (xf && typeof window.xfMatchesNewsCat === 'function') {
+      const m = tlFiltered.filter(n => window.xfMatchesNewsCat(xf, (n.category || n.type || '')));
+      if (m.length) {
+        filtered = m;
+        xfBanner = `FILTER: ${xf.toUpperCase()}`;
+      } else {
+        xfBanner = `FILTER: ${xf.toUpperCase()} · NO MATCH`;
+      }
+    }
     const items = filtered.slice(0, 10);
+
+    // Floating filter pill above the feed
+    const wrap = feed.parentElement;
+    if (wrap) {
+      if (getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
+      let pill = wrap.querySelector('.xf-banner-feed');
+      if (!xfBanner && pill) pill.remove();
+      if (xfBanner) {
+        if (!pill) {
+          pill = document.createElement('div');
+          pill.className = 'xf-banner-feed';
+          pill.style.cssText = 'position:absolute;top:6px;right:8px;padding:3px 7px;font:9px "JetBrains Mono",monospace;letter-spacing:1.5px;border-radius:3px;background:rgba(0,212,255,0.15);color:#dfe7f0;border:1px solid rgba(0,212,255,0.45);z-index:5;pointer-events:none';
+          wrap.appendChild(pill);
+        }
+        pill.textContent = xfBanner;
+      }
+    }
+
     if (!items.length) {
       feed.innerHTML = '<div class="feed-empty">No news in this window.</div>';
       window.FEED = [];
@@ -321,10 +430,15 @@
     }).join('');
     window.FEED = items;
   }
-  // Re-render the feed when the temporal scrubber moves.
+  // Re-render the feed when the temporal scrubber moves OR the cross-filter
+  // toggles. Both events should re-run hydrateFeed against the cached raw
+  // payload so we never re-fetch.
   if (typeof window !== 'undefined' && !window.__feedTlWired) {
     window.__feedTlWired = true;
     window.addEventListener('timeline-set', () => {
+      if (window.__feedRaw) hydrateFeed(window.__feedRaw);
+    });
+    window.addEventListener('cross-filter-changed', () => {
       if (window.__feedRaw) hydrateFeed(window.__feedRaw);
     });
   }
@@ -339,6 +453,89 @@
       label: e.label || e.title || e.name || '',
       price: e.brent_price != null ? +e.brent_price : null,
     })).filter(e => e.date && e.price != null).sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  // ── Tactical-side stats (Geospatial tab) — count events by region.
+  // Bounds match the regions visible on the tactical map.
+  function inBox(lat, lon, latLo, latHi, lonLo, lonHi) {
+    return lat >= latLo && lat <= latHi && lon >= lonLo && lon <= lonHi;
+  }
+  function hydrateTacStats(events) {
+    if (!Array.isArray(events)) return;
+    let total = 0, sRedSea = 0, gulfAden = 0, choke = 0;
+    for (const e of events) {
+      const lat = +e.latitude, lon = +e.longitude;
+      if (!lat || !lon) continue;
+      // Red Sea + Gulf of Aden viewport
+      if (!inBox(lat, lon, 5, 30, 32, 56)) continue;
+      total++;
+      if (inBox(lat, lon, 12, 18, 38, 44))   sRedSea++;
+      if (inBox(lat, lon, 10.5, 14.5, 44, 52)) gulfAden++;
+      if (inBox(lat, lon, 12.0, 13.3, 42.8, 43.8)) choke++;
+    }
+    setText('tacTotal',   total);
+    setText('tacSouthRS', sRedSea);
+    setText('tacGoA',     gulfAden);
+    setText('tacChoke',   choke);
+    // Also patch the badge near the section header so "N=726" stops lying
+    const badge = document.querySelector('.narrative-block .badge.badge-gold');
+    if (badge && /ACLED · N=/.test(badge.textContent)) {
+      badge.textContent = `ACLED · N=${total}`;
+    }
+  }
+
+  // ── Chokepoint cards (overview tab) — hydrate vessels/premium/incidents/flow
+  // Premium isn't a backend metric we track; derive a proxy from threatPct
+  // (war-risk premium is correlated with chokepoint stress).
+  function hydrateChokepointCards() {
+    const cards = document.querySelectorAll('[data-cp-card]');
+    cards.forEach(card => {
+      const key = card.getAttribute('data-cp-card');
+      const cp = key && window.CHOKEPOINTS && window.CHOKEPOINTS[key];
+      if (!cp) return;
+      const set = (stat, val) => {
+        const el = card.querySelector(`[data-stat="${stat}"]`);
+        if (el != null && val != null) el.textContent = val;
+      };
+      // Risk pill
+      if (cp.threat) set('risk', PILL_LABEL[cp.threat] || cp.threat.toUpperCase());
+      // Flow (mbd) — only set if card has a flow stat hook (Hormuz/Bab; Cape uses nm)
+      if (cp.flowMbd != null) set('flow', cp.flowMbd.toFixed(1));
+      // Vessels
+      if (cp.vesselsInZone != null) set('vessels', cp.vesselsInZone);
+      // Premium proxy: scale threatPct → 0–3.5% range
+      if (cp.threatPct != null) set('premium', (cp.threatPct / 100 * 3.5).toFixed(1) + '%');
+      // Incidents/30d
+      if (cp.incidents30d != null) set('incidents', cp.incidents30d);
+      // Cape: vessels diverted
+      if (key === 'cape' && cp.vesselsInZone != null) set('diverted', cp.vesselsInZone);
+    });
+  }
+
+  // ── US-Iran tab KPIs (4 cards) — backed by /api/iran-impact ──
+  function hydrateIranKpis(resp) {
+    const k = (resp && resp.kpis) || {};
+    const set = (name, txt) => {
+      const el = document.querySelector(`[data-iran-kpi="${name}"]`);
+      if (el) el.textContent = txt;
+    };
+    set('total',     k.total_events != null ? k.total_events : '—');
+    set('avg3d',     k.avg_price_move_3d != null ? '$' + k.avg_price_move_3d.toFixed(2) : '—');
+    set('peak3d',    k.peak_volatility_spike != null ? '$' + k.peak_volatility_spike.toFixed(2) : '—');
+    set('thisMonth', k.events_this_month != null ? k.events_this_month : '—');
+    // Find the specific event responsible for the peak move (largest single
+    // 3-day price change in the event_table). Falls back to a generic label.
+    const tbl = (resp && resp.event_table) || [];
+    if (tbl.length) {
+      const top = tbl.slice().sort((a, b) =>
+        Math.abs((b.price_change_3d || 0)) - Math.abs((a.price_change_3d || 0))
+      )[0];
+      if (top && top.date) {
+        const d = new Date(top.date);
+        const lbl = isNaN(d) ? top.date : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        set('peak3dDate', lbl + (top.label ? ' · ' + String(top.label).slice(0, 40) : ''));
+      }
+    }
   }
 
   // ── MAIN LOAD ─────────────────────────────────────────────────────────────
@@ -412,11 +609,43 @@
     // ── DOM updates ──
     hydrateHero(master, brent);
     hydrateSecondaryKpis(master, suez, hormuz, bab);
+    hydrateThreatPills();
+    hydrateChokepointCards();
     hydrateFeed((iranResp && iranResp.news) || []);
+
+    // Iran-events first-fetch may have failed silently (Render free tier
+    // cold-start, transient network). Schedule a single background retry so
+    // the news feed and Iran timeline can populate without a manual refresh.
+    if (!iranResp || !Array.isArray(iranResp.news) || !iranResp.news.length) {
+      setTimeout(() => {
+        API.invalidate('/api/iran-events');
+        API.iranEvents()
+          .then(r => {
+            if (!r) return;
+            S.iran = r;
+            hydrateIranEvents(r);
+            hydrateFeed((r && r.news) || []);
+            // Re-render Iran timeline with new curated events
+            try { renderIranTimeline && renderIranTimeline(window.CP.state); } catch (_) {}
+          })
+          .catch(() => {});
+      }, 4000);
+    }
+
+    // US-Iran tab KPIs (non-blocking; fetches independently)
+    API.iranImpact()
+      .then(r => hydrateIranKpis(r))
+      .catch(() => hydrateIranKpis(null));
 
     if (errors.length) {
       console.warn('Hydrator: partial failure —', errors);
-      if (errors.length >= 4) setConnectionStatus(false, 'PARTIAL · some data stale');
+      if (errors.length >= 4) {
+        setConnectionStatus(false, 'OFFLINE · using cache', 'err');
+      } else {
+        setConnectionStatus(true, `DEGRADED · ${errors.length} source${errors.length === 1 ? '' : 's'} stale`, 'warn');
+      }
+    } else {
+      setConnectionStatus(true, 'LIVE · ACLED + EIA', 'live');
     }
 
     // Resolve the gate IMMEDIATELY so charts can render with master/brent.
@@ -443,6 +672,10 @@
             (window.CHOKEPOINTS.bab.incidents30d || 0)
           );
         }
+        // Refresh per-card metrics + threat pills + tac-side stats now that real counts exist
+        hydrateChokepointCards();
+        hydrateThreatPills();
+        hydrateTacStats(events);
         // Update hotspots layer for globe
         window.ATTACKS = buildAttackHotspots(events);
         window.dispatchEvent(new CustomEvent('events-ready', { detail: { events } }));

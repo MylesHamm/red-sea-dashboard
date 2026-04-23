@@ -62,6 +62,63 @@ function showChartEmpty(canvas, msg) {
   }
 }
 
+// ── Cross-filter taxonomy bridge ────────────────────────────────────────────
+// The doughnut publishes ACLED categories ("Battles", "Explosions/Remote
+// violence", "Strategic developments", "Violence against civilians",
+// "Protests", "Riots"). Other consumers use their own taxonomies; map them.
+function xfActiveType() {
+  return (window.CP && window.CP.filters && window.CP.filters.eventType) || null;
+}
+function xfMatchesIranType(filter, t) {
+  if (!filter) return true;
+  const f = filter.toLowerCase();
+  t = (t || '').toLowerCase();
+  if (f.includes('explosion') || f.includes('battle'))   return t === 'military' || t === 'proxy';
+  if (f.includes('strategic'))                            return t === 'nuclear' || t === 'sanctions';
+  if (f.includes('violence'))                             return t === 'military' || t === 'proxy';
+  return true; // unknown filter — leave all visible
+}
+function xfMatchesTacType(filter, t) {
+  if (!filter) return true;
+  const f = filter.toLowerCase();
+  t = (t || '').toLowerCase();
+  if (f.includes('explosion') || f.includes('battle')) return t === 'missile' || t === 'drone';
+  if (f.includes('violence'))                          return t === 'tanker';
+  if (f.includes('strategic'))                         return false; // none on the tac map
+  return true;
+}
+function xfMatchesNewsCat(filter, c) {
+  if (!filter) return true;
+  const f = filter.toLowerCase();
+  c = (c || '').toLowerCase();
+  if (f.includes('explosion') || f.includes('battle')) return /military|attack|conflict|incident|strike/.test(c);
+  if (f.includes('strategic'))                         return /diplomatic|sanction|treaty|nuclear|policy/.test(c);
+  if (f.includes('violence'))                          return /military|conflict|attack|civilian/.test(c);
+  return true;
+}
+
+// Generic floating filter banner used by consumers in different taxonomies
+// that can't natively re-aggregate by ACLED type — they show a "FILTER ACTIVE"
+// pill so the user knows the cross-filter is shaping the chart.
+function showXfBanner(canvas, label) {
+  if (!canvas) return;
+  const parent = canvas.parentElement;
+  if (!parent) return;
+  if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+  let pill = parent.querySelector('.xf-banner');
+  if (!label) {
+    if (pill) pill.remove();
+    return;
+  }
+  if (!pill) {
+    pill = document.createElement('div');
+    pill.className = 'xf-banner';
+    pill.style.cssText = 'position:absolute;top:8px;right:8px;padding:3px 7px;font:9px "JetBrains Mono",monospace;letter-spacing:1.5px;border-radius:3px;background:rgba(0,212,255,0.15);color:#dfe7f0;border:1px solid rgba(0,212,255,0.45);z-index:5;pointer-events:none';
+    parent.appendChild(pill);
+  }
+  pill.textContent = `FILTER: ${label.toUpperCase()}`;
+}
+
 // ── Main render pipeline ───────────────────────────────────────────────────
 async function renderAllCharts() {
   // Wait for hydrator — tolerate up to 15s, then render with whatever we have
@@ -95,6 +152,7 @@ function renderPriceVsAttacks(state) {
   const canvas = chartEl('priceAttackChart');
   if (!canvas) return;
   destroyChartOn(canvas);
+  showXfBanner(canvas, xfActiveType());
 
   const ts = applyTimelineRows((state.master && state.master.timeseries) || []);
   if (!ts.length) return showChartEmpty(canvas, 'timeseries unavailable');
@@ -126,8 +184,10 @@ function renderPriceVsAttacks(state) {
       plugins: { legend: { labels: { color: '#dfe7f0' } } },
       scales: {
         x: { ticks: { color: '#556475', maxTicksLimit: 10 }, grid: { color: 'rgba(0,212,255,0.05)' } },
-        y:  { position: 'left',  ticks: { color: '#8f9db0', callback: v => '$' + v }, grid: { color: 'rgba(0,212,255,0.05)' } },
-        y1: { position: 'right', ticks: { color: '#ff3d5e' }, grid: { display: false }, beginAtZero: true }
+        y:  { position: 'left',  title: { display: true, text: 'BRENT $/BBL', color: '#556475', font: { size: 10 } },
+              ticks: { color: '#8f9db0', callback: v => '$' + v }, grid: { color: 'rgba(0,212,255,0.05)' } },
+        y1: { position: 'right', title: { display: true, text: 'WEEKLY ATTACKS', color: '#556475', font: { size: 10 } },
+              ticks: { color: '#ff3d5e' }, grid: { display: false }, beginAtZero: true }
       }
     }
   });
@@ -165,7 +225,8 @@ function renderVolatilityChart(state) {
       plugins: { legend: { display: false } },
       scales: {
         x: { ticks: { color: '#556475', maxTicksLimit: 8 }, grid: { display: false } },
-        y: { ticks: { color: '#8f9db0', callback: v => v + '%' }, grid: { color: 'rgba(0,212,255,0.05)' } }
+        y: { title: { display: true, text: 'ANNUALIZED VOL %', color: '#556475', font: { size: 10 } },
+             ticks: { color: '#8f9db0', callback: v => v + '%' }, grid: { color: 'rgba(0,212,255,0.05)' } }
       }
     }
   });
@@ -188,6 +249,7 @@ function renderEventTypesChart(state) {
 
   const allEvents = (state.events && state.events.length) ? state.events : (window.THESIS_EVENTS || []);
   if (!allEvents.length) {
+    destroyChartOn(canvas);
     window.addEventListener('events-ready',        () => renderEventTypesChart(window.CP.state), { once: true });
     window.addEventListener('thesis-events-ready', () => renderEventTypesChart(window.CP.state), { once: true });
     return showChartEmpty(canvas, 'loading events…');
@@ -304,29 +366,47 @@ function renderEventTypesChart(state) {
 function updateIncidentsKpi() {
   const incidentEl = document.querySelector('[data-kpi="incidents30"]');
   if (!incidentEl) return;
+  const deltaEl = document.querySelector('[data-kpi="incidents30Delta"]');
   const sel = window.CP && window.CP.filters && window.CP.filters.eventType;
   const tlTs = tlCutoffTs();
-  // No filters and scrubber at "now": defer to hydrate.js's pre-computed value
-  if (!sel && !tlTs) {
-    const cps = window.CHOKEPOINTS || {};
-    const n = ((cps.hormuz && cps.hormuz.incidents30d) || 0)
-            + ((cps.bab    && cps.bab.incidents30d)    || 0);
-    incidentEl.textContent = String(n);
-    return;
-  }
   const events = (window.CP && window.CP.state && window.CP.state.events) || window.THESIS_EVENTS || [];
+
+  // Compute current 30-day count and prior 30-day count for the delta display.
+  // Even when scrubber is at "now" we want the delta vs the prior 30 days, so
+  // count from events directly rather than deferring to the chokepoint sum.
   const endTs = tlTs || Date.now();
   const startTs = endTs - 30 * 24 * 3600 * 1000;
-  let n = 0;
+  const priorEnd = startTs;
+  const priorStart = priorEnd - 30 * 24 * 3600 * 1000;
+  let n = 0, prior = 0;
   for (const ev of events) {
     if (sel) {
       const t = (ev.event_type || ev.sub_event_type || 'Other').toString();
       if (t !== sel) continue;
     }
     const dt = ev.event_date ? Date.parse(ev.event_date) : NaN;
-    if (!isNaN(dt) && dt >= startTs && dt <= endTs) n++;
+    if (isNaN(dt)) continue;
+    if (dt >= startTs && dt <= endTs)        n++;
+    else if (dt >= priorStart && dt < priorEnd) prior++;
+  }
+
+  // No filters, scrubber at "now", and events not yet loaded: defer to the
+  // chokepoint-aggregated count so we don't show 0 while events load.
+  if (!sel && !tlTs && !events.length) {
+    const cps = window.CHOKEPOINTS || {};
+    n = ((cps.hormuz && cps.hormuz.incidents30d) || 0)
+      + ((cps.bab    && cps.bab.incidents30d)    || 0);
   }
   incidentEl.textContent = String(n);
+
+  // Delta: signed change vs prior 30D
+  if (deltaEl) {
+    const d = n - prior;
+    const sign = d > 0 ? '+' : d < 0 ? '−' : '±';
+    deltaEl.textContent = `${sign}${Math.abs(d)} vs prior 30D`;
+    deltaEl.classList.toggle('up-alert', d > 0);
+    deltaEl.classList.toggle('down', d < 0);
+  }
 }
 
 (function wireCrossFilterIncidentsKpi() {
@@ -372,12 +452,40 @@ function updateIncidentsKpi() {
   });
 })();
 
+// ── Cross-filter re-render: when the doughnut (or its CLEAR pill) toggles
+// window.CP.filters.eventType, re-paint the consumers that change appearance
+// based on the active filter. The doughnut itself updates inline; this hook
+// catches every other chart that needs a banner or marker dim.
+(function wireCrossFilterRerender() {
+  if (window.__xfRerenderWired) return;
+  window.__xfRerenderWired = true;
+  let pending = false;
+  function isStateReady() {
+    const s = window.CP && window.CP.state;
+    return !!(s && (s.master || (s.brent && s.brent.length)));
+  }
+  function flush() {
+    pending = false;
+    if (!isStateReady()) return;
+    const state = window.CP.state;
+    try { renderPriceVsAttacks(state); } catch (e) {}
+    try { renderScatter(state); }        catch (e) {}
+    try { renderIranTimeline(state); }   catch (e) {}
+  }
+  window.addEventListener('cross-filter-changed', () => {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(flush);
+  });
+})();
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Price window (T-2 … T+5 around events) — from master.price_windows
 // ═══════════════════════════════════════════════════════════════════════════
 function renderPriceWindow(state) {
   const canvas = chartEl('priceWindowChart');
   if (!canvas) return;
+  destroyChartOn(canvas);
 
   const pw = (state.master && state.master.price_windows) || {};
   const order = ['Price_T-2','Price_T-1','Price_T0','Price_T+1','Price_T+2','Price_T+3','Price_T+4','Price_T+5'];
@@ -413,6 +521,7 @@ function renderScatter(state) {
   const canvas = chartEl('scatterChart');
   if (!canvas) return;
   destroyChartOn(canvas);
+  showXfBanner(canvas, xfActiveType());
 
   const ts = applyTimelineRows((state.master && state.master.timeseries) || []);
   if (!ts.length) return showChartEmpty(canvas, 'scatter unavailable');
@@ -467,8 +576,10 @@ function renderDxyOvx(state) {
       plugins: { legend: { labels: { color: '#dfe7f0' } } },
       scales: {
         x: { ticks: { color: '#556475', maxTicksLimit: 6 }, grid: { color: 'rgba(0,212,255,0.05)' } },
-        y:  { position: 'left',  ticks: { color: '#9b7bee' }, grid: { color: 'rgba(0,212,255,0.05)' } },
-        y1: { position: 'right', ticks: { color: '#ff8c42' }, grid: { display: false } }
+        y:  { position: 'left',  title: { display: true, text: 'DXY', color: '#556475', font: { size: 10 } },
+              ticks: { color: '#9b7bee' }, grid: { color: 'rgba(0,212,255,0.05)' } },
+        y1: { position: 'right', title: { display: true, text: 'OVX', color: '#556475', font: { size: 10 } },
+              ticks: { color: '#ff8c42' }, grid: { display: false } }
       }
     }
   });
@@ -497,6 +608,12 @@ function renderCorrelation(state) {
 
   const vars = corr.labels.map(shortLabel);
   const m = corr.matrix;
+
+  // Defensive: bail if matrix isn't square against labels
+  if (!Array.isArray(m) || m.length !== vars.length || m.some(r => !Array.isArray(r) || r.length !== vars.length)) {
+    container.innerHTML = '<div style="padding:40px;text-align:center;color:#556475;font:11px JetBrains Mono,monospace;letter-spacing:2px">CORRELATION MATRIX MALFORMED</div>';
+    return;
+  }
 
   container.innerHTML = '';
   const cols = `80px repeat(${vars.length}, 1fr)`;
@@ -547,6 +664,10 @@ function renderIranTimeline(state) {
 
   // Filter Brent to Oct 2025 → (scrubbed cutoff or latest)
   const filtered = brent.filter(r => r.date >= '2025-10-01' && (!tlCut || r.date <= tlCut));
+  if (!filtered.length) {
+    // Pre-Oct-2025 scrub: war hasn't started yet on the timeline
+    return showChartEmpty(canvas, 'no Brent data in window · scrub forward to Oct 2025+');
+  }
   const labels = filtered.map(r => r.date);
   const prices = filtered.map(r => r.price);
 
@@ -557,15 +678,25 @@ function renderIranTimeline(state) {
     t === 'proxy'       ? C_GOLD :
                           C_BLUE;
 
-  const eventDatasets = events.map(e => ({
-    label: e.label,
-    type: 'scatter',
-    data: [{ x: e.date, y: +e.price }],
-    backgroundColor: eventColor(e.type),
-    borderColor: '#fff', borderWidth: 1.5,
-    pointRadius: 7, pointHoverRadius: 10, pointStyle: 'circle',
-    order: 0
-  }));
+  // Cross-filter: dim event markers whose Iran-domain type doesn't map to the
+  // currently selected ACLED filter type from the doughnut.
+  const xf = xfActiveType();
+  showXfBanner(canvas, xf);
+  const eventDatasets = events.map(e => {
+    const match = xfMatchesIranType(xf, e.type);
+    return {
+      label: e.label,
+      type: 'scatter',
+      data: [{ x: e.date, y: +e.price }],
+      backgroundColor: match ? eventColor(e.type) : (eventColor(e.type) + '30'),
+      borderColor: match ? '#fff' : 'rgba(255,255,255,0.2)',
+      borderWidth: 1.5,
+      pointRadius:      match ? 7  : 4,
+      pointHoverRadius: match ? 10 : 5,
+      pointStyle: 'circle',
+      order: 0
+    };
+  });
 
   new Chart(canvas, {
     type: 'line',
@@ -584,9 +715,15 @@ function renderIranTimeline(state) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            title: items => items[0].label,
+            // For scatter event markers, dataset.label IS the event title;
+            // for the Brent line the X-axis label IS the date — use the right one.
+            title: items => {
+              const it = items[0];
+              if (it && it.dataset && it.dataset.type === 'scatter') return it.dataset.label;
+              return it ? it.label : '';
+            },
             label: ctx => ctx.dataset.type === 'scatter'
-              ? `${ctx.dataset.label} — $${ctx.parsed.y}`
+              ? `${ctx.parsed.x} — $${ctx.parsed.y}`
               : `Brent  $${ctx.parsed.y}`
           }
         }

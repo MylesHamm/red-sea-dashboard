@@ -93,13 +93,29 @@
   stage.addEventListener('mouseenter', () => { autoRotate = false; });
   stage.addEventListener('mouseleave', () => { autoRotate = true; lastTime = performance.now(); });
 
-  // Drag to rotate
+  // Drag to rotate. Single shared "release back to autorotate" timer so
+  // rapid drag-release-drag cycles don't stack overlapping setTimeouts that
+  // would all fire later and force-resume rotation while the user is still
+  // interacting. pointercancel covers OS-level interruptions (touch loss,
+  // window blur, gesture switch) where pointerup never arrives.
   let dragStart = null;
   let dragRot = null;
+  let resumeTimer = null;
+  function endDrag() {
+    if (!dragStart) return;
+    dragStart = null;
+    if (resumeTimer) clearTimeout(resumeTimer);
+    resumeTimer = setTimeout(() => {
+      autoRotate = true;
+      lastTime = performance.now();
+      resumeTimer = null;
+    }, 1500);
+  }
   svg.on('pointerdown', (event) => {
     dragStart = [event.clientX, event.clientY];
     dragRot = [...rotation];
     autoRotate = false;
+    if (resumeTimer) { clearTimeout(resumeTimer); resumeTimer = null; }
   });
   window.addEventListener('pointermove', (event) => {
     if (!dragStart) return;
@@ -110,12 +126,9 @@
     projection.rotate(rotation);
     render();
   });
-  window.addEventListener('pointerup', () => {
-    if (dragStart) {
-      dragStart = null;
-      setTimeout(() => { autoRotate = true; lastTime = performance.now(); }, 1500);
-    }
-  });
+  window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', endDrag);
+  window.addEventListener('blur', endDrag);
 
   // Helper: build an arc geojson from a list of [lon,lat]
   function lineString(coords) {
@@ -235,13 +248,13 @@
       .attr('class', d => `globe-arc arc-${d._era}`)
       .attr('d', d => path(lineString(d.path)));
 
-    // Chokepoint + destination nodes
+    // Chokepoint + destination nodes. Iterate CHOKEPOINTS directly — the
+    // earlier "skip suez then re-add" branch was a dead leftover from when
+    // suez wasn't in the dict; the result was identical to a flat iteration.
     const nodeList = [];
     Object.values(window.CHOKEPOINTS || {}).forEach(cp => {
-      if (cp.id === 'suez') return; // skip duplicate; still show as node? keep it.
       nodeList.push({ ...cp, isChokepoint: true });
     });
-    nodeList.push({ ...window.CHOKEPOINTS.suez, isChokepoint: true });
     (window.NODES || []).forEach(n => nodeList.push({ ...n, isChokepoint: false }));
 
     const nodes = nodeLayer.selectAll('g.globe-node')

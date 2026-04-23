@@ -162,7 +162,10 @@
     const color = t => t === 'tanker' ? '#ff3d5e' : t === 'missile' ? '#ff8c42' : '#ffab00';
     const rSize = i => i === 'high' ? 4 : i === 'med' ? 3 : 2.2;
 
-    const g = markerLayer.selectAll('g.atk').data(attacks).enter().append('g').attr('class','atk');
+    const g = markerLayer.selectAll('g.atk')
+      .data(attacks).enter().append('g')
+      .attr('class','atk')
+      .attr('data-atk-type', d => d.type);
     g.append('circle')
       .attr('cx', d => projection([d.lon,d.lat])[0])
       .attr('cy', d => projection([d.lon,d.lat])[1])
@@ -178,14 +181,57 @@
       .attr('fill', d => color(d.type))
       .attr('stroke', '#fff').attr('stroke-width', 0.5);
 
+    // ── Cross-filter: dim non-matching attack markers when a doughnut filter
+    //    is active. ACLED categories don't map perfectly onto tanker/missile/
+    //    drone, so the bridge in charts.js (xfMatchesTacType) handles fuzzy
+    //    routing. When no match exists in the chosen category we fade all so
+    //    the user sees the filter is engaged.
+    function applyXfTac(filter) {
+      const matches = t => {
+        if (!window.xfMatchesTacType) return true;
+        return window.xfMatchesTacType(filter, t);
+      };
+      markerLayer.selectAll('g.atk')
+        .transition().duration(220)
+        .style('opacity', d => matches(d.type) ? 1 : 0.18);
+      // Floating pill on the tac-map container so users see why markers faded
+      const wrap = svg.node() && svg.node().parentElement;
+      if (wrap) {
+        if (getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
+        let pill = wrap.querySelector('.xf-banner-tac');
+        if (!filter) { if (pill) pill.remove(); return; }
+        if (!pill) {
+          pill = document.createElement('div');
+          pill.className = 'xf-banner-tac';
+          pill.style.cssText = 'position:absolute;top:8px;right:8px;padding:3px 7px;font:9px "JetBrains Mono",monospace;letter-spacing:1.5px;border-radius:3px;background:rgba(0,212,255,0.15);color:#dfe7f0;border:1px solid rgba(0,212,255,0.45);z-index:5;pointer-events:none';
+          wrap.appendChild(pill);
+        }
+        pill.textContent = `FILTER: ${filter.toUpperCase()}`;
+      }
+    }
+    // Pick up any filter that's already active on first paint
+    applyXfTac((window.CP && window.CP.filters && window.CP.filters.eventType) || null);
+    if (!window.__tacXfWired) {
+      window.__tacXfWired = true;
+      window.addEventListener('cross-filter-changed', e => {
+        applyXfTac((e.detail && e.detail.eventType) || null);
+      });
+    }
+
     // Compass / scale
     labelLayer.append('text')
       .attr('x', 18).attr('y', 20)
       .attr('font-family',"'JetBrains Mono', monospace").attr('font-size',10).attr('fill','#3a4756').attr('letter-spacing',2)
       .text('RED SEA · GULF OF ADEN · 32°E–56°E');
     labelLayer.append('text')
-      .attr('x', 18).attr('y', H - 14)
+      .attr('x', 18).attr('y', H - 28)
       .attr('font-family',"'JetBrains Mono', monospace").attr('font-size',9).attr('fill','#3a4756').attr('letter-spacing',2)
       .text('● TANKER  ● MISSILE  ● DRONE');
+    // Markers are representative geographic samples drawn from the ACLED
+    // events visible in the data tab — not a real-time AIS / threat feed.
+    labelLayer.append('text')
+      .attr('x', 18).attr('y', H - 14)
+      .attr('font-family',"'JetBrains Mono', monospace").attr('font-size',8).attr('fill','#556475').attr('letter-spacing',1.5)
+      .text('MARKERS · ILLUSTRATIVE · derived from ACLED 2024–2026');
   }
 })();

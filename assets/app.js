@@ -76,13 +76,14 @@ document.addEventListener('DOMContentLoaded', () => {
       <li><span class="r-dot r-${r.risk}"></span>${r.from} → ${r.to} <b>${r.mbd} mbd</b></li>
     `).join('');
 
-    gpEls.vesselList.innerHTML = cp.vessels.length ? cp.vessels.map(v => `
+    const vlist = Array.isArray(cp.vessels) ? cp.vessels : [];
+    gpEls.vesselList.innerHTML = vlist.length ? vlist.map(v => `
       <div class="vessel-row">
         <span class="v-type">${v.type}</span>
         <span class="v-name">${v.name}</span>
         <span class="v-speed">${v.speed} kt</span>
       </div>
-    `).join('') : '<div style="color:var(--text-mute);font-family:var(--mono);font-size:11px">No vessels tracked</div>';
+    `).join('') : '<div style="color:var(--text-mute);font-family:var(--mono);font-size:11px">No live vessel tracking · AIS feed not connected</div>';
   }
 
   let currentChokepoint = 'hormuz';
@@ -160,9 +161,10 @@ document.addEventListener('DOMContentLoaded', () => {
         date: d.toISOString().slice(0, 10),
         ts,
         era: eraOf(ts),
-        // Is the current scrub at or near "today"? Used to suppress filtering
-        // when the user has not actually scrubbed back in time.
-        atNow: currentPct >= 99.5
+        // Is the current scrub at or near "today"? 0.05% of the ~2.5y span
+        // is roughly half a day — tight enough that a deliberate scrub even
+        // one notch back from the end disengages the "no filter" shortcut.
+        atNow: currentPct >= 99.95
       };
       if (!silent) {
         window.dispatchEvent(new CustomEvent('timeline-set', { detail: window.CP.timeline }));
@@ -264,27 +266,97 @@ document.addEventListener('DOMContentLoaded', () => {
   if (closeBtn) closeBtn.addEventListener('click', () => overlay.classList.remove('open'));
   if (overlay) overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.classList.remove('open'); });
 
-  // Mock data rows
-  const dpTbody = document.getElementById('dpTbody');
-  if (dpTbody) {
-    const types = ['Explosions/Remote violence','Battles','Strategic developments','Violence against civilians'];
-    const subs = ['Shelling/artillery','Air/drone strike','Armed clash','Attack'];
-    const actors = ['Houthis','Military Forces of Yemen','IRGC','US Navy','Israeli Forces'];
-    const locs = ['Hodeidah','Sanaa','Strait of Hormuz','Bandar Abbas','Eilat'];
-    const rows = [];
-    for (let i=0;i<80;i++) {
-      const d = new Date(); d.setDate(d.getDate() - Math.floor(Math.random()*120));
-      rows.push(`<tr>
-        <td>${d.toISOString().slice(0,10)}</td>
-        <td>${types[i%types.length]}</td>
-        <td>${subs[i%subs.length]}</td>
-        <td>${actors[i%actors.length]}</td>
-        <td>${locs[i%locs.length]}</td>
-        <td>${Math.random()<0.3?Math.floor(Math.random()*8):0}</td>
-      </tr>`);
-    }
-    dpTbody.innerHTML = rows.join('');
+  // ── Data Explorer table — filters real ACLED events from window.CP.state.events ──
+  const dpTbody  = document.getElementById('dpTbody');
+  const dpSearch = document.getElementById('dpSearch');
+  const dpType   = document.getElementById('dpType');
+  const dpFrom   = document.getElementById('dpFrom');
+  const dpTo     = document.getElementById('dpTo');
+  const dpApply  = document.getElementById('dpApply');
+  const dpExport = document.getElementById('dpExport');
+  const dpMeta   = document.getElementById('dpMeta');
+  const MAX_ROWS = 500;
+
+  function dpEvents() {
+    const s = window.CP && window.CP.state;
+    return (s && Array.isArray(s.events) && s.events.length) ? s.events : (window.THESIS_EVENTS || []);
   }
+  function dpFilter() {
+    const events = dpEvents();
+    const q = (dpSearch && dpSearch.value || '').trim().toLowerCase();
+    const type = (dpType && dpType.value) || '';
+    const from = dpFrom && dpFrom.value ? Date.parse(dpFrom.value) : null;
+    const to   = dpTo   && dpTo.value   ? Date.parse(dpTo.value) + 86399999 : null;
+    return events.filter(e => {
+      if (type && (e.event_type || '') !== type) return false;
+      const dt = e.event_date ? Date.parse(e.event_date) : NaN;
+      if (!isNaN(dt)) {
+        if (from != null && dt < from) return false;
+        if (to   != null && dt > to)   return false;
+      }
+      if (q) {
+        const hay = `${e.event_type||''} ${e.sub_event_type||''} ${e.actor1||''} ${e.location||e.admin1||''} ${e.notes||''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+  function dpRender() {
+    if (!dpTbody) return;
+    const filtered = dpFilter();
+    const rows = filtered.slice(0, MAX_ROWS).map(e => {
+      const d = e.event_date ? String(e.event_date).slice(0, 10) : '—';
+      const t = e.event_type || '—';
+      const s = e.sub_event_type || '—';
+      const a = e.actor1 || '—';
+      const l = e.location || e.admin1 || '—';
+      const f = e.fatalities != null ? e.fatalities : 0;
+      return `<tr><td>${d}</td><td>${t}</td><td>${s}</td><td>${a}</td><td>${l}</td><td>${f}</td></tr>`;
+    });
+    dpTbody.innerHTML = rows.join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-mute);padding:24px">No matching events</td></tr>';
+    if (dpMeta) {
+      const cap = filtered.length > MAX_ROWS ? ` · showing first ${MAX_ROWS}` : '';
+      dpMeta.textContent = `${filtered.length.toLocaleString()} EVENT${filtered.length === 1 ? '' : 'S'}${cap}`;
+    }
+  }
+  function dpPopulateTypes() {
+    if (!dpType) return;
+    const events = dpEvents();
+    const set = new Set();
+    for (const e of events) if (e.event_type) set.add(e.event_type);
+    const types = [...set].sort();
+    const cur = dpType.value;
+    dpType.innerHTML = '<option value="">All</option>' +
+      types.map(t => `<option value="${t.replace(/"/g, '&quot;')}">${t}</option>`).join('');
+    if (cur && set.has(cur)) dpType.value = cur;
+  }
+  function dpExportCsv() {
+    const filtered = dpFilter();
+    const head = ['event_date','event_type','sub_event_type','actor1','location','admin1','fatalities','latitude','longitude'];
+    const esc = v => {
+      if (v == null) return '';
+      const s = String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [head.join(',')];
+    for (const e of filtered) lines.push(head.map(k => esc(e[k])).join(','));
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `events_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+  if (dpApply)  dpApply.addEventListener('click', dpRender);
+  if (dpExport) dpExport.addEventListener('click', dpExportCsv);
+  if (dpSearch) dpSearch.addEventListener('keydown', e => { if (e.key === 'Enter') dpRender(); });
+  // Initial render (will show empty / placeholder until events arrive)
+  dpRender();
+  // Re-render when events fetch resolves
+  window.addEventListener('events-ready', () => { dpPopulateTypes(); dpRender(); });
+  window.addEventListener('thesis-events-ready', () => { dpPopulateTypes(); dpRender(); });
+  window.addEventListener('data-hydrated', () => { dpPopulateTypes(); dpRender(); });
 
   // ── Tactical map filter toggles ──
   function wireTacToggles() {

@@ -203,6 +203,10 @@ button { font-family: inherit; cursor: pointer; }
   box-shadow: 0 0 8px var(--green);
   animation: pulse 2s infinite;
 }
+.status-dot.warn  { background: #ffab00; box-shadow: 0 0 8px #ffab00; }
+.status-dot.err   { background: #ff3d5e; box-shadow: 0 0 8px #ff3d5e; }
+.status-text.warn { color: #ffab00; }
+.status-text.err  { color: #ff3d5e; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
 .status-time {
   font-family: var(--mono);
