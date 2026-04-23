@@ -118,13 +118,24 @@ window.ARCS = [
     ] },
 
   // ═══ Cape of Good Hope alternative routes ═══
+  // Cape → Houston: round Cape, NW across South Atlantic, then bend NORTH well
+  // east of Brazil's eastern bulge (Cape São Roque at -35.5°W, -5.2°S — the
+  // easternmost point of the Americas). NEVER cross west of -33°W between lat
+  // -12°S and 0° or the line will cut through NE Brazil. Then NW across the
+  // Atlantic, into the Caribbean north of Trinidad, south of Hispaniola/Cuba,
+  // through the Yucatán Channel, into the Gulf of Mexico to Houston.
   { id: 'ras-houston-cape', from: 'ras', to: 'houston', risk: 'safe',
-    path: [[50.17,26.64],[52,26.5],[55,26.3],[56.3,26.5],[58,24.5],[60,21],[62,15],[62,8],[58,0],[55,-10],[53,-20],[51,-28],[42,-35],[30,-37],[22,-36],[18.47,-34.35],[10,-34],[0,-32],[-10,-27],[-20,-20],[-30,-12],[-42,-2],[-55,8],[-68,15],[-80,20],[-88,23],[-93,27],[-95.28,29.72]] },
-  // Cape route to Rotterdam: round Cape, up West African coast (offshore), past Iberia (offshore), into English Channel via mid-channel, through Strait of Dover, into Rotterdam.
+    path: [[50.17,26.64],[52,26.5],[55,26.3],[56.3,26.5],[58,24.5],[60,21],[62,15],[62,8],[58,0],[55,-10],[53,-20],[51,-28],[42,-35],[30,-37],[22,-36],[18.47,-34.35],[10,-34],[0,-32],[-10,-27],[-20,-20],[-28,-12],[-30,-5],[-32,0],[-40,5],[-50,10],[-60,13],[-68,15],[-80,20],[-88,23],[-93,27],[-95.28,29.72]] },
+  // Cape route to Rotterdam: round Cape, due west into deep South Atlantic, north
+  // through mid-Atlantic well west of the West-African bulge (Dakar at -17.5°W,
+  // Conakry at -13.7°W, Cape Verde Islands at -24°W), then back ENE past Iberia
+  // (Lisbon -9.1°W) into the English Channel via mid-channel, through Strait of
+  // Dover, into Rotterdam. NEVER bend east of -19°W between lat 5°N and 25°N or
+  // the path will cut through Senegal/Mauritania.
   { id: 'ras-rotter-cape', from: 'ras', to: 'rotter', risk: 'safe',
     path: [
       [50.17,26.64],[52,26.5],[55,26.3],[56.3,26.5],[58,24],[60,19],[62,12],[60,0],[58,-12],[55,-22],[52,-30],[42,-35],[30,-37],[22,-36],[18.47,-34.35],
-      [12,-30],[8,-20],[5,-10],[-2,0],[-10,10],[-17,20],[-18,30],[-12,38],[-11,42],[-12,46],[-7,48.5],[-5,49.5],[0,50.3],[2,51],[3,51.6],[4.14,51.95]
+      [10,-33],[0,-25],[-10,-10],[-15,5],[-20,12],[-22,18],[-20,25],[-15,32],[-12,38],[-11,42],[-12,46],[-7,48.5],[-5,49.5],[0,50.3],[2,51],[3,51.6],[4.14,51.95]
     ] },
 
   // ═══ Baseline regional flow ═══

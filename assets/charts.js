@@ -138,22 +138,26 @@ function renderVolatilityChart(state) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Event types doughnut (ACLED categories)
+// Event types doughnut (ACLED categories) — CLICK-TO-CROSS-FILTER
+// Clicking a slice sets window.CP.filters.eventType, dims non-matching
+// slices, shows a filter-active pill, and dispatches 'cross-filter-changed'
+// so other listeners (KPIs, scatter) can react. Click the active slice again
+// (or anywhere on the cleared pill) to release the filter.
 // ═══════════════════════════════════════════════════════════════════════════
 function renderEventTypesChart(state) {
   const canvas = chartEl('eventTypesChart');
   if (!canvas) return;
 
+  // Cross-filter store (shared with other charts)
+  window.CP = window.CP || {};
+  window.CP.filters = window.CP.filters || {};
+
   const events = (state.events && state.events.length) ? state.events : (window.THESIS_EVENTS || []);
   if (!events.length) {
-    // Events arrives in the background after the gate resolves — re-render
-    // when either the heavy /api/events payload OR the thesis-events feed
-    // becomes available.
     window.addEventListener('events-ready',        () => renderEventTypesChart(window.CP.state), { once: true });
     window.addEventListener('thesis-events-ready', () => renderEventTypesChart(window.CP.state), { once: true });
     return showChartEmpty(canvas, 'loading events…');
   }
-  // If we're re-rendering after events arrived, drop any prior empty overlay
   const parent = canvas.parentElement;
   const overlay = parent && parent.querySelector('.chart-empty');
   if (overlay) overlay.remove();
@@ -166,20 +170,118 @@ function renderEventTypesChart(state) {
   const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
   const labels = entries.map(x => x[0]);
   const data   = entries.map(x => x[1]);
+  const palette = [C_RED, C_ORANGE, C_CYAN, C_PURPLE, C_GOLD];
 
-  new Chart(canvas, {
+  // Tear down prior chart instance so click handlers stay clean across re-renders
+  const prior = (typeof Chart.getChart === 'function') ? Chart.getChart(canvas) : null;
+  if (prior) prior.destroy();
+
+  // Build/refresh the floating "FILTER: <type>" pill
+  if (parent && getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+  let pill = parent && parent.querySelector('.xf-pill');
+  if (!pill && parent) {
+    pill = document.createElement('div');
+    pill.className = 'xf-pill';
+    pill.style.cssText = 'position:absolute;top:8px;left:8px;padding:4px 8px;font:10px "JetBrains Mono",monospace;letter-spacing:1.5px;border-radius:3px;cursor:pointer;display:none;background:rgba(0,212,255,0.15);color:#dfe7f0;border:1px solid rgba(0,212,255,0.45);z-index:5';
+    parent.appendChild(pill);
+  }
+
+  function applyFilterVisual(sel) {
+    const colors = labels.map((lbl, i) => {
+      const base = palette[i];
+      if (!sel) return base;
+      return lbl === sel ? base : (base + '33'); // dim non-selected (~20% alpha)
+    });
+    chart.data.datasets[0].backgroundColor = colors;
+    chart.update('none');
+    if (pill) {
+      if (sel) {
+        pill.textContent = `FILTER: ${sel.toUpperCase()} · CLEAR ✕`;
+        pill.style.display = 'block';
+      } else {
+        pill.style.display = 'none';
+      }
+    }
+  }
+
+  const chart = new Chart(canvas, {
     type: 'doughnut',
     data: { labels, datasets: [{
       data,
-      backgroundColor: [C_RED, C_ORANGE, C_CYAN, C_PURPLE, C_GOLD],
-      borderColor: '#0b1119', borderWidth: 2
+      backgroundColor: palette.slice(0, labels.length),
+      borderColor: '#0b1119', borderWidth: 2,
+      hoverOffset: 6
     }] },
     options: {
       responsive: true, maintainAspectRatio: false, cutout: '62%',
-      plugins: { legend: { position: 'right', labels: { color: '#dfe7f0', boxWidth: 10, padding: 8, font: { size: 11 } } } }
+      plugins: {
+        legend: { position: 'right', labels: { color: '#dfe7f0', boxWidth: 10, padding: 8, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            afterLabel: () => '· click to filter'
+          }
+        }
+      },
+      onClick: (_evt, elements) => {
+        if (!elements || !elements.length) return;
+        const idx = elements[0].index;
+        const next = labels[idx];
+        const prev = window.CP.filters.eventType;
+        window.CP.filters.eventType = (prev === next) ? null : next;
+        applyFilterVisual(window.CP.filters.eventType);
+        window.dispatchEvent(new CustomEvent('cross-filter-changed', {
+          detail: { eventType: window.CP.filters.eventType }
+        }));
+      }
     }
   });
+
+  // Pill also acts as a clear-button
+  if (pill) {
+    pill.onclick = () => {
+      if (!window.CP.filters.eventType) return;
+      window.CP.filters.eventType = null;
+      applyFilterVisual(null);
+      window.dispatchEvent(new CustomEvent('cross-filter-changed', {
+        detail: { eventType: null }
+      }));
+    };
+  }
+
+  // Re-apply existing filter on re-render
+  applyFilterVisual(window.CP.filters.eventType || null);
 }
+
+// ── Cross-filter consumer: update the incidents-30d KPI to show the
+// filtered event count when an event type is selected. Restores the
+// unfiltered chokepoint-aggregated count when the filter clears.
+(function wireCrossFilterIncidentsKpi() {
+  if (window.__xfIncidentsWired) return;
+  window.__xfIncidentsWired = true;
+  window.addEventListener('cross-filter-changed', (e) => {
+    const sel = e.detail && e.detail.eventType;
+    const incidentEl = document.querySelector('[data-kpi="incidents30"]');
+    if (!incidentEl) return;
+    if (!sel) {
+      // Restore the chokepoint-based count maintained by hydrate.js
+      const cps = window.CHOKEPOINTS || {};
+      const n = ((cps.hormuz && cps.hormuz.incidents30d) || 0)
+              + ((cps.bab    && cps.bab.incidents30d)    || 0);
+      incidentEl.textContent = String(n);
+      return;
+    }
+    const events = (window.CP && window.CP.state && window.CP.state.events) || window.THESIS_EVENTS || [];
+    const cutoff = Date.now() - 30 * 24 * 3600 * 1000;
+    let n = 0;
+    for (const ev of events) {
+      const t = (ev.event_type || ev.sub_event_type || 'Other').toString();
+      if (t !== sel) continue;
+      const dt = ev.event_date ? Date.parse(ev.event_date) : NaN;
+      if (!isNaN(dt) && dt >= cutoff) n++;
+    }
+    incidentEl.textContent = String(n);
+  });
+})();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Price window (T-2 … T+5 around events) — from master.price_windows
