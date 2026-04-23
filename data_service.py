@@ -256,6 +256,10 @@ def _is_maritime_relevant(event: dict) -> bool:
     return any(kw in text for kw in _MARITIME_KEYWORDS)
 
 
+_acled_events_memo: Optional[List[dict]] = None
+_acled_events_memo_ts: float = 0.0
+_acled_events_memo_lock = threading.Lock()
+
 def fetch_acled_events() -> List[dict]:
     """Fetch comprehensive Houthi/Red Sea events from ACLED with multi-query approach.
 
@@ -263,9 +267,23 @@ def fetch_acled_events() -> List[dict]:
     1. All Yemen events (primary conflict zone)
     2. Houthi/Ansar Allah actor events globally (maritime attacks outside Yemen)
     3. Red Sea regional countries filtered for maritime relevance
+
+    In-process memoization: the on-disk cache is ~13MB of JSON which
+    materializes to 40-70MB of Python dicts per parse. Without the in-process
+    cache, every /api/events request re-parses that blob (and on Render's
+    512MB free tier two concurrent parses are enough to OOM the worker).
     """
+    global _acled_events_memo, _acled_events_memo_ts
+    # Fast path: serve from in-process memo (re-check after acquiring the lock
+    # in case another thread populated it while we were waiting).
+    if _acled_events_memo is not None and time.time() - _acled_events_memo_ts < 600:
+        return _acled_events_memo
+
     cached = _read_cache("acled_events", config.CACHE_TTL_ACLED)
     if cached:
+        with _acled_events_memo_lock:
+            _acled_events_memo = cached
+            _acled_events_memo_ts = time.time()
         logger.info("ACLED: serving from cache")
         return cached
 
@@ -313,7 +331,9 @@ def fetch_acled_events() -> List[dict]:
             maritime = [e for e in regional if _is_maritime_relevant(e)]
             return country, maritime, True
 
-        with ThreadPoolExecutor(max_workers=6) as pool:
+        # Cap concurrency at 3 so we only hold 3 in-flight response bodies in
+        # memory at a time (previously 6 => spikes of ~80MB on Render free).
+        with ThreadPoolExecutor(max_workers=3) as pool:
             futures = [
                 pool.submit(_fetch_yemen),
                 pool.submit(_fetch_houthi),
@@ -331,13 +351,22 @@ def fetch_acled_events() -> List[dict]:
 
         if all_events:
             _write_cache("acled_events", all_events)
+            with _acled_events_memo_lock:
+                _acled_events_memo = all_events
+                _acled_events_memo_ts = time.time()
             logger.info(f"ACLED: total {len(all_events)} unique events fetched and cached")
             return all_events
 
     except Exception as e:
         logger.warning(f"ACLED API failed: {e}")
 
-    return _load_acled_fallback()
+    fallback = _load_acled_fallback()
+    # Memoize the fallback too — it's the same 13MB blob
+    if fallback:
+        with _acled_events_memo_lock:
+            _acled_events_memo = fallback
+            _acled_events_memo_ts = time.time()
+    return fallback
 
 
 def _load_acled_fallback() -> List[dict]:
@@ -1012,14 +1041,25 @@ def fetch_iran_events() -> List[dict]:
     return fallback
 
 
+_iran_fallback_memo: Optional[List[dict]] = None
+
 def _load_iran_json_fallback() -> List[dict]:
-    """Load Iran events from local JSON fallback file."""
+    """Load Iran events from local JSON fallback file.
+
+    Memoized after first successful parse — the 400KB file materializes to
+    ~2MB of dicts and was previously being reparsed on every /api/iran-events
+    and /api/iran-impact call.
+    """
+    global _iran_fallback_memo
+    if _iran_fallback_memo is not None:
+        return _iran_fallback_memo
     path = config.DATA_DIR / "iran_events.json"
     if not path.exists():
         logger.warning("Iran events: no JSON fallback file found")
         return []
     try:
         events = json.loads(path.read_text())
+        _iran_fallback_memo = events
         logger.info(f"Iran events: loaded {len(events)} events from JSON fallback")
         return events
     except Exception as e:

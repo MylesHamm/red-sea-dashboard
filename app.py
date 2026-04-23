@@ -224,6 +224,11 @@ def _do_refresh():
     _refresh_in_progress = True
     try:
         data_service._acled_token = None
+        # Invalidate in-process memos so the refresh actually re-fetches
+        data_service._acled_events_memo = None
+        data_service._acled_events_memo_ts = 0.0
+        data_service._iran_fallback_memo = None
+        data_service._thesis_events_cache = None
 
         # Clear only API-driven caches (preserve master_dataset, thesis_events)
         _api_caches = {"acled_events", "iran_events", "brent_prices", "iran_news",
@@ -277,17 +282,28 @@ async def refresh_status():
 @app.on_event("startup")
 async def preload_data():
     """Warm caches in a background thread so the server starts accepting
-    requests immediately (critical for Render health-check timing)."""
+    requests immediately (critical for Render health-check timing).
+
+    Memory-aware preload: Render's free tier is capped at 512MB. The old
+    preload spawned 6 worker threads fetching 11 datasets in parallel at
+    boot, which reliably OOM'd the instance. This version:
+      - caps concurrency at 2 workers
+      - skips ACLED (13MB JSON) entirely; it lazy-loads on first /api/events
+        and is then memoized in-process
+      - forces gc.collect() between phases to release intermediate DataFrames
+      - small per-task timeouts so a stuck fetch never pins memory
+    """
 
     def _preload():
         import concurrent.futures
-        print("  [preload] Starting background cache warming...")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
-            # Phase 1: Warm external API caches that master depends on
+        import gc
+        print("  [preload] Starting background cache warming (low-mem mode)...")
+        # Phase 1: small external API caches that master depends on.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             api_futures = {
                 "brent": pool.submit(data_service.fetch_brent_prices),
-                "dxy": pool.submit(data_service.fetch_dxy),
-                "ovx": pool.submit(data_service.fetch_ovx),
+                "dxy":   pool.submit(data_service.fetch_dxy),
+                "ovx":   pool.submit(data_service.fetch_ovx),
             }
             for name, fut in api_futures.items():
                 try:
@@ -295,15 +311,19 @@ async def preload_data():
                     print(f"  [preload] {name}: OK")
                 except Exception as e:
                     print(f"  [preload] {name}: FAILED ({e})")
+        gc.collect()
 
-            # Phase 2: master (reads caches from phase 1) + remaining sources
+        # Phase 2: master + transit counts. These are all small (<1MB each).
+        # NB: ACLED is intentionally NOT preloaded — it's 13MB and its on-disk
+        # cache is already warm from prior deploys. First /api/events call
+        # populates the in-process memo; subsequent calls are instant.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             futures = {
                 "master": pool.submit(data_service.load_master_dataset),
                 "thesis": pool.submit(data_service.load_thesis_events),
-                "acled": pool.submit(data_service.fetch_acled_events),
-                "iran": pool.submit(data_service.fetch_iran_events),
-                "news": pool.submit(data_service.fetch_iran_news),
-                "suez": pool.submit(data_service.fetch_suez_transits),
+                "iran":   pool.submit(data_service.fetch_iran_events),
+                "news":   pool.submit(data_service.fetch_iran_news),
+                "suez":   pool.submit(data_service.fetch_suez_transits),
                 "mandeb": pool.submit(data_service.fetch_bab_el_mandeb_transits),
                 "hormuz": pool.submit(data_service.fetch_hormuz_transits),
             }
@@ -313,7 +333,8 @@ async def preload_data():
                     print(f"  [preload] {name}: OK")
                 except Exception as e:
                     print(f"  [preload] {name}: FAILED ({e})")
-        print("  [preload] All data sources warmed")
+        gc.collect()
+        print("  [preload] Cache warming complete (ACLED deferred to first request)")
 
     # Fire-and-forget in a daemon thread — server starts immediately
     t = threading.Thread(target=_preload, daemon=True)
