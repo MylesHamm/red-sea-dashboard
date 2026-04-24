@@ -358,17 +358,30 @@ def _do_refresh():
                 except Exception:
                     pass
 
-        # Re-fetch all data sources in parallel
-        with data_service.ThreadPoolExecutor(max_workers=4) as pool:
+        # Re-fetch all data sources in parallel — including Tier-1 (EIA / FRED /
+        # GDELT). Without this, a refresh clears those cache files but never
+        # repopulates them, leaving the UI blank until a user-facing request
+        # happens to trigger the live fetcher.
+        with data_service.ThreadPoolExecutor(max_workers=7) as pool:
             f_events = pool.submit(data_service.fetch_acled_events)
             f_iran = pool.submit(data_service.fetch_iran_events)
             f_brent = pool.submit(data_service.fetch_brent_prices)
             f_news = pool.submit(data_service.fetch_iran_news)
+            f_eia = pool.submit(data_service.fetch_eia_inventories)
+            f_macro = pool.submit(data_service.fetch_macro_context)
+            f_gdelt = pool.submit(data_service.fetch_gdelt_tone)
 
         events = f_events.result()
         iran = f_iran.result()
         f_brent.result()
         f_news.result()
+        # Tier-1 results aren't used here directly — we just need the side
+        # effect of re-populated caches.
+        for fut in (f_eia, f_macro, f_gdelt):
+            try:
+                fut.result()
+            except Exception as e:
+                print(f"[refresh] tier-1 fetcher failed: {e!r}")
 
         # Update JSON fallbacks if we got real API data
         if len(events) > 1000:

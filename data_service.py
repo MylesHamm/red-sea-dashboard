@@ -849,6 +849,22 @@ def fetch_china_pmi() -> List[dict]:
 # (crude inventories + Cushing), forward inflation (5y breakeven), broad
 # risk (VIX, HY credit spreads), and media attention (GDELT tone timeline).
 
+def _read_stale_cache(cache_key: str):
+    """Read a cache file ignoring TTL — used as a fallback when a live fetch fails.
+
+    Better to show yesterday's data than to show nothing while the upstream
+    provider has a hiccup. The dashboard has a staleness banner elsewhere.
+    """
+    path = _cache_path(cache_key)
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text())
+        return data.get("payload")
+    except Exception:
+        return None
+
+
 def _eia_weekly_stocks(series_id: str, cache_key: str) -> List[dict]:
     """Internal helper — fetch a weekly stocks series from EIA v2 by series ID."""
     cached = _read_cache(cache_key, config.CACHE_TTL_BRENT)
@@ -867,21 +883,30 @@ def _eia_weekly_stocks(series_id: str, cache_key: str) -> List[dict]:
                 "start": "2023-10-01",
                 "length": 5000,
             },
-            timeout=15,
+            timeout=30,
+            headers=_BROWSER_HEADERS,
         )
         resp.raise_for_status()
         data = resp.json()
+        rows = data.get("response", {}).get("data", [])
         records = [
             {"date": r["period"], "value": float(r["value"])}
-            for r in data.get("response", {}).get("data", [])
+            for r in rows
             if r.get("value") is not None
         ]
         if records:
             _write_cache(cache_key, records)
             logger.info(f"EIA {series_id}: fetched {len(records)} weekly data points")
             return records
+        # Empty response — log the full payload so we can see WHY (e.g. auth error body)
+        logger.warning(f"EIA {series_id} returned 0 rows. response={str(data)[:400]}")
     except Exception as e:
         logger.warning(f"EIA {series_id} failed: {e}")
+    # Fallback: stale cache beats an empty response in the UI
+    stale = _read_stale_cache(cache_key)
+    if stale:
+        logger.info(f"EIA {series_id}: serving stale cache ({len(stale)} rows)")
+        return stale
     return []
 
 
@@ -898,7 +923,13 @@ def fetch_eia_inventories() -> Dict[str, List[dict]]:
 
 
 def _fred_series(series_id: str, cache_key: str, ttl: int = None) -> List[dict]:
-    """Internal helper — fetch a FRED series with cache."""
+    """Internal helper — fetch a FRED series with cache.
+
+    On live-fetch failure or empty response, falls back to the stale cache file
+    so the UI keeps showing yesterday's numbers instead of going blank. Same
+    rationale as `_eia_weekly_stocks`: freshness matters less than continuity
+    for an exec dashboard.
+    """
     cached = _read_cache(cache_key, ttl if ttl is not None else config.CACHE_TTL_YFINANCE)
     if cached:
         return cached
@@ -915,8 +946,14 @@ def _fred_series(series_id: str, cache_key: str, ttl: int = None) -> List[dict]:
             _write_cache(cache_key, records)
             logger.info(f"FRED {series_id}: fetched {len(records)} data points")
             return records
+        logger.warning(f"FRED {series_id} returned 0 rows")
     except Exception as e:
         logger.warning(f"FRED {series_id} failed: {e}")
+    # Fallback: stale cache beats an empty response in the UI
+    stale = _read_stale_cache(cache_key)
+    if stale:
+        logger.info(f"FRED {series_id}: serving stale cache ({len(stale)} rows)")
+        return stale
     return []
 
 
@@ -989,6 +1026,12 @@ def fetch_gdelt_tone(timespan: str = "90d") -> dict:
 
     if result["tone"] or result["volume"]:
         _write_cache(f"gdelt_tone_{timespan}", result)
+        return result
+    # Both branches empty — fall back to stale cache rather than blank chart
+    stale = _read_stale_cache(f"gdelt_tone_{timespan}")
+    if stale:
+        logger.info(f"GDELT: serving stale cache (tone={len(stale.get('tone') or [])})")
+        return stale
     return result
 
 
