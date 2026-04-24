@@ -1491,6 +1491,23 @@ button { font-family: inherit; cursor: pointer; }
   color: var(--cyan);
   border-color: rgba(0,212,255,0.4);
 }
+/* Active filter — persists after click; thicker border, cyan fill */
+.vt-chip.is-active {
+  color: var(--bg);
+  background: var(--cyan);
+  border-color: var(--cyan);
+  box-shadow: 0 0 8px rgba(0,212,255,0.35);
+}
+.vt-panel[data-cp="hormuz"] .vt-chip.is-active {
+  background: var(--red);
+  border-color: var(--red);
+  box-shadow: 0 0 8px rgba(255,92,92,0.35);
+}
+.vt-panel[data-cp="bab"] .vt-chip.is-active {
+  background: var(--orange);
+  border-color: var(--orange);
+  box-shadow: 0 0 8px rgba(255,180,80,0.35);
+}
 .vt-frame-wrap {
   position: relative;
   width: 100%;

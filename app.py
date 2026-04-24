@@ -5,6 +5,7 @@ Run: python app.py
 import asyncio
 import json
 import threading
+import time
 from functools import partial
 
 import uvicorn
@@ -103,11 +104,39 @@ async def get_master_data():
     return await _run_sync(data_service.load_master_dataset)
 
 
+# Fields dropped from the LITE /api/events response. These are the heavy
+# string fields the dashboard doesn't need for maps / KPIs / Houthi filters:
+#   notes        ~ 300–900 chars/event — ACLED prose summary (only used by the
+#                  Data Explorer's full-text search)
+#   source       ~ 40–120 chars/event — news-source credit
+#   source_scale ~ 15–30 chars/event — "Regional / National / ..."
+#   tags         ~ 20–80 chars/event — ACLED internal taxonomy tags
+# Dropping these cuts the payload roughly 60–70% (~13MB → ~4–5MB) and more
+# than doubles front-end parse speed on Render's slow egress path. The Data
+# Explorer can opt back in via /api/events?lite=0 when the user starts
+# typing a search query.
+_EVENT_LITE_DROP = ("notes", "source", "source_scale", "tags")
+
+
+def _lite_event(e: dict) -> dict:
+    # New dict (don't mutate the cached one — the full version is shared by
+    # both the diag endpoint and the in-process memo).
+    return {k: v for k, v in e.items() if k not in _EVENT_LITE_DROP}
+
+
 @app.get("/api/events")
-async def get_events():
-    """ACLED event data for map and table."""
+async def get_events(lite: int = 1):
+    """ACLED event data for map and table.
+
+    Defaults to the LITE payload (drops `notes`/`source`/`source_scale`/`tags`)
+    to keep the Incidents tab responsive on slow networks. Pass `?lite=0` to
+    get the full payload with prose `notes` — used by the Data Explorer's
+    search box on focus.
+    """
     events = await _run_sync(data_service.fetch_acled_events)
-    return {"count": len(events), "data": events}
+    if lite:
+        events = [_lite_event(e) for e in events]
+    return {"count": len(events), "data": events, "lite": bool(lite)}
 
 
 @app.get("/api/thesis-events")
@@ -380,9 +409,6 @@ async def preload_data():
         gc.collect()
 
         # Phase 2: master + transit counts. These are all small (<1MB each).
-        # NB: ACLED is intentionally NOT preloaded — it's 13MB and its on-disk
-        # cache is already warm from prior deploys. First /api/events call
-        # populates the in-process memo; subsequent calls are instant.
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             futures = {
                 "master": pool.submit(data_service.load_master_dataset),
@@ -400,7 +426,24 @@ async def preload_data():
                 except Exception as e:
                     print(f"  [preload] {name}: FAILED ({e})")
         gc.collect()
-        print("  [preload] Cache warming complete (ACLED deferred to first request)")
+
+        # Phase 3: ACLED. Deliberately runs AFTER phases 1+2 have returned
+        # so their intermediate DataFrames have been released (gc.collect
+        # above). Previously this was skipped because 6-wide parallel
+        # preload + ACLED's 13MB blob OOM'd Render free. With the tighter
+        # per-phase memory budget above, we can afford to warm ACLED
+        # serially on boot so the first visitor doesn't wait 90+ seconds
+        # for the Incidents tab. If it fails, the first /api/events call
+        # still falls back to a live fetch — no user-visible regression.
+        try:
+            print("  [preload] ACLED: warming cache (serial, post-gc)...")
+            t0 = time.time()
+            events = data_service.fetch_acled_events()
+            print(f"  [preload] ACLED: OK — {len(events)} events in {time.time()-t0:.1f}s")
+        except Exception as e:
+            print(f"  [preload] ACLED: FAILED ({e}) — will lazy-load on first request")
+        gc.collect()
+        print("  [preload] Cache warming complete")
 
     # Fire-and-forget in a daemon thread — server starts immediately
     t = threading.Thread(target=_preload, daemon=True)

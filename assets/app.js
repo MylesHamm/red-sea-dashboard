@@ -353,6 +353,41 @@ document.addEventListener('DOMContentLoaded', () => {
     const s = window.CP && window.CP.state;
     return (s && Array.isArray(s.events) && s.events.length) ? s.events : (window.THESIS_EVENTS || []);
   }
+
+  // The main /api/events payload is served LITE (no `notes`) so the Incidents
+  // tab loads fast. When the user first clicks into the search box or opens
+  // the Data Explorer, lazy-fetch the FULL payload with notes so full-text
+  // search works. One-shot — we upgrade the cached state in place and then
+  // never re-fetch until the page reloads.
+  let dpFullLoaded = false;
+  let dpFullPromise = null;
+  function dpEnsureFullEvents() {
+    if (dpFullLoaded || dpFullPromise) return dpFullPromise || Promise.resolve();
+    if (!window.API || !window.API.eventsFull) return Promise.resolve();
+    dpFullPromise = window.API.eventsFull()
+      .then(r => {
+        const full = (r && r.data) || [];
+        if (full.length && window.CP && window.CP.state) {
+          window.CP.state.events = full;
+          dpFullLoaded = true;
+          // Re-render whatever the user is currently viewing so notes-aware
+          // search sees the upgraded payload.
+          try { dpRender(); } catch (_) {}
+        }
+      })
+      .catch(() => {})
+      .finally(() => { dpFullPromise = null; });
+    return dpFullPromise;
+  }
+  // Trigger the full fetch on first interaction with the overlay. Focus on
+  // search, typing in search, or opening the overlay via the nav button all
+  // count as "user actually wants to dig in."
+  if (dpSearch) {
+    dpSearch.addEventListener('focus', dpEnsureFullEvents, { once: true });
+  }
+  if (openBtn) {
+    openBtn.addEventListener('click', () => setTimeout(dpEnsureFullEvents, 300), { once: true });
+  }
   function dpFilter() {
     const events = dpEvents();
     const q = (dpSearch && dpSearch.value || '').trim().toLowerCase();
@@ -526,22 +561,83 @@ document.addEventListener('DOMContentLoaded', () => {
   wireVesselEmbed('vtBabFrame',    'vtBabWrap');
 
   // ── Vessel-class filter chips (MarineTraffic) ──
-  // The /ais/embed/ route ignores the `vtypes` URL segment in practice (the
-  // embed always renders the full fleet, regardless of what we put in the
-  // URL). The /ais/home/ fullscreen route DOES honor it. So each chip is an
-  // anchor that opens MarineTraffic's fullscreen view in a new tab with the
-  // chosen vessel class applied — that gives the user a reliable way to
-  // de-clutter the map without pretending the iframe filter works.
-  // Codes: 6 = passenger, 7 = tankers, 8 = cargo. Pipe-separate ("7|8") to
-  // combine.
+  // Each panel has its own `<iframe>` (MT /ais/embed/) and a chip row. Clicking
+  // a chip:
+  //   1. Rewrites the iframe src with the `vtypes:X` path segment so the
+  //      embedded map filters to that vessel class (7=tanker, 8=cargo,
+  //      6=passenger, "7|8"=tanker+cargo).
+  //   2. Toggles a `.is-active` state on the chip (radio-group semantics —
+  //      clicking ALL clears the filter).
+  //   3. Updates the sibling "FULLSCREEN ↗" link so the pop-out preserves
+  //      the currently-selected filter.
+  //
+  // If MarineTraffic's embed route silently ignores `vtypes` (their embed
+  // parity with /ais/home/ has historically been patchy), the iframe visibly
+  // reloads and the fullscreen link still opens the properly-filtered view —
+  // so the user always has a working filtered view one click away. No
+  // pretending the filter silently applied.
   function wireVesselFilters() {
-    const filters = document.querySelectorAll('.vt-filter[data-fs-base]');
-    filters.forEach(filter => {
-      const base = filter.dataset.fsBase;
-      if (!base) return;
-      filter.querySelectorAll('.vt-chip[data-vtypes]').forEach(chip => {
+    const panels = document.querySelectorAll('.vt-panel');
+    panels.forEach(panel => {
+      const frame = panel.querySelector('.vt-frame');
+      const fullLink = panel.querySelector('.vt-foot-link');
+      const filter = panel.querySelector('.vt-filter[data-fs-base]');
+      if (!frame || !filter) return;
+      const fsBase = filter.dataset.fsBase || '';
+      const srcOriginal = frame.getAttribute('src') || '';
+      const fullOriginal = fullLink ? fullLink.getAttribute('href') : '';
+
+      // Build the embed src with a vtypes segment. MT's embed URL is
+      // colon-delimited path segments; we splice `vtypes:X` in right after
+      // `/embed/` so it's before the other map params.
+      function buildFrameSrc(vtypes) {
+        if (!vtypes) return srcOriginal;
+        return srcOriginal.replace(
+          /\/ais\/embed\//,
+          `/ais/embed/vtypes:${encodeURIComponent(vtypes)}/`
+        );
+      }
+      function buildFullSrc(vtypes) {
+        if (!vtypes) return fullOriginal || fsBase;
+        return `${fsBase}/vtypes:${encodeURIComponent(vtypes)}`;
+      }
+
+      const chips = Array.from(filter.querySelectorAll('.vt-chip'));
+      // Ensure there's an "ALL" reset chip at the front. If markup already
+      // provides one, leave it alone.
+      let allChip = chips.find(c => (c.dataset.vtypes || '') === '' || c.classList.contains('vt-chip-all'));
+      if (!allChip) {
+        allChip = document.createElement('a');
+        allChip.className = 'vt-chip vt-chip-all is-active';
+        allChip.textContent = 'ALL';
+        allChip.href = fsBase;
+        allChip.setAttribute('target', '_blank');
+        allChip.setAttribute('rel', 'noopener');
+        const row = filter.querySelector('.vt-chip-row');
+        if (row) row.insertBefore(allChip, row.firstChild);
+        chips.unshift(allChip);
+      }
+      // Default active = ALL.
+      if (!chips.some(c => c.classList.contains('is-active'))) {
+        allChip.classList.add('is-active');
+      }
+
+      chips.forEach(chip => {
         const vtypes = chip.dataset.vtypes || '';
-        chip.href = vtypes ? `${base}/vtypes:${vtypes}` : base;
+        // Preserve the right-click-→-open-in-new-tab affordance: href stays
+        // pointed at the filtered fullscreen URL, but left-click is
+        // intercepted and filters the iframe instead.
+        chip.setAttribute('href', buildFullSrc(vtypes));
+        chip.addEventListener('click', ev => {
+          // Let ctrl/cmd/middle/shift clicks fall through — user is
+          // explicitly asking to open in a new tab. Otherwise: filter.
+          if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button === 1) return;
+          ev.preventDefault();
+          chips.forEach(c => c.classList.remove('is-active'));
+          chip.classList.add('is-active');
+          frame.setAttribute('src', buildFrameSrc(vtypes));
+          if (fullLink) fullLink.setAttribute('href', buildFullSrc(vtypes));
+        });
       });
     });
   }

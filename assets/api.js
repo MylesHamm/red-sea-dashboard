@@ -43,6 +43,8 @@ window.API = (function () {
     health:           ()  => _fetch('/api/health'),
     master:           ()  => _fetch('/api/master',               { ttlMs: 60_000 }),
     events:           ()  => _fetch('/api/events',               { ttlMs: 60_000 }),
+    // Heavy payload with `notes` — only used by Data Explorer search.
+    eventsFull:       ()  => _fetch('/api/events?lite=0',         { ttlMs: 300_000 }),
     thesisEvents:     ()  => _fetch('/api/thesis-events',        { ttlMs: 300_000 }),
     brent:            ()  => _fetch('/api/brent',                { ttlMs: 60_000 }),
     dxy:              ()  => _fetch('/api/dxy',                  { ttlMs: 60_000 }),
