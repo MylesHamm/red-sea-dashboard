@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
 
-<link rel="stylesheet" href="assets/app.css?v=20260424c">
+<link rel="stylesheet" href="assets/app.css?v=20260424d">
 </head>
 <body>
 
@@ -161,6 +161,24 @@
       <div class="kpi-sec">
         <div class="kpi-sec-label">PEAK DAILY VOL</div>
         <div class="kpi-sec-value" data-kpi="peakVol">8.7%</div>
+      </div>
+
+      <!-- Market Context row — Tier-1 FRED/EIA macro -->
+      <div class="kpi-sec" title="WTI–Brent spread. Negative = Brent premium (tight seaborne supply).">
+        <div class="kpi-sec-label">WTI–BRENT SPREAD</div>
+        <div class="kpi-sec-value" data-kpi="wtiBrent">—</div>
+      </div>
+      <div class="kpi-sec" title="CBOE Volatility Index. >25 = elevated broad-market stress.">
+        <div class="kpi-sec-label">VIX</div>
+        <div class="kpi-sec-value" data-kpi="vix">—</div>
+      </div>
+      <div class="kpi-sec" title="BofA US High-Yield effective yield. Credit-spread proxy for recession/stress risk.">
+        <div class="kpi-sec-label">HY CREDIT YIELD</div>
+        <div class="kpi-sec-value" data-kpi="hyYield">—</div>
+      </div>
+      <div class="kpi-sec" title="US commercial crude inventories (weekly, EIA). Draws = physical tightness.">
+        <div class="kpi-sec-label">US CRUDE STOCKS</div>
+        <div class="kpi-sec-value" data-kpi="crudeStocks">—</div>
       </div>
     </section>
 
@@ -718,6 +736,21 @@
       </div>
     </section>
 
+    <!-- GDELT global media tone — Tier-1 free API -->
+    <section class="narrative-block">
+      <div class="nb-header">
+        <div class="nb-index">§ 09b</div>
+        <div>
+          <h2 class="nb-title">Global Media Tone · Iran Oil Coverage</h2>
+          <p class="nb-subtitle">GDELT DOC 2.0 daily-average tone of English-language news mentioning Iran + oil/Hormuz/military. Scale: −100 very negative, +100 very positive. Sharp negative swings precede or accompany price spikes.</p>
+        </div>
+        <div class="nb-badges"><span class="badge badge-blue">LIVE · GDELT</span></div>
+      </div>
+      <div class="chart-surface" style="height:260px">
+        <canvas id="gdeltToneChart"></canvas>
+      </div>
+    </section>
+
     <!-- Scenario forecast -->
     <section class="scenario-block">
       <div class="nb-header">
@@ -808,12 +841,12 @@
 </div>
 
 <!-- Scripts -->
-<script src="assets/api.js?v=20260424c"></script>
-<script src="assets/data.js?v=20260424c"></script>
-<script src="assets/hydrate.js?v=20260424c"></script>
-<script src="assets/globe.js?v=20260424c"></script>
-<script src="assets/tacmap.js?v=20260424c"></script>
-<script src="assets/charts.js?v=20260424c"></script>
-<script src="assets/app.js?v=20260424c"></script>
+<script src="assets/api.js?v=20260424d"></script>
+<script src="assets/data.js?v=20260424d"></script>
+<script src="assets/hydrate.js?v=20260424d"></script>
+<script src="assets/globe.js?v=20260424d"></script>
+<script src="assets/tacmap.js?v=20260424d"></script>
+<script src="assets/charts.js?v=20260424d"></script>
+<script src="assets/app.js?v=20260424d"></script>
 </body>
 </html>

@@ -64,6 +64,10 @@ window.API = (function () {
     iranRegression:   ()  => _fetch('/api/iran-regression',      { ttlMs: 600_000 }),
     refresh:          ()  => fetch(BASE + '/api/refresh', { method: 'POST' }).then(r => r.json()),
     refreshStatus:    ()  => _fetch('/api/refresh-status'),
+    // Tier-1 free APIs (EIA inventories + FRED macro + GDELT media tone)
+    eiaInventories:   ()  => _fetch('/api/eia-inventories',     { ttlMs: 900_000 }),
+    macroContext:     ()  => _fetch('/api/macro-context',       { ttlMs: 300_000 }),
+    gdeltTone:        ()  => _fetch('/api/gdelt-tone',          { ttlMs: 1_800_000 }),
     // Live AIS — short TTL because vessels move in real time
     vessels:          (cp) => _fetch(`/api/vessels/${encodeURIComponent(cp)}`, { ttlMs: 15_000 }),
     vesselsStatus:    ()   => _fetch('/api/vessels-status', { ttlMs: 15_000 }),

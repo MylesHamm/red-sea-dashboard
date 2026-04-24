@@ -843,6 +843,155 @@ def fetch_china_pmi() -> List[dict]:
     return []
 
 
+# ─── Tier-1 Free API Integrations (EIA inventories, FRED macro, GDELT) ──────
+# These endpoints enrich the Overview and US-Iran tabs with context that
+# exec-level readers expect on an oil-price dashboard: physical supply
+# (crude inventories + Cushing), forward inflation (5y breakeven), broad
+# risk (VIX, HY credit spreads), and media attention (GDELT tone timeline).
+
+def _eia_weekly_stocks(series_id: str, cache_key: str) -> List[dict]:
+    """Internal helper — fetch a weekly stocks series from EIA v2 by series ID."""
+    cached = _read_cache(cache_key, config.CACHE_TTL_BRENT)
+    if cached:
+        return cached
+    try:
+        resp = requests.get(
+            f"{config.EIA_BASE_URL}/petroleum/stoc/wstk/data",
+            params={
+                "api_key": config.EIA_API_KEY,
+                "frequency": "weekly",
+                "data[0]": "value",
+                "facets[series][]": series_id,
+                "sort[0][column]": "period",
+                "sort[0][direction]": "asc",
+                "start": "2023-10-01",
+                "length": 5000,
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        records = [
+            {"date": r["period"], "value": float(r["value"])}
+            for r in data.get("response", {}).get("data", [])
+            if r.get("value") is not None
+        ]
+        if records:
+            _write_cache(cache_key, records)
+            logger.info(f"EIA {series_id}: fetched {len(records)} weekly data points")
+            return records
+    except Exception as e:
+        logger.warning(f"EIA {series_id} failed: {e}")
+    return []
+
+
+def fetch_eia_inventories() -> Dict[str, List[dict]]:
+    """Fetch weekly US commercial crude inventories + Cushing hub stocks.
+
+    Critical context for an oil dashboard: draws on inventories during the war
+    quantify physical supply tightness that price alone can obscure. Cushing
+    (WTI delivery hub) matters because low stocks there amplify backwardation.
+    """
+    commercial = _eia_weekly_stocks("WCESTUS1", "eia_commercial_crude")
+    cushing = _eia_weekly_stocks("W_EPC0_SAX_YCUOK_MBBL", "eia_cushing_stocks")
+    return {"commercial_crude": commercial, "cushing": cushing}
+
+
+def _fred_series(series_id: str, cache_key: str, ttl: int = None) -> List[dict]:
+    """Internal helper — fetch a FRED series with cache."""
+    cached = _read_cache(cache_key, ttl if ttl is not None else config.CACHE_TTL_YFINANCE)
+    if cached:
+        return cached
+    try:
+        from fredapi import Fred
+        fred = Fred(api_key=config.FRED_API_KEY)
+        series = fred.get_series(series_id, observation_start="2023-10-01")
+        records = [
+            {"date": idx.strftime("%Y-%m-%d"), "value": round(float(val), 4)}
+            for idx, val in series.items()
+            if pd.notna(val)
+        ]
+        if records:
+            _write_cache(cache_key, records)
+            logger.info(f"FRED {series_id}: fetched {len(records)} data points")
+            return records
+    except Exception as e:
+        logger.warning(f"FRED {series_id} failed: {e}")
+    return []
+
+
+def fetch_macro_context() -> Dict[str, List[dict]]:
+    """Fetch macro-financial context series from FRED.
+
+    - DCOILWTICO: WTI crude spot (for Brent-WTI spread — key freight / Cushing signal)
+    - T5YIE: 5-year breakeven inflation (market's pricing of war→inflation pass-through)
+    - VIXCLS: S&P 500 volatility (broad risk-on/risk-off gauge)
+    - BAMLH0A0HYM2EY: US High-Yield effective yield (credit spread stress)
+    """
+    return {
+        "wti":        _fred_series("DCOILWTICO",       "fred_wti"),
+        "breakeven5": _fred_series("T5YIE",            "fred_breakeven5"),
+        "vix":        _fred_series("VIXCLS",           "fred_vix"),
+        "hy_yield":   _fred_series("BAMLH0A0HYM2EY",   "fred_hy_yield"),
+    }
+
+
+def fetch_gdelt_tone(timespan: str = "90d") -> dict:
+    """Fetch GDELT DOC 2.0 TimelineTone for Iran-related coverage.
+
+    Keyless public API. Returns a daily timeline of average tone (–100 very
+    negative, +100 very positive) for English-language news mentioning Iran
+    in an oil/strait/military context. A sharp negative swing typically
+    precedes or accompanies market stress.
+
+    Also fetches TimelineVolRaw (raw article volume) so the frontend can
+    overlay attention intensity alongside tone.
+    """
+    cached = _read_cache(f"gdelt_tone_{timespan}", 3600)  # 1-hour TTL — news-cycle data
+    if cached:
+        return cached
+
+    query = 'iran AND (oil OR "strait of hormuz" OR military OR strikes OR sanctions)'
+    base = "https://api.gdeltproject.org/api/v2/doc/doc"
+    result = {"tone": [], "volume": []}
+
+    for mode, key in [("TimelineTone", "tone"), ("TimelineVolRaw", "volume")]:
+        try:
+            resp = requests.get(
+                base,
+                params={
+                    "mode": mode,
+                    "query": query,
+                    "format": "json",
+                    "timespan": timespan,
+                    "sort": "datedesc",
+                },
+                headers=_BROWSER_HEADERS,
+                timeout=30,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            timeline = data.get("timeline", [])
+            if timeline and timeline[0].get("data"):
+                # GDELT returns ISO dates like "20260415T000000Z"
+                records = []
+                for r in timeline[0]["data"]:
+                    raw_date = r.get("date", "")
+                    if len(raw_date) >= 8:
+                        date_str = f"{raw_date[0:4]}-{raw_date[4:6]}-{raw_date[6:8]}"
+                        val = r.get("value")
+                        if val is not None:
+                            records.append({"date": date_str, "value": round(float(val), 4)})
+                result[key] = records
+                logger.info(f"GDELT {mode}: fetched {len(records)} daily points")
+        except Exception as e:
+            logger.warning(f"GDELT {mode} failed: {e}")
+
+    if result["tone"] or result["volume"]:
+        _write_cache(f"gdelt_tone_{timespan}", result)
+    return result
+
+
 # ─── Master Dataset (CSV Backbone) ──────────────────────────────────────────
 
 def load_master_dataset() -> dict:

@@ -287,6 +287,26 @@ async def get_iran_regression():
     return await _run_sync(data_service.run_iran_regression)
 
 
+# ─── Tier-1 Free APIs (EIA inventories, FRED macro, GDELT tone) ─────────────
+
+@app.get("/api/eia-inventories")
+async def get_eia_inventories():
+    """Weekly US commercial crude inventories + Cushing hub stocks (EIA v2)."""
+    return await _run_sync(data_service.fetch_eia_inventories)
+
+
+@app.get("/api/macro-context")
+async def get_macro_context():
+    """Macro context bundle from FRED: WTI, 5y breakeven, VIX, HY yield."""
+    return await _run_sync(data_service.fetch_macro_context)
+
+
+@app.get("/api/gdelt-tone")
+async def get_gdelt_tone():
+    """GDELT DOC 2.0 TimelineTone for Iran oil/military coverage (keyless)."""
+    return await _run_sync(data_service.fetch_gdelt_tone)
+
+
 # ─── Live AIS Vessel Feed (AISStream.io WebSocket) ───────────────────────────
 
 @app.get("/api/vessels/{chokepoint}")
@@ -327,7 +347,10 @@ def _do_refresh():
 
         # Clear only API-driven caches (preserve master_dataset, thesis_events)
         _api_caches = {"acled_events", "iran_events", "brent_prices", "iran_news",
-                       "spr_data", "dxy", "ovx", "china_pmi"}
+                       "spr_data", "dxy", "ovx", "china_pmi",
+                       "eia_commercial_crude", "eia_cushing_stocks",
+                       "fred_wti", "fred_breakeven5", "fred_vix", "fred_hy_yield",
+                       "gdelt_tone_90d"}
         for cache_file in config.CACHE_DIR.glob("*.json"):
             if cache_file.stem in _api_caches:
                 try:

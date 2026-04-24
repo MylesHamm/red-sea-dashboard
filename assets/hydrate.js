@@ -425,6 +425,152 @@
     }
   }
 
+  // ── Market Context KPIs — Tier-1 FRED/EIA ──────────────────────────────────
+  // Populates the WTI-Brent spread, VIX, HY yield, and US crude inventory
+  // tiles. All four sources are live APIs; silently skip any tile whose
+  // endpoint returned empty (Render free-tier cold-start can leave one of
+  // these unfetched on first paint — they'll hydrate on next cache cycle).
+  function hydrateMarketContext(macro, inventories, brent) {
+    const last = (arr) => (Array.isArray(arr) && arr.length) ? arr[arr.length - 1] : null;
+
+    // WTI – Brent spread (signed, 2dp). Positive = WTI premium (domestic oversupply rare);
+    // negative = Brent premium (tight seaborne supply, the common war-regime signal).
+    const wtiBrentEl = document.querySelector('[data-kpi="wtiBrent"]');
+    if (wtiBrentEl) {
+      const wti = last(macro && macro.wti);
+      // `brent` is the full Brent array (price field); find the most recent row that has a WTI date match,
+      // else just take the last Brent price available.
+      let brentLast = null;
+      if (Array.isArray(brent) && brent.length) {
+        if (wti && wti.date) {
+          // Walk backward to find the Brent row on-or-before the WTI date (markets close slightly differently).
+          for (let i = brent.length - 1; i >= 0; i--) {
+            if (brent[i].date <= wti.date) { brentLast = brent[i]; break; }
+          }
+        }
+        if (!brentLast) brentLast = brent[brent.length - 1];
+      }
+      if (wti && brentLast) {
+        const spread = (+wti.value) - (+brentLast.price);
+        const sign = spread >= 0 ? '+' : '';
+        const arrow = spread >= 0 ? '<span class="up">▲</span>' : '<span class="down">▼</span>';
+        wtiBrentEl.innerHTML = `${sign}$${spread.toFixed(2)} ${arrow}`;
+      }
+    }
+
+    // VIX — S&P 500 volatility. >25 = elevated.
+    const vixEl = document.querySelector('[data-kpi="vix"]');
+    if (vixEl) {
+      const v = last(macro && macro.vix);
+      if (v && v.value != null) {
+        const arrow = v.value > 20 ? '<span class="up">▲</span>' : '<span class="down">▼</span>';
+        vixEl.innerHTML = `${(+v.value).toFixed(1)} ${arrow}`;
+      }
+    }
+
+    // HY effective yield (%). Higher = credit-market stress.
+    const hyEl = document.querySelector('[data-kpi="hyYield"]');
+    if (hyEl) {
+      const h = last(macro && macro.hy_yield);
+      if (h && h.value != null) {
+        const arrow = h.value > 7.5 ? '<span class="up">▲</span>' : '<span class="down">▼</span>';
+        hyEl.innerHTML = `${(+h.value).toFixed(2)}% ${arrow}`;
+      }
+    }
+
+    // US commercial crude stocks — latest weekly reading (thousand barrels).
+    // Display in million-bbl and show W/W change arrow.
+    const stocksEl = document.querySelector('[data-kpi="crudeStocks"]');
+    if (stocksEl && inventories && Array.isArray(inventories.commercial_crude) && inventories.commercial_crude.length >= 2) {
+      const arr = inventories.commercial_crude;
+      const cur = arr[arr.length - 1];
+      const prev = arr[arr.length - 2];
+      if (cur && prev && cur.value != null && prev.value != null) {
+        const delta = cur.value - prev.value;  // thousands of bbl
+        const mmbbl = cur.value / 1000;        // convert to million bbl
+        const arrow = delta >= 0 ? '<span class="up">▲</span>' : '<span class="down">▼</span>';
+        const dSign = delta >= 0 ? '+' : '';
+        stocksEl.innerHTML = `${mmbbl.toFixed(0)} mmbbl <span class="kpi-unit" style="font-size:10px;opacity:.7">${dSign}${(delta/1000).toFixed(1)} W/W</span> ${arrow}`;
+      }
+    }
+  }
+
+  // ── GDELT tone chart (Iran media sentiment) ───────────────────────────────
+  // Small Chart.js line chart on the US-Iran tab. Renders only if the
+  // canvas + data are both present; safe no-op otherwise.
+  let __gdeltChartInstance = null;
+  function renderGdeltChart(gdelt) {
+    const canvas = document.getElementById('gdeltToneChart');
+    if (!canvas || !window.Chart || !gdelt) return;
+    const tone = Array.isArray(gdelt.tone) ? gdelt.tone : [];
+    if (!tone.length) return;
+
+    // Sort ascending by date (GDELT returns newest first)
+    const sorted = tone.slice().sort((a, b) => a.date.localeCompare(b.date));
+    const labels = sorted.map(r => r.date);
+    const values = sorted.map(r => +r.value);
+
+    // Build a 7-day simple moving average to smooth the day-to-day noise
+    const sma = values.map((_, i) => {
+      const window = values.slice(Math.max(0, i - 6), i + 1);
+      return window.reduce((s, v) => s + v, 0) / window.length;
+    });
+
+    if (__gdeltChartInstance) {
+      try { __gdeltChartInstance.destroy(); } catch (_) {}
+    }
+    __gdeltChartInstance = new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Daily tone',
+            data: values,
+            borderColor: 'rgba(61, 153, 212, 0.45)',
+            backgroundColor: 'rgba(61, 153, 212, 0.08)',
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: true,
+            tension: 0.2,
+          },
+          {
+            label: '7-day avg',
+            data: sma,
+            borderColor: '#ff5252',
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: false,
+            tension: 0.25,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#c8d0dc', font: { family: 'JetBrains Mono', size: 10 } } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: ${(+ctx.parsed.y).toFixed(2)}`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            ticks: { color: '#7e8699', font: { family: 'JetBrains Mono', size: 9 }, maxTicksLimit: 8 },
+            grid: { color: 'rgba(255,255,255,0.04)' },
+          },
+          y: {
+            ticks: { color: '#7e8699', font: { family: 'JetBrains Mono', size: 9 } },
+            grid: { color: 'rgba(255,255,255,0.05)' },
+            title: { display: true, text: 'Average tone', color: '#9099aa', font: { size: 10 } },
+          },
+        },
+      },
+    });
+  }
+
   // ── News & event feed ─────────────────────────────────────────────────────
   function hydrateFeed(news) {
     const feed = $('feedList');
@@ -720,6 +866,21 @@
     API.iranImpact()
       .then(r => hydrateIranKpis(r))
       .catch(() => hydrateIranKpis(null));
+
+    // Market-context tiles (WTI-Brent spread, VIX, HY, US crude stocks).
+    // All three endpoints are fetched in parallel and rendered independently
+    // so a single slow endpoint can't hold up the overview.
+    Promise.all([
+      API.macroContext().catch(() => null),
+      API.eiaInventories().catch(() => null),
+    ]).then(([macro, inv]) => {
+      try { hydrateMarketContext(macro, inv, brent); } catch (e) { console.warn('market-context render failed', e); }
+    });
+
+    // GDELT media tone — renders on US-Iran tab, non-blocking
+    API.gdeltTone()
+      .then(g => { try { renderGdeltChart(g); } catch (e) { console.warn('gdelt render failed', e); } })
+      .catch(() => {});
 
     if (errors.length) {
       console.warn('Hydrator: partial failure —', errors);
