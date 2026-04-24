@@ -731,6 +731,74 @@ button { font-family: inherit; cursor: pointer; }
 }
 @keyframes blink { 0%,70%,100% { opacity: 0.55; } 85% { opacity: 1; } }
 
+/* Era badge (top-left corner of globe) — reflects temporal scrubber state */
+.globe-era {
+  position: absolute;
+  top: 16px; left: 16px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--text-mute);
+  background: rgba(5,8,13,0.82);
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  z-index: 4;
+}
+.globe-era b { font-weight: 700; margin-left: 4px; color: var(--cyan); }
+.globe-era.era-pre b    { color: var(--green); }
+.globe-era.era-houthi b { color: var(--orange); }
+.globe-era.era-war b    { color: var(--red); }
+
+/* Vertical zoom slider, bottom-left of globe */
+.globe-zoom {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px;
+  background: rgba(5,8,13,0.78);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  z-index: 4;
+}
+.globe-zoom .gz-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--text-mute);
+  font-weight: 700;
+}
+.globe-zoom input[type="range"] {
+  -webkit-appearance: slider-vertical;
+  appearance: slider-vertical;
+  writing-mode: bt-lr;
+  width: 16px;
+  height: 130px;
+  background: transparent;
+  accent-color: var(--cyan);
+  cursor: ns-resize;
+}
+.globe-zoom .gz-reset {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-mute);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 2px 6px;
+  cursor: pointer;
+  line-height: 1;
+  transition: color 0.15s, border-color 0.15s;
+}
+.globe-zoom .gz-reset:hover {
+  color: var(--cyan);
+  border-color: rgba(0,212,255,0.45);
+}
+
 /* Globe svg internals */
 .globe-sphere { fill: url(#sphereGrad); stroke: rgba(0,212,255,0.15); stroke-width: 0.5; }
 .globe-graticule { fill: none; stroke: rgba(0,212,255,0.07); stroke-width: 0.5; }
@@ -1377,24 +1445,23 @@ button { font-family: inherit; cursor: pointer; }
   border-radius: 3px;
   padding: 5px 9px;
   cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.vt-panel[data-cp="hormuz"] .vt-chip:hover {
+  color: var(--bg);
+  background: var(--red);
+  border-color: var(--red);
+}
+.vt-panel[data-cp="bab"] .vt-chip:hover {
+  color: var(--bg);
+  background: var(--orange);
+  border-color: var(--orange);
 }
 .vt-chip:hover {
   color: var(--cyan);
   border-color: rgba(0,212,255,0.4);
-}
-.vt-chip.active {
-  color: var(--bg);
-  background: var(--cyan);
-  border-color: var(--cyan);
-}
-.vt-panel[data-cp="hormuz"] .vt-chip.active {
-  background: var(--red);
-  border-color: var(--red);
-}
-.vt-panel[data-cp="bab"] .vt-chip.active {
-  background: var(--orange);
-  border-color: var(--orange);
 }
 .vt-frame-wrap {
   position: relative;
@@ -1538,6 +1605,47 @@ button { font-family: inherit; cursor: pointer; }
 .hyp-supported { color: var(--green); background: rgba(0,230,144,0.08); border: 1px solid rgba(0,230,144,0.3); }
 .hyp-weak { color: var(--amber); background: rgba(255,171,0,0.08); border: 1px solid rgba(255,171,0,0.3); }
 
+/* Plain-English explainer under each hypothesis verdict */
+.hyp-plain {
+  margin-top: 10px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  background: rgba(0,0,0,0.18);
+  border-left: 2px solid rgba(0,212,255,0.45);
+  border-radius: 0 3px 3px 0;
+}
+.hyp-plain b { color: var(--text); font-weight: 600; }
+
+/* "How to read this" explainer card — above the hypothesis row */
+.howto-card {
+  background: rgba(0,212,255,0.04);
+  border: 1px solid rgba(0,212,255,0.25);
+  border-left: 3px solid var(--cyan);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  margin-bottom: 22px;
+}
+.howto-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--cyan);
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.howto-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 22px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+.howto-grid b { color: var(--text); font-weight: 700; }
+.howto-grid i { color: var(--text); font-style: italic; }
+
 .garch-block .garch-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1551,6 +1659,21 @@ button { font-family: inherit; cursor: pointer; }
 }
 .gc-lbl { font-family: var(--mono); font-size: 9px; color: var(--text-mute); letter-spacing: 1.5px; }
 .gc-val { font-family: var(--mono); font-size: 15px; color: var(--cyan); font-weight: 700; margin-top: 3px; }
+.gc-hint { font-size: 10px; color: var(--text-dim); margin-top: 3px; font-style: italic; }
+.garch-cell { cursor: help; } /* title attr provides per-cell explanation on hover */
+
+/* Correlation-matrix reader guide */
+.corr-read {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  background: rgba(0,0,0,0.18);
+  border-left: 2px solid rgba(0,212,255,0.45);
+  border-radius: 0 3px 3px 0;
+  padding: 10px 14px;
+  margin: 0 0 14px 0;
+}
+.corr-read b { color: var(--text); font-weight: 700; }
 
 /* Correlation matrix */
 .corr-matrix {

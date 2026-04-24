@@ -152,7 +152,8 @@ function renderPriceVsAttacks(state) {
   const canvas = chartEl('priceAttackChart');
   if (!canvas) return;
   destroyChartOn(canvas);
-  showXfBanner(canvas, xfActiveType());
+  const xfType = xfActiveType();
+  showXfBanner(canvas, xfType);
 
   const ts = applyTimelineRows((state.master && state.master.timeseries) || []);
   if (!ts.length) return showChartEmpty(canvas, 'timeseries unavailable');
@@ -166,7 +167,42 @@ function renderPriceVsAttacks(state) {
 
   const labels   = rows.map(r => r.date);
   const prices   = rows.map(r => (r.brent_price != null ? +r.brent_price : null));
-  const attacks  = rows.map(r => (r.weekly_attacks != null ? +r.weekly_attacks : 0));
+
+  // Weekly attack counts. When the cross-filter is inactive, use the backend's
+  // pre-aggregated `weekly_attacks` column from master.timeseries. When active,
+  // recompute per-week counts from raw ACLED events using the same bucketing
+  // (Monday-anchored ISO week), filtered to only the selected event_type.
+  // This lets the red bars actually SHRINK to the filtered subset instead of
+  // just showing a "FILTER: X" banner over the full-dataset bars.
+  let attacks;
+  if (xfType && Array.isArray(state.events) && state.events.length) {
+    const counts = new Map();
+    for (const e of state.events) {
+      const t = (e.event_type || e.sub_event_type || 'Other').toString();
+      if (t !== xfType) continue;
+      const d = e.event_date;
+      if (!d) continue;
+      // Snap to ISO week-start (Monday)
+      const dt = new Date(d);
+      if (isNaN(dt)) continue;
+      const day = dt.getUTCDay() || 7;      // Sun=0 → 7
+      const monday = new Date(dt); monday.setUTCDate(dt.getUTCDate() - (day - 1));
+      const key = monday.toISOString().slice(0, 10);
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    // For each sampled row, take the count of events in the week ending on/before its date
+    attacks = rows.map(r => {
+      if (!r.date) return 0;
+      const dt = new Date(r.date);
+      if (isNaN(dt)) return 0;
+      const day = dt.getUTCDay() || 7;
+      const monday = new Date(dt); monday.setUTCDate(dt.getUTCDate() - (day - 1));
+      const key = monday.toISOString().slice(0, 10);
+      return counts.get(key) || 0;
+    });
+  } else {
+    attacks = rows.map(r => (r.weekly_attacks != null ? +r.weekly_attacks : 0));
+  }
 
   new Chart(canvas, {
     type: 'line',
@@ -491,6 +527,15 @@ function updateIncidentsKpi() {
     try { renderIranTimeline(state); }   catch (e) {}
   }
   window.addEventListener('cross-filter-changed', () => {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(flush);
+  });
+  // When heavy events arrive AFTER a filter is already active, re-run the
+  // price chart so its weekly bars recompute from the now-populated event
+  // list (init-time render saw an empty events array).
+  window.addEventListener('events-ready', () => {
+    if (!xfActiveType()) return;
     if (pending) return;
     pending = true;
     requestAnimationFrame(flush);

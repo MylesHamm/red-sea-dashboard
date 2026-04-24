@@ -227,7 +227,80 @@
   // Re-render arcs/particles when the temporal scrubber moves. The animation
   // tick will pick up the next state on its own, but we trigger an immediate
   // render() so the user sees the change without waiting for autoRotate.
-  window.addEventListener('timeline-set', () => render());
+  // Also surface the active era label in the globe overlay so the user can
+  // see that scrubbing is actually changing the projection state.
+  const ERA_LABELS = { pre: 'PRE-CRISIS', houthi: 'HOUTHI', war: 'WAR', now: 'WAR' };
+  const eraLabelEl = document.getElementById('globeEraLabel');
+  const eraWrapEl  = document.getElementById('globeEra');
+  function syncEraLabel() {
+    if (!eraLabelEl) return;
+    const era = currentEra();
+    eraLabelEl.textContent = ERA_LABELS[era] || era.toUpperCase();
+    if (eraWrapEl) {
+      eraWrapEl.classList.remove('era-pre', 'era-houthi', 'era-war');
+      eraWrapEl.classList.add('era-' + (era === 'now' ? 'war' : era));
+    }
+  }
+  window.addEventListener('timeline-set', () => {
+    syncEraLabel();
+    render();
+  });
+  syncEraLabel();
+
+  // ── Zoom slider ─────────────────────────────────────────────────────────
+  // Pan the orthographic `scale` between 200 (zoomed out → small globe) and
+  // 720 (zoomed in → sphere fills the SVG). Persist across tab switches so
+  // the user doesn't lose their framing. Zooming pauses autorotate briefly
+  // so the view doesn't drift under the cursor during the drag.
+  const zoomEl = document.getElementById('globeZoom');
+  const zoomReset = document.getElementById('globeZoomReset');
+  const DEFAULT_SCALE = 320;
+  function applyZoom(scale) {
+    projection.scale(scale);
+    render();
+    try { localStorage.setItem('cp_globe_zoom', String(scale)); } catch (e) {}
+  }
+  if (zoomEl) {
+    // Restore persisted zoom
+    try {
+      const saved = parseFloat(localStorage.getItem('cp_globe_zoom'));
+      if (!isNaN(saved) && saved >= 200 && saved <= 720) {
+        zoomEl.value = String(saved);
+        projection.scale(saved);
+      }
+    } catch (e) {}
+    let zoomTimer = null;
+    zoomEl.addEventListener('input', () => {
+      autoRotate = false;
+      applyZoom(+zoomEl.value);
+      if (zoomTimer) clearTimeout(zoomTimer);
+      zoomTimer = setTimeout(() => {
+        autoRotate = true;
+        lastTime = performance.now();
+      }, 1500);
+    });
+    // Wheel-zoom on the globe itself — much more natural than dragging the
+    // slider. Passive listener so scrolling the page isn't blocked on
+    // non-globe elements.
+    stage.addEventListener('wheel', (ev) => {
+      if (!ev.ctrlKey && !ev.metaKey) {
+        // Only intercept when the wheel is over the globe, not page scroll
+        const rect = stage.getBoundingClientRect();
+        if (ev.clientY < rect.top || ev.clientY > rect.bottom) return;
+      }
+      ev.preventDefault();
+      const cur = +zoomEl.value;
+      const next = Math.max(200, Math.min(720, cur - ev.deltaY * 0.5));
+      zoomEl.value = String(next);
+      applyZoom(next);
+    }, { passive: false });
+  }
+  if (zoomReset) {
+    zoomReset.addEventListener('click', () => {
+      if (zoomEl) zoomEl.value = String(DEFAULT_SCALE);
+      applyZoom(DEFAULT_SCALE);
+    });
+  }
 
   // Render (re-project everything that depends on rotation)
   function render(){
@@ -267,6 +340,21 @@
         return g;
       });
 
+    // Era-adjusted node threat: in PRE-CRISIS everything is nominal, in
+    // HOUTHI era Bab el-Mandeb is high but Hormuz is still nominal, WAR uses
+    // the canonical classification. This keeps the dots consistent with the
+    // arc coloring the temporal scrubber already drives.
+    function eraNodeThreat(d, era) {
+      if (!d.isChokepoint) return d.threat;
+      if (era === 'pre')    return 'safe';
+      if (era === 'houthi') {
+        if (d.id === 'hormuz') return 'safe';       // pre-war Gulf was quiet
+        if (d.id === 'bab')    return 'high';       // Houthi Red Sea campaign
+        if (d.id === 'cape')   return 'safe';
+        return d.threat;
+      }
+      return d.threat;
+    }
     nodes.each(function(d){
       const sel = d3.select(this);
       const visible = isVisible([d.lon, d.lat]);
@@ -274,10 +362,11 @@
       sel.attr('display', null);
       const [x, y] = projection([d.lon, d.lat]);
       const isCp = d.isChokepoint;
-      const fill = d.threat === 'critical' ? '#ff3d5e'
-                 : d.threat === 'high' ? '#ff8c42'
-                 : d.threat === 'elevated' ? '#ffab00'
-                 : d.threat === 'safe' ? '#00e690'
+      const effectiveThreat = eraNodeThreat(d, era);
+      const fill = effectiveThreat === 'critical' ? '#ff3d5e'
+                 : effectiveThreat === 'high' ? '#ff8c42'
+                 : effectiveThreat === 'elevated' ? '#ffab00'
+                 : effectiveThreat === 'safe' ? '#00e690'
                  : '#00d4ff';
       sel.select('.node-dot')
         .attr('cx', x).attr('cy', y)

@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.background import BackgroundTasks
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 
 import config
 import data_service
@@ -24,6 +25,12 @@ def _run_sync(fn, *args):
     return loop.run_in_executor(None, fn if not args else partial(fn, *args))
 
 app = FastAPI(title="Middle East Energy Security Dashboard")
+
+# Gzip responses over 500 bytes. The big win here is /api/events (~13MB JSON
+# of 17k ACLED events) compressing to ~2MB over the wire — the single largest
+# factor in Geospatial/Incidents tab load time. Gzip is ~negligible CPU at
+# compresslevel=5 even for large responses.
+app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=5)
 
 # Serve static files (HTML, CSS, JS) with no-cache headers
 

@@ -143,7 +143,13 @@
     cp.threatPct     = Math.round(pct);
     cp.flowMbd       = flowMbd;
     cp.vesselsInZone = vessels;
-    cp.incidents30d  = countRecentIncidents(events, cp, 300, 30);
+    // Hormuz is a 21-mile chokepoint but the operationally relevant "in-zone"
+    // region is the Persian Gulf + Gulf of Oman — a radius of 300km only
+    // catches events directly in the strait, so per-chokepoint widths are
+    // used below to pick up Gulf-area activity (UAE/Oman coast, southern
+    // Iran shipping lanes when present in the dataset).
+    const RADIUS_KM = { hormuz: 650, bab: 400, suez: 300 };
+    cp.incidents30d  = countRecentIncidents(events, cp, RADIUS_KM[key] || 300, 30);
     cp.pctDecline    = decline == null ? null : +decline.toFixed(1);
     cp.transitHistory = transitData || [];
   }
@@ -486,10 +492,22 @@
   function inBox(lat, lon, latLo, latHi, lonLo, lonHi) {
     return lat >= latLo && lat <= latHi && lon >= lonLo && lon <= lonHi;
   }
+  // Houthi-attributed events only. The ACLED dataset includes everything that
+  // happens in Yemen — civil war crossfire, AQAP attacks, Iran-backed proxy
+  // operations elsewhere, etc. The tactical map is specifically about the
+  // Houthi maritime campaign so we filter on actor1/actor2 names. Coverage
+  // includes the formal alias ("Ansar Allah") and common spelling variants.
+  function isHouthiAttributed(e) {
+    const a1 = (e.actor1 || '').toLowerCase();
+    const a2 = (e.actor2 || '').toLowerCase();
+    const blob = a1 + ' ' + a2;
+    return blob.includes('houthi') || blob.includes('ansar allah') || blob.includes('ansarallah');
+  }
   function hydrateTacStats(events) {
     if (!Array.isArray(events)) return;
     let total = 0, sRedSea = 0, gulfAden = 0, choke = 0;
     for (const e of events) {
+      if (!isHouthiAttributed(e)) continue;
       const lat = +e.latitude, lon = +e.longitude;
       if (!lat || !lon) continue;
       // Red Sea + Gulf of Aden viewport
@@ -685,10 +703,12 @@
       .catch(() => [])
       .then(events => {
         S.events = events;
-        // Refresh chokepoint incident counts now that real events are in
+        // Refresh chokepoint incident counts now that real events are in.
+        // Per-chokepoint radii must match hydrateChokepoint above.
+        const RADIUS_KM = { hormuz: 650, bab: 400, suez: 300 };
         ['hormuz', 'bab', 'suez'].forEach(k => {
           const cp = window.CHOKEPOINTS[k];
-          if (cp) cp.incidents30d = countRecentIncidents(events, cp, 300, 30);
+          if (cp) cp.incidents30d = countRecentIncidents(events, cp, RADIUS_KM[k] || 300, 30);
         });
         // Refresh aggregate incidents KPI
         const incidentEl = document.querySelector('[data-kpi="incidents30"]');
