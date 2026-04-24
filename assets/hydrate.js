@@ -281,6 +281,14 @@
       }
     }
 
+    // "Feb 28 → now: N days of market whiplash" — recompute daily so the
+    // headline doesn't drift the moment the dashboard is left open overnight.
+    const warOnset = new Date('2026-02-28T00:00:00Z');
+    const daysSinceWar = Math.max(0, Math.floor((Date.now() - warOnset.getTime()) / 86400000));
+    document.querySelectorAll('[data-days-since-war]').forEach(el => {
+      el.textContent = `Feb 28 → now: ${daysSinceWar} days of market whiplash.`;
+    });
+
     // 30-day range foot row + war-onset % (also surfaced in threat-strip below)
     let warPct = null;
     const foot = document.querySelector('.kpi-hero-foot');
