@@ -234,21 +234,39 @@ _MARITIME_KEYWORDS = [
 def _paginated_acled_fetch(token: str, params: dict, label: str, max_pages: int = 10) -> List[dict]:
     """Fetch paginated ACLED results.
 
-    Timeout: 30s. ACLED's multi-year paginated queries (limit=5000) routinely
-    take 5-15s per page, and Render's free-tier egress is slower than a dev
-    laptop, so a 10s timeout silently fell through to the frozen fallback on
-    every live fetch. 30s leaves headroom without pinning threads indefinitely.
+    ACLED's multi-year paginated queries (limit=5000) routinely take 5-30s per
+    page from Render's slow egress. Originally 10s → silent fallback on every
+    live fetch. Bumped to 30s, then again to 60s with one retry after we still
+    saw `ReadTimeout` in production — the cost of retrying once (extra 60s
+    per failing page) is a one-time hit during the preload thread, but it
+    keeps the dashboard off the frozen fallback when ACLED is just slow.
     """
     results = []
     for page in range(1, max_pages + 1):
         p = {**params, "page": page}
-        resp = requests.get(
-            config.ACLED_DATA_URL,
-            headers={**_BROWSER_HEADERS, "Authorization": f"Bearer {token}"},
-            params=p,
-            timeout=30,
-        )
-        resp.raise_for_status()
+        # One retry: ACLED routinely returns ReadTimeout on the FIRST page
+        # request (cold connection) but succeeds on retry.
+        last_err = None
+        for attempt in range(2):
+            try:
+                resp = requests.get(
+                    config.ACLED_DATA_URL,
+                    headers={**_BROWSER_HEADERS, "Authorization": f"Bearer {token}"},
+                    params=p,
+                    timeout=60,
+                )
+                resp.raise_for_status()
+                last_err = None
+                break
+            except (requests.Timeout, requests.ConnectionError) as e:
+                last_err = e
+                if attempt == 0:
+                    logger.warning(f"ACLED {label} page {page}: {type(e).__name__}, retrying once")
+                    continue
+        if last_err is not None:
+            # Both attempts failed — surface the error to caller so it can
+            # fall back to cache, but log clearly so we know which page died.
+            raise last_err
         batch = resp.json().get("data", [])
         if not batch:
             break
@@ -968,15 +986,32 @@ def load_master_dataset() -> dict:
             values = attack_rows[col].replace(0, np.nan).dropna()
             price_windows[col] = round(float(values.mean()), 2) if len(values) > 0 else 0
 
-    # Correlation matrix
+    # Correlation matrix.
+    # The OPEC / Russia-Ukraine / Iran-Israel dummy variables are zero across
+    # the entire sample window (the events they encode either pre-date or
+    # post-date the regression sample), which makes their pairwise correlations
+    # NaN → rendered as a column of zeros in the heatmap. That's an
+    # embarrassing visual ("everything correlates 0.00 with X?") so we drop
+    # any column with zero variance before building the matrix. Logged so it's
+    # visible during refreshes if a dummy ever does activate.
     corr_cols = ["Brent_Price", "Daily_Volatility", "WeeklyAttackFreq", "DXY", "OVX",
                  "OPEC_Dummy", "RussiaUkraine_Dummy", "IranIsrael_Escalation",
                  "China_PMI", "Baker_Hughes_Rigs", "SPR_Release_Volume"]
     available_cols = [c for c in corr_cols if c in df.columns]
-    corr_df = df[available_cols].replace(0, np.nan).dropna(how="all").corr()
+    # Drop columns where every value is the same (variance == 0). The
+    # `replace(0, NaN).dropna(how="all")` row-filter below would already drop
+    # all-zero rows, but a column where ALL non-zero values are identical (or
+    # the column is entirely NaN/0) still produces a column-of-zeros after
+    # corr(). Filtering at the column level is the correct fix.
+    nonconstant_cols = [c for c in available_cols if df[c].nunique(dropna=True) > 1]
+    dropped = [c for c in available_cols if c not in nonconstant_cols]
+    if dropped:
+        logger.info(f"Correlation matrix: dropped zero-variance columns {dropped}")
+    corr_df = df[nonconstant_cols].replace(0, np.nan).dropna(how="all").corr()
     correlation = {
         "labels": list(corr_df.columns),
         "matrix": [[round(float(v), 3) if pd.notna(v) else 0 for v in row] for row in corr_df.values],
+        "dropped_constant": dropped,
     }
 
     result = {
@@ -1006,18 +1041,36 @@ def fetch_iran_events() -> List[dict]:
         token = _get_acled_token()
         iran_fields = "event_id_cnty|event_date|event_type|sub_event_type|actor1|actor2|location|latitude|longitude|notes|fatalities|tags"
 
+        # 60s + one retry to match _paginated_acled_fetch — ACLED's first page
+        # request from a cold connection (Render) frequently times out at 30s
+        # and silently puts us on the 2025-03 fallback. The retry keeps live
+        # data flowing without a manual /api/refresh.
+        def _acled_get_with_retry(params):
+            last_err = None
+            for attempt in range(2):
+                try:
+                    r = requests.get(
+                        config.ACLED_DATA_URL,
+                        headers={**_BROWSER_HEADERS, "Authorization": f"Bearer {token}"},
+                        params=params,
+                        timeout=60,
+                    )
+                    r.raise_for_status()
+                    return r
+                except (requests.Timeout, requests.ConnectionError) as e:
+                    last_err = e
+                    if attempt == 0:
+                        logger.warning(f"Iran ACLED: {type(e).__name__}, retrying once")
+            raise last_err
+
         def _fetch_iran_country():
             results = []
             for page in range(1, 8):  # Cap at 7 pages (35k events max — more than enough)
-                resp = requests.get(
-                    config.ACLED_DATA_URL,
-                    headers={**_BROWSER_HEADERS, "Authorization": f"Bearer {token}"},
-                    params={"_format": "json", "country": "Iran",
-                            "event_date": "2025-01-01|2026-12-31", "event_date_where": "BETWEEN",
-                            "fields": iran_fields, "limit": 5000, "page": page},
-                    timeout=30,
-                )
-                resp.raise_for_status()
+                resp = _acled_get_with_retry({
+                    "_format": "json", "country": "Iran",
+                    "event_date": "2025-01-01|2026-12-31", "event_date_where": "BETWEEN",
+                    "fields": iran_fields, "limit": 5000, "page": page,
+                })
                 batch = resp.json().get("data", [])
                 if not batch:
                     break
@@ -1028,16 +1081,12 @@ def fetch_iran_events() -> List[dict]:
             return results
 
         def _fetch_iran_bilateral(actor1, actor2):
-            resp = requests.get(
-                config.ACLED_DATA_URL,
-                headers={**_BROWSER_HEADERS, "Authorization": f"Bearer {token}"},
-                params={"_format": "json", "actor1": actor1, "actor1_where": "LIKE",
-                        "actor2": actor2, "actor2_where": "LIKE",
-                        "event_date": "2025-01-01|2026-12-31", "event_date_where": "BETWEEN",
-                        "fields": iran_fields, "limit": 5000},
-                timeout=30,
-            )
-            resp.raise_for_status()
+            resp = _acled_get_with_retry({
+                "_format": "json", "actor1": actor1, "actor1_where": "LIKE",
+                "actor2": actor2, "actor2_where": "LIKE",
+                "event_date": "2025-01-01|2026-12-31", "event_date_where": "BETWEEN",
+                "fields": iran_fields, "limit": 5000,
+            })
             bilateral = resp.json().get("data", [])
             logger.info(f"Iran bilateral ({actor1}→{actor2}): {len(bilateral)} events")
             return bilateral

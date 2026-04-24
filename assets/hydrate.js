@@ -372,6 +372,14 @@
       ovxEl.innerHTML = `${kpis.latest_ovx.toFixed(1)} ${arrow}`;
     }
 
+    // PEAK DAILY VOL — was static "8.7%" in markup; back it with the actual
+    // max daily Brent return from the regression sample. data_service returns
+    // peak_volatility as a percent (e.g. 7.266 = 7.3%); display one decimal.
+    const peakVolEl = document.querySelector('[data-kpi="peakVol"]');
+    if (peakVolEl && kpis.peak_volatility != null) {
+      peakVolEl.textContent = `${(+kpis.peak_volatility).toFixed(1)}%`;
+    }
+
     // DXY
     const dxyEl = document.querySelector('[data-kpi="dxy"]');
     if (dxyEl && kpis.latest_dxy != null) {
