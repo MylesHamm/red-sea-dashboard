@@ -62,6 +62,9 @@ window.API = (function () {
     iranRegression:   ()  => _fetch('/api/iran-regression',      { ttlMs: 600_000 }),
     refresh:          ()  => fetch(BASE + '/api/refresh', { method: 'POST' }).then(r => r.json()),
     refreshStatus:    ()  => _fetch('/api/refresh-status'),
+    // Live AIS — short TTL because vessels move in real time
+    vessels:          (cp) => _fetch(`/api/vessels/${encodeURIComponent(cp)}`, { ttlMs: 15_000 }),
+    vesselsStatus:    ()   => _fetch('/api/vessels-status', { ttlMs: 15_000 }),
   };
 })();
 

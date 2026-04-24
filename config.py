@@ -32,6 +32,11 @@ FRED_API_KEY = os.environ.get("FRED_API_KEY", "")
 ACLED_USERNAME = os.environ.get("ACLED_USERNAME", "")
 ACLED_PASSWORD = os.environ.get("ACLED_PASSWORD", "")
 
+# AISStream.io — live AIS vessel positions (WebSocket). Free signup at
+# https://aisstream.io. Used by ais_service.py to populate the "VESSELS IN
+# KILL ZONE" panel on the Geospatial tab with real MMSIs.
+AISSTREAM_API_KEY = os.environ.get("AISSTREAM_API_KEY", "")
+
 # --- API Endpoints ---
 ACLED_TOKEN_URL = "https://acleddata.com/oauth/token"
 ACLED_DATA_URL = "https://acleddata.com/api/acled/read"

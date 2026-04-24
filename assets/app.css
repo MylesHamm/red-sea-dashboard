@@ -750,20 +750,24 @@ button { font-family: inherit; cursor: pointer; }
 .globe-era.era-houthi b { color: var(--orange); }
 .globe-era.era-war b    { color: var(--red); }
 
-/* Vertical zoom slider, bottom-left of globe */
+/* Horizontal zoom slider, bottom-right of globe.
+   Was vertical (-webkit-appearance:slider-vertical) which Firefox renders as
+   a normal horizontal slider — and the bottom-left position collided with
+   the legend. Horizontal + bottom-right is cross-browser and doesn't overlap. */
 .globe-zoom {
   position: absolute;
-  left: 16px;
+  right: 16px;
   bottom: 16px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 6px;
-  padding: 8px 6px;
-  background: rgba(5,8,13,0.78);
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(5,8,13,0.85);
   border: 1px solid var(--line);
   border-radius: 4px;
   z-index: 4;
+  backdrop-filter: blur(6px);
 }
 .globe-zoom .gz-label {
   font-family: var(--mono);
@@ -773,14 +777,38 @@ button { font-family: inherit; cursor: pointer; }
   font-weight: 700;
 }
 .globe-zoom input[type="range"] {
-  -webkit-appearance: slider-vertical;
-  appearance: slider-vertical;
-  writing-mode: bt-lr;
-  width: 16px;
-  height: 130px;
-  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 130px;
+  height: 4px;
+  background: rgba(0,212,255,0.18);
+  border-radius: 2px;
   accent-color: var(--cyan);
-  cursor: ns-resize;
+  cursor: ew-resize;
+  outline: none;
+}
+.globe-zoom input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+  cursor: ew-resize;
+}
+.globe-zoom input[type="range"]::-moz-range-thumb {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+  cursor: ew-resize;
+}
+.globe-zoom input[type="range"]::-moz-range-track {
+  height: 4px;
+  background: rgba(0,212,255,0.18);
+  border-radius: 2px;
 }
 .globe-zoom .gz-reset {
   font-family: var(--mono);

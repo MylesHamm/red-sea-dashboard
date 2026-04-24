@@ -17,6 +17,7 @@ from starlette.middleware.gzip import GZipMiddleware
 
 import config
 import data_service
+import ais_service
 
 
 def _run_sync(fn, *args):
@@ -257,6 +258,25 @@ async def get_iran_regression():
     return await _run_sync(data_service.run_iran_regression)
 
 
+# ─── Live AIS Vessel Feed (AISStream.io WebSocket) ───────────────────────────
+
+@app.get("/api/vessels/{chokepoint}")
+async def get_vessels(chokepoint: str):
+    """Current vessels inside a chokepoint bounding box, from live AIS feed.
+
+    Chokepoint must be one of: hormuz, bab. Returns an empty list if the AIS
+    feed isn't connected yet or the chokepoint is unknown.
+    """
+    vessels = ais_service.get_vessels(chokepoint)
+    return {"chokepoint": chokepoint, "count": len(vessels), "data": vessels}
+
+
+@app.get("/api/vessels-status")
+async def get_vessels_status():
+    """Diagnostic: AIS WebSocket connection state + per-chokepoint counts."""
+    return ais_service.get_status()
+
+
 # ─── Data Refresh ─────────────────────────────────────────────────────────────
 
 _refresh_lock = threading.Lock()
@@ -385,6 +405,10 @@ async def preload_data():
     # Fire-and-forget in a daemon thread — server starts immediately
     t = threading.Thread(target=_preload, daemon=True)
     t.start()
+
+    # Live AIS feed: a separate daemon thread running its own asyncio loop.
+    # No-ops if AISSTREAM_API_KEY isn't set — safe to always call.
+    ais_service.start()
 
 
 # ─── Frontend Entry Point ────────────────────────────────────────────────────

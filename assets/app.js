@@ -76,15 +76,84 @@ document.addEventListener('DOMContentLoaded', () => {
       <li><span class="r-dot r-${r.risk}"></span>${r.from} → ${r.to} <b>${r.mbd} mbd</b></li>
     `).join('');
 
-    const vlist = Array.isArray(cp.vessels) ? cp.vessels : [];
-    gpEls.vesselList.innerHTML = vlist.length ? vlist.map(v => `
-      <div class="vessel-row">
-        <span class="v-type">${v.type}</span>
-        <span class="v-name">${v.name}</span>
-        <span class="v-speed">${v.speed} kt</span>
-      </div>
-    `).join('') : '<div style="color:var(--text-mute);font-family:var(--mono);font-size:11px">No live vessel tracking · AIS feed not connected</div>';
+    renderVesselList(id, cp);
   }
+
+  // ── Vessel list rendering — fed by live AISStream.io WebSocket via backend ──
+  // Only populated for chokepoints that have a bounding box server-side (hormuz,
+  // bab). Other chokepoints show a contextual message instead of a lying list.
+  const LIVE_AIS_CHOKEPOINTS = new Set(['hormuz', 'bab']);
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]
+    ));
+  }
+  function renderVesselList(id, cp) {
+    if (!gpEls.vesselList) return;
+    const vessels = Array.isArray(cp && cp.liveVessels) ? cp.liveVessels : [];
+    const status = window.CP && window.CP.aisStatus;
+    const hint = 'color:var(--text-mute);font-family:var(--mono);font-size:11px;padding:6px 2px';
+
+    if (!LIVE_AIS_CHOKEPOINTS.has(id)) {
+      gpEls.vesselList.innerHTML = `<div style="${hint}">Live AIS coverage is limited to Hormuz and Bab el-Mandeb.</div>`;
+      return;
+    }
+    if (vessels.length) {
+      gpEls.vesselList.innerHTML = vessels.map(v => {
+        const type  = escapeHtml(v.type || 'OTHER');
+        const name  = escapeHtml(v.name || `MMSI ${v.mmsi}`);
+        const speed = v.speed == null ? '—' : v.speed.toFixed(1);
+        return `<div class="vessel-row">
+          <span class="v-type">${type}</span>
+          <span class="v-name">${name}</span>
+          <span class="v-speed">${speed} kt</span>
+        </div>`;
+      }).join('');
+      return;
+    }
+    // No vessels yet — use the AIS status to explain why
+    let msg = 'Waiting for AIS feed…';
+    if (status) {
+      if (!status.configured)        msg = 'AIS feed not configured (AISSTREAM_API_KEY missing).';
+      else if (!status.connected)    msg = 'AIS feed reconnecting…' + (status.last_error ? ` (${status.last_error})` : '');
+      else if (!status.last_message_ts) msg = 'Connected. Waiting for first position report…';
+      else                           msg = 'No vessels currently in the kill zone.';
+    }
+    gpEls.vesselList.innerHTML = `<div style="${hint}">${escapeHtml(msg)}</div>`;
+  }
+
+  // Poll /api/vessels/{cp} on an interval. 30s is well under the 30-min vessel
+  // TTL and below most intermittent-noise thresholds. Uses the shared API
+  // cache (15s TTL) so a page that renders both panels only hits the network
+  // once per cycle.
+  async function refreshLiveVessels() {
+    if (!window.API || !window.CHOKEPOINTS) return;
+    try {
+      const [status, hormuz, bab] = await Promise.all([
+        window.API.vesselsStatus().catch(() => null),
+        window.API.vessels('hormuz').catch(() => null),
+        window.API.vessels('bab').catch(() => null),
+      ]);
+      window.CP = window.CP || {};
+      window.CP.aisStatus = status;
+      if (window.CHOKEPOINTS.hormuz) {
+        window.CHOKEPOINTS.hormuz.liveVessels = (hormuz && hormuz.data) || [];
+        const hUpd = (hormuz && hormuz.data) ? hormuz.data.length : null;
+        if (hUpd != null) window.CHOKEPOINTS.hormuz.vesselsInZone = hUpd;
+      }
+      if (window.CHOKEPOINTS.bab) {
+        window.CHOKEPOINTS.bab.liveVessels = (bab && bab.data) || [];
+        const bUpd = (bab && bab.data) ? bab.data.length : null;
+        if (bUpd != null) window.CHOKEPOINTS.bab.vesselsInZone = bUpd;
+      }
+      renderChokepoint(currentChokepoint);
+    } catch (e) {
+      // Swallow — the panel has a fallback message
+      console.warn('AIS poll failed:', e);
+    }
+  }
+  refreshLiveVessels();
+  setInterval(refreshLiveVessels, 30_000);
 
   let currentChokepoint = 'hormuz';
   window.addEventListener('chokepoint-select', (e) => {

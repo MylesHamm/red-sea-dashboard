@@ -6,3 +6,4 @@ yfinance==0.2.51
 requests==2.32.3
 fredapi==0.5.2
 numpy==1.26.4
+websockets==13.1

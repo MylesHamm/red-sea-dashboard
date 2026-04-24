@@ -118,7 +118,41 @@
   // Expose for charts.js so its scrubber-aware KPI uses the same anchor.
   window.__dataNowTs = dataNowTs;
 
-  function hydrateChokepoint(key, transitData, events, flowMbd) {
+  // Hormuz is a 21-mile chokepoint but the operationally relevant "in-zone"
+  // region is the Persian Gulf + Gulf of Oman — a radius of 300km only
+  // catches events directly in the strait, so per-chokepoint widths are
+  // used to pick up Gulf-area activity (UAE/Oman coast, southern Iran
+  // shipping lanes when present in the dataset).
+  const RADIUS_KM = { hormuz: 650, bab: 400, suez: 300 };
+
+  // ACLED's primary "events" payload is Yemen + regional coverage, which
+  // EXCLUDES Iran. Hormuz-adjacent incidents (IRGC seizures, Iranian coastal
+  // strikes, etc.) live in the separate /api/iran-events payload. Merge both
+  // when scoring Hormuz so the KPI doesn't collapse to 0 just because the
+  // action moved to the north side of the strait.
+  function eventsForChokepoint(key, acledEvents, iranEvents) {
+    const base = Array.isArray(acledEvents) ? acledEvents : [];
+    if (key !== 'hormuz') return base;
+    const iran = Array.isArray(iranEvents) ? iranEvents : [];
+    if (!iran.length) return base;
+    // Dedupe on event_id_cnty if present — the two feeds can overlap on
+    // bilateral US/Iran incidents that also appear in regional pulls.
+    const seen = new Set();
+    const out = [];
+    for (const e of base) {
+      const id = e && e.event_id_cnty;
+      if (id) seen.add(id);
+      out.push(e);
+    }
+    for (const e of iran) {
+      const id = e && e.event_id_cnty;
+      if (id && seen.has(id)) continue;
+      out.push(e);
+    }
+    return out;
+  }
+
+  function hydrateChokepoint(key, transitData, events, flowMbd, iranEvents) {
     const cp = window.CHOKEPOINTS[key];
     if (!cp) return;
 
@@ -143,13 +177,8 @@
     cp.threatPct     = Math.round(pct);
     cp.flowMbd       = flowMbd;
     cp.vesselsInZone = vessels;
-    // Hormuz is a 21-mile chokepoint but the operationally relevant "in-zone"
-    // region is the Persian Gulf + Gulf of Oman — a radius of 300km only
-    // catches events directly in the strait, so per-chokepoint widths are
-    // used below to pick up Gulf-area activity (UAE/Oman coast, southern
-    // Iran shipping lanes when present in the dataset).
-    const RADIUS_KM = { hormuz: 650, bab: 400, suez: 300 };
-    cp.incidents30d  = countRecentIncidents(events, cp, RADIUS_KM[key] || 300, 30);
+    const evForCount = eventsForChokepoint(key, events, iranEvents);
+    cp.incidents30d  = countRecentIncidents(evForCount, cp, RADIUS_KM[key] || 300, 30);
     cp.pctDecline    = decline == null ? null : +decline.toFixed(1);
     cp.transitHistory = transitData || [];
   }
@@ -642,7 +671,10 @@
     // Real-world flow estimates (EIA) — these are geophysical constants,
     // not analytical values. Flows through a strait don't vary by the day.
     // Use whatever events we have so far; refine when /api/events resolves.
-    hydrateChokepoint('hormuz', hormuz, S.events, 21.0);
+    // For Hormuz we also pass the Iran ACLED subset so the incident count
+    // reflects IRGC / Iranian-coast activity that the regional feed omits.
+    const iranEv = (iranResp && Array.isArray(iranResp.data)) ? iranResp.data : [];
+    hydrateChokepoint('hormuz', hormuz, S.events, 21.0, iranEv);
     hydrateChokepoint('bab',    bab,    S.events,  8.2);
     hydrateChokepoint('suez',   suez,   S.events,  5.5);
     hydrateCape(hormuz);
@@ -704,11 +736,13 @@
       .then(events => {
         S.events = events;
         // Refresh chokepoint incident counts now that real events are in.
-        // Per-chokepoint radii must match hydrateChokepoint above.
-        const RADIUS_KM = { hormuz: 650, bab: 400, suez: 300 };
+        // Per-chokepoint radii match the module-level RADIUS_KM constant.
+        const iranEv2 = (S.iran && Array.isArray(S.iran.data)) ? S.iran.data : [];
         ['hormuz', 'bab', 'suez'].forEach(k => {
           const cp = window.CHOKEPOINTS[k];
-          if (cp) cp.incidents30d = countRecentIncidents(events, cp, RADIUS_KM[k] || 300, 30);
+          if (!cp) return;
+          const evForCount = eventsForChokepoint(k, events, iranEv2);
+          cp.incidents30d = countRecentIncidents(evForCount, cp, RADIUS_KM[k] || 300, 30);
         });
         // Refresh aggregate incidents KPI
         const incidentEl = document.querySelector('[data-kpi="incidents30"]');
