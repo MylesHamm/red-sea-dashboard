@@ -99,11 +99,16 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     if (vessels.length) {
-      gpEls.vesselList.innerHTML = vessels.map(v => {
+      const anyRepresentative = vessels.some(v => v.representative);
+      const banner = anyRepresentative
+        ? `<div style="${hint}">Showing representative tanker positions · live AIS feed unavailable.</div>`
+        : '';
+      gpEls.vesselList.innerHTML = banner + vessels.map(v => {
         const type  = escapeHtml(v.type || 'OTHER');
         const name  = escapeHtml(v.name || `MMSI ${v.mmsi}`);
         const speed = v.speed == null ? '—' : v.speed.toFixed(1);
-        return `<div class="vessel-row">
+        const cls   = v.representative ? 'vessel-row v-representative' : 'vessel-row';
+        return `<div class="${cls}">
           <span class="v-type">${type}</span>
           <span class="v-name">${name}</span>
           <span class="v-speed">${speed} kt</span>
@@ -541,41 +546,8 @@ document.addEventListener('DOMContentLoaded', () => {
   updateClock();
   setInterval(updateClock, 30000);
 
-  // ── Live vessel traffic (AIS embeds) ──
-  // MarineTraffic's free embed sometimes gets blocked by strict CSP /
-  // X-Frame-Options on corporate networks. We can't read the inner document
-  // cross-origin, but we CAN time-out: if `load` hasn't fired within a
-  // window the frame is almost certainly blocked, so reveal the fallback.
-  // When it does load, we keep the fallback hidden.
-  function wireVesselEmbed(frameId, wrapId) {
-    const frame = document.getElementById(frameId);
-    const wrap  = document.getElementById(wrapId);
-    if (!frame || !wrap) return;
-    let loaded = false;
-    frame.addEventListener('load', () => {
-      loaded = true;
-      wrap.classList.remove('embed-blocked');
-    });
-    frame.addEventListener('error', () => {
-      wrap.classList.add('embed-blocked');
-    });
-    // Safety net: if no load event after 8s, assume the embed was blocked
-    // (e.g. `frame-ancestors` CSP, corporate proxy). Don't mark earlier —
-    // MarineTraffic's embed can take a few seconds to paint on slow links.
-    setTimeout(() => {
-      if (!loaded) wrap.classList.add('embed-blocked');
-    }, 8000);
-  }
-  wireVesselEmbed('vtHormuzFrame', 'vtHormuzWrap');
-  wireVesselEmbed('vtBabFrame',    'vtBabWrap');
-
-  // Vessel-class filter chips were removed because MarineTraffic's /ais/embed/
-  // endpoint silently ignores the `vtypes:` segment — it's only honored by
-  // /ais/home/, which CSP `frame-ancestors` blocks from being iframed. Having
-  // chips that didn't filter the visible map was worse than having no chips;
-  // the filtered-in-new-tab links in the footer are now the honest affordance.
-  // Tanker filtering still works where it matters: the Overview tab's
-  // "Vessels in zone" list is fed by our own AISStream consumer, which
-  // classifies vessels by AIS ShipType, so the analyst-facing data path
-  // is filtered end-to-end.
+  // The chokepoint vessel maps (formerly MarineTraffic iframes) are now
+  // self-hosted Leaflet maps managed by assets/vessel-map.js. That module
+  // owns its own polling + filter-chip wiring, so app.js doesn't need to do
+  // anything for them here.
 });

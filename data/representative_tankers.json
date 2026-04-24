@@ -1,0 +1,27 @@
+{
+  "_comment": "Representative tanker positions along the established shipping lanes through Hormuz and Bab el-Mandeb. Used as a fallback when the live AISStream.io feed is unavailable (rate-limited, key missing, etc.) so the chokepoint maps aren't empty. Positions are synthesized from documented traffic-separation-scheme lanes, not from any specific vessel's live AIS broadcast. Every record is tagged representative:true so the frontend can label the map accordingly.",
+  "hormuz": [
+    {"mmsi": 900000001, "name": "REPRESENTATIVE VLCC (outbound)", "type": "TANKER", "lat": 26.52, "lon": 56.30, "speed": 12.8, "course": 115, "nav": 0, "representative": true},
+    {"mmsi": 900000002, "name": "REPRESENTATIVE VLCC (outbound)", "type": "TANKER", "lat": 26.45, "lon": 56.42, "speed": 13.1, "course": 118, "nav": 0, "representative": true},
+    {"mmsi": 900000003, "name": "REPRESENTATIVE SUEZMAX (outbound)", "type": "TANKER", "lat": 26.38, "lon": 56.55, "speed": 11.6, "course": 122, "nav": 0, "representative": true},
+    {"mmsi": 900000004, "name": "REPRESENTATIVE AFRAMAX (inbound)", "type": "TANKER", "lat": 26.64, "lon": 56.18, "speed": 13.4, "course": 295, "nav": 0, "representative": true},
+    {"mmsi": 900000005, "name": "REPRESENTATIVE VLCC (inbound)", "type": "TANKER", "lat": 26.70, "lon": 56.05, "speed": 14.2, "course": 298, "nav": 0, "representative": true},
+    {"mmsi": 900000006, "name": "REPRESENTATIVE SUEZMAX (inbound)", "type": "TANKER", "lat": 26.77, "lon": 55.90, "speed": 12.9, "course": 302, "nav": 0, "representative": true},
+    {"mmsi": 900000007, "name": "REPRESENTATIVE VLCC (waiting)", "type": "TANKER", "lat": 26.92, "lon": 55.55, "speed": 0.8, "course": 45, "nav": 1, "representative": true},
+    {"mmsi": 900000008, "name": "REPRESENTATIVE AFRAMAX (waiting)", "type": "TANKER", "lat": 27.05, "lon": 55.30, "speed": 1.2, "course": 60, "nav": 1, "representative": true},
+    {"mmsi": 900000009, "name": "REPRESENTATIVE VLCC (transit)", "type": "TANKER", "lat": 26.30, "lon": 56.90, "speed": 13.6, "course": 125, "nav": 0, "representative": true},
+    {"mmsi": 900000010, "name": "REPRESENTATIVE SUEZMAX (transit)", "type": "TANKER", "lat": 26.20, "lon": 57.15, "speed": 12.4, "course": 128, "nav": 0, "representative": true}
+  ],
+  "bab": [
+    {"mmsi": 900000101, "name": "REPRESENTATIVE VLCC (northbound)", "type": "TANKER", "lat": 12.62, "lon": 43.38, "speed": 13.5, "course": 340, "nav": 0, "representative": true},
+    {"mmsi": 900000102, "name": "REPRESENTATIVE SUEZMAX (northbound)", "type": "TANKER", "lat": 12.70, "lon": 43.33, "speed": 12.9, "course": 345, "nav": 0, "representative": true},
+    {"mmsi": 900000103, "name": "REPRESENTATIVE AFRAMAX (northbound)", "type": "TANKER", "lat": 12.85, "lon": 43.25, "speed": 13.2, "course": 350, "nav": 0, "representative": true},
+    {"mmsi": 900000104, "name": "REPRESENTATIVE VLCC (northbound)", "type": "TANKER", "lat": 13.10, "lon": 43.08, "speed": 14.0, "course": 352, "nav": 0, "representative": true},
+    {"mmsi": 900000105, "name": "REPRESENTATIVE AFRAMAX (southbound)", "type": "TANKER", "lat": 12.54, "lon": 43.45, "speed": 12.6, "course": 165, "nav": 0, "representative": true},
+    {"mmsi": 900000106, "name": "REPRESENTATIVE SUEZMAX (southbound)", "type": "TANKER", "lat": 12.46, "lon": 43.52, "speed": 13.1, "course": 168, "nav": 0, "representative": true},
+    {"mmsi": 900000107, "name": "REPRESENTATIVE VLCC (southbound)", "type": "TANKER", "lat": 12.30, "lon": 43.70, "speed": 13.4, "course": 172, "nav": 0, "representative": true},
+    {"mmsi": 900000108, "name": "REPRESENTATIVE SUEZMAX (southbound)", "type": "TANKER", "lat": 12.10, "lon": 43.88, "speed": 12.8, "course": 175, "nav": 0, "representative": true},
+    {"mmsi": 900000109, "name": "REPRESENTATIVE VLCC (waiting)", "type": "TANKER", "lat": 13.45, "lon": 42.85, "speed": 0.5, "course": 90, "nav": 1, "representative": true},
+    {"mmsi": 900000110, "name": "REPRESENTATIVE AFRAMAX (transit)", "type": "TANKER", "lat": 12.90, "lon": 43.20, "speed": 13.8, "course": 348, "nav": 0, "representative": true}
+  ]
+}

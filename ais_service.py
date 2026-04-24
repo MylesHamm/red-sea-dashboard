@@ -21,6 +21,7 @@ import logging
 import random
 import threading
 import time
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import config
@@ -216,6 +217,14 @@ async def _consumer_loop() -> None:
         except Exception as e:
             _status["connected"] = False
             _status["last_error"] = f"{type(e).__name__}: {e}"
+            # Dump everything the websockets library can tell us about this
+            # failure — response headers, status line, body — so we can see
+            # whether AISStream is rejecting on API-key validity, quota,
+            # malformed subscription, or just zombie-connection contention.
+            for attr in ("response", "status_code", "headers"):
+                val = getattr(e, attr, None)
+                if val:
+                    logger.warning(f"[ais] exception.{attr}={str(val)[:400]}")
             err_str = str(e).lower()
             # Parenthesize the `rate ... limit` branch so it doesn't bind as
             # `(... or rate) and limit` — Python's `and` has higher precedence
@@ -252,8 +261,31 @@ def _prune_stale() -> None:
 
 # ─── Public API ──────────────────────────────────────────────────────────────
 
+_REPRESENTATIVE_PATH = Path(__file__).parent / "data" / "representative_tankers.json"
+_representative_cache: Optional[dict] = None
+
+
+def _load_representative() -> dict:
+    """Load the static representative-tanker fallback dataset once."""
+    global _representative_cache
+    if _representative_cache is None:
+        try:
+            _representative_cache = json.loads(_REPRESENTATIVE_PATH.read_text())
+        except Exception as e:
+            logger.warning(f"[ais] representative tanker file unreadable: {e}")
+            _representative_cache = {}
+    return _representative_cache
+
+
 def get_vessels(chokepoint_id: str) -> List[dict]:
-    """Return the current vessel list for a chokepoint, sorted by speed desc."""
+    """Return the current vessel list for a chokepoint, sorted by speed desc.
+
+    If the live AISStream feed hasn't produced any vessels yet (rate-limited,
+    not configured, or just slow to first message), fall back to a static
+    representative-tanker dataset so the chokepoint maps show meaningful
+    traffic instead of being blank. Representative records carry
+    `representative: true` so the UI labels them as synthesized.
+    """
     if chokepoint_id not in _vessels:
         return []
     _prune_stale()
@@ -265,7 +297,12 @@ def get_vessels(chokepoint_id: str) -> List[dict]:
         not (v.get("type") and v["type"] != "OTHER"),
         -(v.get("speed") or 0),
     ))
-    return vessels[:MAX_RETURNED]
+    if vessels:
+        return vessels[:MAX_RETURNED]
+    # Live feed empty → representative fallback. Clearly flagged so the
+    # frontend can show "representative positions · live feed unavailable".
+    rep = _load_representative().get(chokepoint_id) or []
+    return [dict(v) for v in rep][:MAX_RETURNED]
 
 
 def get_status() -> dict:
