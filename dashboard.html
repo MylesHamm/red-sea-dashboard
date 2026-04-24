@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
 
-<link rel="stylesheet" href="assets/app.css?v=20260424h">
+<link rel="stylesheet" href="assets/app.css?v=20260424i">
 </head>
 <body>
 
@@ -466,23 +466,20 @@
             </div>
             <span class="vt-live"><span class="vt-live-dot"></span>LIVE · AIS</span>
           </div>
-          <div class="vt-filter" data-vt-filter="hormuz"
-               data-fs-base="https://www.marinetraffic.com/en/ais/home/centerx:56.25/centery:26.57/zoom:9"
-               data-default-vtypes="7">
-            <span class="vt-filter-label">VESSEL CLASS · defaults to TANKERS · click to open filtered map in new tab</span>
-            <div class="vt-chip-row" role="group" aria-label="Vessel type filter">
-              <a class="vt-chip" data-vtypes="7" target="_blank" rel="noopener">TANKERS</a>
-              <a class="vt-chip" data-vtypes="8" target="_blank" rel="noopener">CARGO</a>
-              <a class="vt-chip" data-vtypes="6" target="_blank" rel="noopener">PASSENGER</a>
-              <a class="vt-chip" data-vtypes="7|8" target="_blank" rel="noopener">TANKER+CARGO</a>
-            </div>
+          <!-- Honest note: MarineTraffic's /ais/embed/ endpoint ignores the
+               vtypes path segment (filter works only on /ais/home/, which
+               CSP `frame-ancestors` blocks from being iframed). Tanker
+               filtering happens in our own vessel list (fed by AISStream)
+               and in the fullscreen-in-new-tab links below. -->
+          <div class="vt-note">
+            <b>Embed shows all AIS traffic.</b> MarineTraffic's embed strips type filters — for tankers only, use the links below or the live list in the Overview tab (filtered by our AISStream feed).
           </div>
           <div class="vt-frame-wrap" id="vtHormuzWrap">
             <iframe
               class="vt-frame"
               id="vtHormuzFrame"
-              title="Live vessel traffic — Strait of Hormuz (tankers)"
-              src="https://www.marinetraffic.com/en/ais/embed/vtypes:7/zoom:9/centery:26.57/centerx:56.25/maptype:4/shownames:false/mmsi:0/shipid:0/fleet:/fleet_id:0/showmenu:false/remember:false/fs:true"
+              title="Live vessel traffic — Strait of Hormuz (all types)"
+              src="https://www.marinetraffic.com/en/ais/embed/zoom:9/centery:26.57/centerx:56.25/maptype:4/shownames:false/mmsi:0/shipid:0/fleet:/fleet_id:0/showmenu:false/remember:false/fs:true"
               referrerpolicy="no-referrer-when-downgrade"
               allow="geolocation"
               loading="lazy"
@@ -494,8 +491,12 @@
             </div>
           </div>
           <div class="vt-foot">
-            <span class="vt-foot-meta"><b>26.57°N · 56.25°E</b> · 21-mile narrowest point · TANKERS</span>
-            <a class="vt-foot-link" href="https://www.marinetraffic.com/en/ais/home/centerx:56.25/centery:26.57/zoom:9/vtypes:7" target="_blank" rel="noopener">FULLSCREEN ↗</a>
+            <span class="vt-foot-meta"><b>26.57°N · 56.25°E</b> · 21-mile narrowest point</span>
+            <div class="vt-foot-links">
+              <a class="vt-foot-link vt-foot-link-primary" href="https://www.marinetraffic.com/en/ais/home/centerx:56.25/centery:26.57/zoom:9/vtypes:7" target="_blank" rel="noopener">TANKERS ONLY ↗</a>
+              <a class="vt-foot-link" href="https://www.marinetraffic.com/en/ais/home/centerx:56.25/centery:26.57/zoom:9/vtypes:8" target="_blank" rel="noopener">CARGO ↗</a>
+              <a class="vt-foot-link" href="https://www.marinetraffic.com/en/ais/home/centerx:56.25/centery:26.57/zoom:9" target="_blank" rel="noopener">ALL ↗</a>
+            </div>
           </div>
         </div>
 
@@ -507,23 +508,15 @@
             </div>
             <span class="vt-live"><span class="vt-live-dot"></span>LIVE · AIS</span>
           </div>
-          <div class="vt-filter" data-vt-filter="bab"
-               data-fs-base="https://www.marinetraffic.com/en/ais/home/centerx:43.33/centery:12.58/zoom:8"
-               data-default-vtypes="7">
-            <span class="vt-filter-label">VESSEL CLASS · defaults to TANKERS · click to open filtered map in new tab</span>
-            <div class="vt-chip-row" role="group" aria-label="Vessel type filter">
-              <a class="vt-chip" data-vtypes="7" target="_blank" rel="noopener">TANKERS</a>
-              <a class="vt-chip" data-vtypes="8" target="_blank" rel="noopener">CARGO</a>
-              <a class="vt-chip" data-vtypes="6" target="_blank" rel="noopener">PASSENGER</a>
-              <a class="vt-chip" data-vtypes="7|8" target="_blank" rel="noopener">TANKER+CARGO</a>
-            </div>
+          <div class="vt-note">
+            <b>Embed shows all AIS traffic.</b> MarineTraffic's embed strips type filters — for tankers only, use the links below or the live list in the Overview tab (filtered by our AISStream feed).
           </div>
           <div class="vt-frame-wrap" id="vtBabWrap">
             <iframe
               class="vt-frame"
               id="vtBabFrame"
-              title="Live vessel traffic — Bab el-Mandeb (tankers)"
-              src="https://www.marinetraffic.com/en/ais/embed/vtypes:7/zoom:8/centery:12.58/centerx:43.33/maptype:4/shownames:false/mmsi:0/shipid:0/fleet:/fleet_id:0/showmenu:false/remember:false/fs:true"
+              title="Live vessel traffic — Bab el-Mandeb (all types)"
+              src="https://www.marinetraffic.com/en/ais/embed/zoom:8/centery:12.58/centerx:43.33/maptype:4/shownames:false/mmsi:0/shipid:0/fleet:/fleet_id:0/showmenu:false/remember:false/fs:true"
               referrerpolicy="no-referrer-when-downgrade"
               allow="geolocation"
               loading="lazy"
@@ -535,8 +528,12 @@
             </div>
           </div>
           <div class="vt-foot">
-            <span class="vt-foot-meta"><b>12.58°N · 43.33°E</b> · 18-mile strait · Yemen/Djibouti · TANKERS</span>
-            <a class="vt-foot-link" href="https://www.marinetraffic.com/en/ais/home/centerx:43.33/centery:12.58/zoom:8/vtypes:7" target="_blank" rel="noopener">FULLSCREEN ↗</a>
+            <span class="vt-foot-meta"><b>12.58°N · 43.33°E</b> · 18-mile strait · Yemen/Djibouti</span>
+            <div class="vt-foot-links">
+              <a class="vt-foot-link vt-foot-link-primary" href="https://www.marinetraffic.com/en/ais/home/centerx:43.33/centery:12.58/zoom:8/vtypes:7" target="_blank" rel="noopener">TANKERS ONLY ↗</a>
+              <a class="vt-foot-link" href="https://www.marinetraffic.com/en/ais/home/centerx:43.33/centery:12.58/zoom:8/vtypes:8" target="_blank" rel="noopener">CARGO ↗</a>
+              <a class="vt-foot-link" href="https://www.marinetraffic.com/en/ais/home/centerx:43.33/centery:12.58/zoom:8" target="_blank" rel="noopener">ALL ↗</a>
+            </div>
           </div>
         </div>
 
@@ -843,12 +840,12 @@
 </div>
 
 <!-- Scripts -->
-<script src="assets/api.js?v=20260424h"></script>
-<script src="assets/data.js?v=20260424h"></script>
-<script src="assets/hydrate.js?v=20260424h"></script>
-<script src="assets/globe.js?v=20260424h"></script>
-<script src="assets/tacmap.js?v=20260424h"></script>
-<script src="assets/charts.js?v=20260424h"></script>
-<script src="assets/app.js?v=20260424h"></script>
+<script src="assets/api.js?v=20260424i"></script>
+<script src="assets/data.js?v=20260424i"></script>
+<script src="assets/hydrate.js?v=20260424i"></script>
+<script src="assets/globe.js?v=20260424i"></script>
+<script src="assets/tacmap.js?v=20260424i"></script>
+<script src="assets/charts.js?v=20260424i"></script>
+<script src="assets/app.js?v=20260424i"></script>
 </body>
 </html>

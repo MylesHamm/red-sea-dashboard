@@ -59,8 +59,10 @@ _lock = threading.Lock()
 _status: dict = {
     "connected": False,
     "last_message_ts": None,
+    "last_connected_ts": None,  # set once per successful handshake
     "last_error": None,
     "started": False,
+    "retry_eta_ts": None,       # when we plan to try reconnecting next
 }
 
 
@@ -179,12 +181,22 @@ async def _consumer_loop() -> None:
     # drain — cheap if unnecessary, essential if it's the actual cause.
     await asyncio.sleep(8)
 
-    # Backoff strategy:
+    # Backoff strategy (tuned after seeing the feed stuck in 30-min retries
+    # on Render):
     #   - Normal disconnect       → 30s (+jitter), double up to 5 min
-    #   - HTTP 429 (rate limit)   → start at 5 min, cap at 30 min
-    #   - Reset ONLY after we've received at least one message (a 429 can
-    #     happen after a successful TCP connect if free-tier quota triggers
-    #     on subscription, not handshake — we don't want to reset on that)
+    #   - HTTP 429 (rate limit)   → 60s floor, 5 min cap
+    #
+    # The old 5-min floor + 30-min cap assumed the zombie connection would
+    # linger for minutes. In practice AISStream drops it in ~30-60s. Waiting
+    # 30 min between attempts meant the feed could stay dark for an entire
+    # demo even after the zombie cleared. 60s floor gives the provider time
+    # to clean up without punishing us for their latency; 5-min cap means
+    # steady-state retries are frequent enough that a user actually sees
+    # recovery happen in real time.
+    #
+    # Reset backoff only after we receive at least one message — a 429 can
+    # happen after a successful TCP connect if free-tier quota triggers on
+    # subscription rather than handshake.
     backoff = 30
     while True:
         got_message = False
@@ -193,6 +205,8 @@ async def _consumer_loop() -> None:
                 await ws.send(json.dumps(sub))
                 _status["connected"] = True
                 _status["last_error"] = None
+                _status["last_connected_ts"] = time.time()
+                _status["retry_eta_ts"] = None
                 logger.info("[ais] Connected, subscribed to Hormuz + Bab boxes")
                 async for raw in ws:
                     if not got_message:
@@ -203,23 +217,28 @@ async def _consumer_loop() -> None:
             _status["connected"] = False
             _status["last_error"] = f"{type(e).__name__}: {e}"
             err_str = str(e).lower()
+            # Parenthesize the `rate ... limit` branch so it doesn't bind as
+            # `(... or rate) and limit` — Python's `and` has higher precedence
+            # than `or`, but readability matters more than correctness-by-luck.
             is_rate_limited = (
                 "429" in err_str
                 or "too many" in err_str
-                or "rate" in err_str and "limit" in err_str
+                or ("rate" in err_str and "limit" in err_str)
             )
             if is_rate_limited:
-                wait = max(backoff, 300)       # never retry sooner than 5 min on 429
-                wait = min(wait, 1800)         # cap at 30 min
-                backoff = wait * 2             # next failure waits even longer
-                logger.warning(f"[ais] HTTP 429 rate-limited; waiting {wait}s before retry")
+                wait = max(backoff, 60)          # floor at 60s (zombie lifetime)
+                wait = min(wait, 300)            # cap at 5 min
+                backoff = min(wait * 2, 300)     # next attempt, still capped
+                logger.warning(f"[ais] HTTP 429 rate-limited; retry in {wait}s")
             else:
                 wait = backoff
-                logger.warning(f"[ais] connection dropped ({e!r}); reconnecting in {wait}s")
+                logger.warning(f"[ais] connection dropped ({e!r}); retry in {wait}s")
                 backoff = min(backoff * 2, 300)  # cap at 5 min for normal errors
             # Jitter: ±25% so multiple Render workers (if any) don't resync
             jitter = 1.0 + random.uniform(-0.25, 0.25)
-            await asyncio.sleep(wait * jitter)
+            actual_wait = wait * jitter
+            _status["retry_eta_ts"] = time.time() + actual_wait
+            await asyncio.sleep(actual_wait)
 
 
 def _prune_stale() -> None:

@@ -111,14 +111,20 @@ document.addEventListener('DOMContentLoaded', () => {
       }).join('');
       return;
     }
-    // No vessels yet — use the AIS status to explain why
+    // No vessels yet — use the AIS status to explain why, with a real
+    // countdown to the next retry so users see progress instead of a vague
+    // "a few minutes" that never resolves.
     let msg = 'Waiting for AIS feed…';
     if (status) {
       const err = (status.last_error || '').toLowerCase();
       const isRateLimited = err.includes('429') || err.includes('too many') || (err.includes('rate') && err.includes('limit'));
+      const etaSec = status.retry_eta_ts ? Math.max(0, Math.round(status.retry_eta_ts - Date.now()/1000)) : null;
+      const etaTxt = etaSec != null ? ` · next retry ${etaSec < 60 ? etaSec + 's' : Math.round(etaSec/60) + 'm'}` : '';
+      const lastOk = status.last_connected_ts ? Math.round((Date.now()/1000 - status.last_connected_ts) / 60) : null;
+      const lastOkTxt = lastOk != null && lastOk < 240 ? ` · last ok ${lastOk}m ago` : '';
       if (!status.configured)            msg = 'AIS feed not configured (AISSTREAM_API_KEY missing).';
-      else if (isRateLimited)            msg = 'AIS feed rate-limited by provider · retrying in a few minutes.';
-      else if (!status.connected)        msg = 'AIS feed reconnecting…' + (status.last_error ? ` (${status.last_error})` : '');
+      else if (isRateLimited)            msg = 'AIS feed rate-limited by provider' + etaTxt + lastOkTxt + '.';
+      else if (!status.connected)        msg = 'AIS feed reconnecting…' + etaTxt + (status.last_error ? ` (${status.last_error})` : '');
       else if (!status.last_message_ts)  msg = 'Connected. Waiting for first position report…';
       else                               msg = 'No vessels currently in the kill zone.';
     }
@@ -563,49 +569,13 @@ document.addEventListener('DOMContentLoaded', () => {
   wireVesselEmbed('vtHormuzFrame', 'vtHormuzWrap');
   wireVesselEmbed('vtBabFrame',    'vtBabWrap');
 
-  // ── Vessel-class filter chips (MarineTraffic) ──
-  // HONEST IMPLEMENTATION: MarineTraffic's /ais/embed/ endpoint appears to
-  // silently ignore vessel-type filters in many cases (their `vtypes:` path
-  // segment is reliably honored only by /ais/home/ — the fullscreen page,
-  // which CSP `frame-ancestors` blocks from being iframed). So the chips
-  // do exactly what they visibly advertise: clicking opens MT's fullscreen
-  // map in a new tab, pre-filtered to that vessel class. The iframe loads
-  // with `vtypes:7` baked in — if MT honors it, great; if not, the chip +
-  // fullscreen link always gives a working filtered view.
-  //
-  // Codes: 7=tanker, 8=cargo, 6=passenger, "7|8"=tanker+cargo.
-  // Default filter = tankers (thesis focus is oil security, tankers are the
-  // only class that carries the risk we're quantifying).
-  function wireVesselFilters() {
-    document.querySelectorAll('.vt-panel').forEach(panel => {
-      const filter = panel.querySelector('.vt-filter[data-fs-base]');
-      if (!filter) return;
-      const fsBase = filter.dataset.fsBase || '';
-      const defaultVtypes = filter.dataset.defaultVtypes || '';
-
-      const chips = Array.from(filter.querySelectorAll('.vt-chip'));
-
-      // Mark the chip matching the default vtypes (e.g. TANKERS) as active
-      // so the user sees at a glance what the iframe is currently showing.
-      if (defaultVtypes) {
-        chips.forEach(c => c.classList.remove('is-active'));
-        const defChip = chips.find(c => (c.dataset.vtypes || '') === defaultVtypes);
-        if (defChip) defChip.classList.add('is-active');
-      }
-
-      // Wire every chip → open the properly-filtered fullscreen MT view in a new tab.
-      // No click handler needed; default anchor + target="_blank" is correct behavior.
-      chips.forEach(chip => {
-        const vtypes = chip.dataset.vtypes || '';
-        const href = vtypes ? `${fsBase}/vtypes:${encodeURIComponent(vtypes)}` : fsBase;
-        chip.setAttribute('href', href);
-        chip.setAttribute('target', '_blank');
-        chip.setAttribute('rel', 'noopener');
-        chip.setAttribute('title', vtypes
-          ? `Open filtered view (${chip.textContent.trim()}) in MarineTraffic`
-          : 'Open unfiltered live map in MarineTraffic');
-      });
-    });
-  }
-  wireVesselFilters();
+  // Vessel-class filter chips were removed because MarineTraffic's /ais/embed/
+  // endpoint silently ignores the `vtypes:` segment — it's only honored by
+  // /ais/home/, which CSP `frame-ancestors` blocks from being iframed. Having
+  // chips that didn't filter the visible map was worse than having no chips;
+  // the filtered-in-new-tab links in the footer are now the honest affordance.
+  // Tanker filtering still works where it matters: the Overview tab's
+  // "Vessels in zone" list is fed by our own AISStream consumer, which
+  // classifies vessels by AIS ShipType, so the analyst-facing data path
+  // is filtered end-to-end.
 });

@@ -1570,6 +1570,37 @@ button { font-family: inherit; cursor: pointer; }
   background: var(--cyan-dim);
   border-color: var(--line-3);
 }
+.vt-foot-links {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.vt-foot-link-primary {
+  color: var(--text-100, #e8edf4);
+  background: var(--cyan-dim, rgba(0, 230, 255, 0.12));
+  border-color: var(--cyan);
+  font-weight: 600;
+}
+.vt-foot-link-primary:hover {
+  background: var(--cyan);
+  color: #0a0f18;
+}
+.vt-note {
+  padding: 10px 18px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: 0.4px;
+  color: var(--text-mute);
+  background: rgba(255, 171, 0, 0.06);
+  border-top: 1px solid rgba(255, 171, 0, 0.18);
+  border-bottom: 1px solid var(--line);
+}
+.vt-note b {
+  color: #ffab00;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+}
 
 /* ═══ HYPOTHESIS CARDS ═══ */
 
