@@ -564,83 +564,46 @@ document.addEventListener('DOMContentLoaded', () => {
   wireVesselEmbed('vtBabFrame',    'vtBabWrap');
 
   // ── Vessel-class filter chips (MarineTraffic) ──
-  // Each panel has its own `<iframe>` (MT /ais/embed/) and a chip row. Clicking
-  // a chip:
-  //   1. Rewrites the iframe src with the `vtypes:X` path segment so the
-  //      embedded map filters to that vessel class (7=tanker, 8=cargo,
-  //      6=passenger, "7|8"=tanker+cargo).
-  //   2. Toggles a `.is-active` state on the chip (radio-group semantics —
-  //      clicking ALL clears the filter).
-  //   3. Updates the sibling "FULLSCREEN ↗" link so the pop-out preserves
-  //      the currently-selected filter.
+  // HONEST IMPLEMENTATION: MarineTraffic's /ais/embed/ endpoint appears to
+  // silently ignore vessel-type filters in many cases (their `vtypes:` path
+  // segment is reliably honored only by /ais/home/ — the fullscreen page,
+  // which CSP `frame-ancestors` blocks from being iframed). So the chips
+  // do exactly what they visibly advertise: clicking opens MT's fullscreen
+  // map in a new tab, pre-filtered to that vessel class. The iframe loads
+  // with `vtypes:7` baked in — if MT honors it, great; if not, the chip +
+  // fullscreen link always gives a working filtered view.
   //
-  // If MarineTraffic's embed route silently ignores `vtypes` (their embed
-  // parity with /ais/home/ has historically been patchy), the iframe visibly
-  // reloads and the fullscreen link still opens the properly-filtered view —
-  // so the user always has a working filtered view one click away. No
-  // pretending the filter silently applied.
+  // Codes: 7=tanker, 8=cargo, 6=passenger, "7|8"=tanker+cargo.
+  // Default filter = tankers (thesis focus is oil security, tankers are the
+  // only class that carries the risk we're quantifying).
   function wireVesselFilters() {
-    const panels = document.querySelectorAll('.vt-panel');
-    panels.forEach(panel => {
-      const frame = panel.querySelector('.vt-frame');
-      const fullLink = panel.querySelector('.vt-foot-link');
+    document.querySelectorAll('.vt-panel').forEach(panel => {
       const filter = panel.querySelector('.vt-filter[data-fs-base]');
-      if (!frame || !filter) return;
+      if (!filter) return;
       const fsBase = filter.dataset.fsBase || '';
-      const srcOriginal = frame.getAttribute('src') || '';
-      const fullOriginal = fullLink ? fullLink.getAttribute('href') : '';
-
-      // Build the embed src with a vtypes segment. MT's embed URL is
-      // colon-delimited path segments; we splice `vtypes:X` in right after
-      // `/embed/` so it's before the other map params.
-      function buildFrameSrc(vtypes) {
-        if (!vtypes) return srcOriginal;
-        return srcOriginal.replace(
-          /\/ais\/embed\//,
-          `/ais/embed/vtypes:${encodeURIComponent(vtypes)}/`
-        );
-      }
-      function buildFullSrc(vtypes) {
-        if (!vtypes) return fullOriginal || fsBase;
-        return `${fsBase}/vtypes:${encodeURIComponent(vtypes)}`;
-      }
+      const defaultVtypes = filter.dataset.defaultVtypes || '';
 
       const chips = Array.from(filter.querySelectorAll('.vt-chip'));
-      // Ensure there's an "ALL" reset chip at the front. If markup already
-      // provides one, leave it alone.
-      let allChip = chips.find(c => (c.dataset.vtypes || '') === '' || c.classList.contains('vt-chip-all'));
-      if (!allChip) {
-        allChip = document.createElement('a');
-        allChip.className = 'vt-chip vt-chip-all is-active';
-        allChip.textContent = 'ALL';
-        allChip.href = fsBase;
-        allChip.setAttribute('target', '_blank');
-        allChip.setAttribute('rel', 'noopener');
-        const row = filter.querySelector('.vt-chip-row');
-        if (row) row.insertBefore(allChip, row.firstChild);
-        chips.unshift(allChip);
-      }
-      // Default active = ALL.
-      if (!chips.some(c => c.classList.contains('is-active'))) {
-        allChip.classList.add('is-active');
+
+      // Mark the chip matching the default vtypes (e.g. TANKERS) as active
+      // so the user sees at a glance what the iframe is currently showing.
+      if (defaultVtypes) {
+        chips.forEach(c => c.classList.remove('is-active'));
+        const defChip = chips.find(c => (c.dataset.vtypes || '') === defaultVtypes);
+        if (defChip) defChip.classList.add('is-active');
       }
 
+      // Wire every chip → open the properly-filtered fullscreen MT view in a new tab.
+      // No click handler needed; default anchor + target="_blank" is correct behavior.
       chips.forEach(chip => {
         const vtypes = chip.dataset.vtypes || '';
-        // Preserve the right-click-→-open-in-new-tab affordance: href stays
-        // pointed at the filtered fullscreen URL, but left-click is
-        // intercepted and filters the iframe instead.
-        chip.setAttribute('href', buildFullSrc(vtypes));
-        chip.addEventListener('click', ev => {
-          // Let ctrl/cmd/middle/shift clicks fall through — user is
-          // explicitly asking to open in a new tab. Otherwise: filter.
-          if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button === 1) return;
-          ev.preventDefault();
-          chips.forEach(c => c.classList.remove('is-active'));
-          chip.classList.add('is-active');
-          frame.setAttribute('src', buildFrameSrc(vtypes));
-          if (fullLink) fullLink.setAttribute('href', buildFullSrc(vtypes));
-        });
+        const href = vtypes ? `${fsBase}/vtypes:${encodeURIComponent(vtypes)}` : fsBase;
+        chip.setAttribute('href', href);
+        chip.setAttribute('target', '_blank');
+        chip.setAttribute('rel', 'noopener');
+        chip.setAttribute('title', vtypes
+          ? `Open filtered view (${chip.textContent.trim()}) in MarineTraffic`
+          : 'Open unfiltered live map in MarineTraffic');
       });
     });
   }

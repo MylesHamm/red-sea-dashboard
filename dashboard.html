@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
 
-<link rel="stylesheet" href="assets/app.css?v=20260424f">
+<link rel="stylesheet" href="assets/app.css?v=20260424g">
 </head>
 <body>
 
@@ -467,8 +467,9 @@
             <span class="vt-live"><span class="vt-live-dot"></span>LIVE · AIS</span>
           </div>
           <div class="vt-filter" data-vt-filter="hormuz"
-               data-fs-base="https://www.marinetraffic.com/en/ais/home/centerx:56.25/centery:26.57/zoom:9">
-            <span class="vt-filter-label">VESSEL CLASS · click to filter · ⌘-click for new tab</span>
+               data-fs-base="https://www.marinetraffic.com/en/ais/home/centerx:56.25/centery:26.57/zoom:9"
+               data-default-vtypes="7">
+            <span class="vt-filter-label">VESSEL CLASS · defaults to TANKERS · click to open filtered map in new tab</span>
             <div class="vt-chip-row" role="group" aria-label="Vessel type filter">
               <a class="vt-chip" data-vtypes="7" target="_blank" rel="noopener">TANKERS</a>
               <a class="vt-chip" data-vtypes="8" target="_blank" rel="noopener">CARGO</a>
@@ -480,8 +481,8 @@
             <iframe
               class="vt-frame"
               id="vtHormuzFrame"
-              title="Live vessel traffic — Strait of Hormuz"
-              src="https://www.marinetraffic.com/en/ais/embed/zoom:9/centery:26.57/centerx:56.25/maptype:4/shownames:false/mmsi:0/shipid:0/fleet:/fleet_id:0/showmenu:false/remember:false/fs:true"
+              title="Live vessel traffic — Strait of Hormuz (tankers)"
+              src="https://www.marinetraffic.com/en/ais/embed/vtypes:7/zoom:9/centery:26.57/centerx:56.25/maptype:4/shownames:false/mmsi:0/shipid:0/fleet:/fleet_id:0/showmenu:false/remember:false/fs:true"
               referrerpolicy="no-referrer-when-downgrade"
               allow="geolocation"
               loading="lazy"
@@ -489,12 +490,12 @@
             ></iframe>
             <div class="vt-frame-fallback">
               <div>AIS EMBED BLOCKED BY BROWSER</div>
-              <a class="vt-foot-link" href="https://www.marinetraffic.com/en/ais/home/centerx:56.25/centery:26.57/zoom:9" target="_blank" rel="noopener">OPEN IN MARINETRAFFIC ↗</a>
+              <a class="vt-foot-link" href="https://www.marinetraffic.com/en/ais/home/centerx:56.25/centery:26.57/zoom:9/vtypes:7" target="_blank" rel="noopener">OPEN IN MARINETRAFFIC ↗</a>
             </div>
           </div>
           <div class="vt-foot">
-            <span class="vt-foot-meta"><b>26.57°N · 56.25°E</b> · 21-mile narrowest point</span>
-            <a class="vt-foot-link" href="https://www.marinetraffic.com/en/ais/home/centerx:56.25/centery:26.57/zoom:9" target="_blank" rel="noopener">FULLSCREEN ↗</a>
+            <span class="vt-foot-meta"><b>26.57°N · 56.25°E</b> · 21-mile narrowest point · TANKERS</span>
+            <a class="vt-foot-link" href="https://www.marinetraffic.com/en/ais/home/centerx:56.25/centery:26.57/zoom:9/vtypes:7" target="_blank" rel="noopener">FULLSCREEN ↗</a>
           </div>
         </div>
 
@@ -507,8 +508,9 @@
             <span class="vt-live"><span class="vt-live-dot"></span>LIVE · AIS</span>
           </div>
           <div class="vt-filter" data-vt-filter="bab"
-               data-fs-base="https://www.marinetraffic.com/en/ais/home/centerx:43.33/centery:12.58/zoom:8">
-            <span class="vt-filter-label">VESSEL CLASS · click to filter · ⌘-click for new tab</span>
+               data-fs-base="https://www.marinetraffic.com/en/ais/home/centerx:43.33/centery:12.58/zoom:8"
+               data-default-vtypes="7">
+            <span class="vt-filter-label">VESSEL CLASS · defaults to TANKERS · click to open filtered map in new tab</span>
             <div class="vt-chip-row" role="group" aria-label="Vessel type filter">
               <a class="vt-chip" data-vtypes="7" target="_blank" rel="noopener">TANKERS</a>
               <a class="vt-chip" data-vtypes="8" target="_blank" rel="noopener">CARGO</a>
@@ -520,8 +522,8 @@
             <iframe
               class="vt-frame"
               id="vtBabFrame"
-              title="Live vessel traffic — Bab el-Mandeb"
-              src="https://www.marinetraffic.com/en/ais/embed/zoom:8/centery:12.58/centerx:43.33/maptype:4/shownames:false/mmsi:0/shipid:0/fleet:/fleet_id:0/showmenu:false/remember:false/fs:true"
+              title="Live vessel traffic — Bab el-Mandeb (tankers)"
+              src="https://www.marinetraffic.com/en/ais/embed/vtypes:7/zoom:8/centery:12.58/centerx:43.33/maptype:4/shownames:false/mmsi:0/shipid:0/fleet:/fleet_id:0/showmenu:false/remember:false/fs:true"
               referrerpolicy="no-referrer-when-downgrade"
               allow="geolocation"
               loading="lazy"
@@ -529,12 +531,12 @@
             ></iframe>
             <div class="vt-frame-fallback">
               <div>AIS EMBED BLOCKED BY BROWSER</div>
-              <a class="vt-foot-link" href="https://www.marinetraffic.com/en/ais/home/centerx:43.33/centery:12.58/zoom:8" target="_blank" rel="noopener">OPEN IN MARINETRAFFIC ↗</a>
+              <a class="vt-foot-link" href="https://www.marinetraffic.com/en/ais/home/centerx:43.33/centery:12.58/zoom:8/vtypes:7" target="_blank" rel="noopener">OPEN IN MARINETRAFFIC ↗</a>
             </div>
           </div>
           <div class="vt-foot">
-            <span class="vt-foot-meta"><b>12.58°N · 43.33°E</b> · 18-mile strait · Yemen/Djibouti</span>
-            <a class="vt-foot-link" href="https://www.marinetraffic.com/en/ais/home/centerx:43.33/centery:12.58/zoom:8" target="_blank" rel="noopener">FULLSCREEN ↗</a>
+            <span class="vt-foot-meta"><b>12.58°N · 43.33°E</b> · 18-mile strait · Yemen/Djibouti · TANKERS</span>
+            <a class="vt-foot-link" href="https://www.marinetraffic.com/en/ais/home/centerx:43.33/centery:12.58/zoom:8/vtypes:7" target="_blank" rel="noopener">FULLSCREEN ↗</a>
           </div>
         </div>
 
@@ -841,12 +843,12 @@
 </div>
 
 <!-- Scripts -->
-<script src="assets/api.js?v=20260424f"></script>
-<script src="assets/data.js?v=20260424f"></script>
-<script src="assets/hydrate.js?v=20260424f"></script>
-<script src="assets/globe.js?v=20260424f"></script>
-<script src="assets/tacmap.js?v=20260424f"></script>
-<script src="assets/charts.js?v=20260424f"></script>
-<script src="assets/app.js?v=20260424f"></script>
+<script src="assets/api.js?v=20260424g"></script>
+<script src="assets/data.js?v=20260424g"></script>
+<script src="assets/hydrate.js?v=20260424g"></script>
+<script src="assets/globe.js?v=20260424g"></script>
+<script src="assets/tacmap.js?v=20260424g"></script>
+<script src="assets/charts.js?v=20260424g"></script>
+<script src="assets/app.js?v=20260424g"></script>
 </body>
 </html>
