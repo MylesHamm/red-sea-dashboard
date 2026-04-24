@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import random
 import threading
 import time
 from typing import Dict, List, Optional
@@ -170,23 +171,55 @@ async def _consumer_loop() -> None:
         "BoundingBoxes": list(BOUNDING_BOXES.values()),
         "FilterMessageTypes": ["PositionReport", "ShipStaticData"],
     }
-    backoff = 5
+
+    # AISStream.io free tier enforces "one active connection per API key". On
+    # Render free-tier deploys a previous worker's WebSocket can linger for
+    # ~30s before their side drops it, so our new worker gets HTTP 429 on
+    # handshake. Sleep briefly before the very first connect to let that
+    # drain — cheap if unnecessary, essential if it's the actual cause.
+    await asyncio.sleep(8)
+
+    # Backoff strategy:
+    #   - Normal disconnect       → 30s (+jitter), double up to 5 min
+    #   - HTTP 429 (rate limit)   → start at 5 min, cap at 30 min
+    #   - Reset ONLY after we've received at least one message (a 429 can
+    #     happen after a successful TCP connect if free-tier quota triggers
+    #     on subscription, not handshake — we don't want to reset on that)
+    backoff = 30
     while True:
+        got_message = False
         try:
             async with websockets.connect(url, ping_interval=30, ping_timeout=20) as ws:
                 await ws.send(json.dumps(sub))
                 _status["connected"] = True
                 _status["last_error"] = None
-                backoff = 5
                 logger.info("[ais] Connected, subscribed to Hormuz + Bab boxes")
                 async for raw in ws:
+                    if not got_message:
+                        got_message = True
+                        backoff = 30  # confirmed healthy — reset only now
                     await _handle_message(raw)
         except Exception as e:
             _status["connected"] = False
             _status["last_error"] = f"{type(e).__name__}: {e}"
-            logger.warning(f"[ais] connection dropped ({e!r}); reconnecting in {backoff}s")
-            await asyncio.sleep(backoff)
-            backoff = min(backoff * 2, 120)  # cap at 2 min
+            err_str = str(e).lower()
+            is_rate_limited = (
+                "429" in err_str
+                or "too many" in err_str
+                or "rate" in err_str and "limit" in err_str
+            )
+            if is_rate_limited:
+                wait = max(backoff, 300)       # never retry sooner than 5 min on 429
+                wait = min(wait, 1800)         # cap at 30 min
+                backoff = wait * 2             # next failure waits even longer
+                logger.warning(f"[ais] HTTP 429 rate-limited; waiting {wait}s before retry")
+            else:
+                wait = backoff
+                logger.warning(f"[ais] connection dropped ({e!r}); reconnecting in {wait}s")
+                backoff = min(backoff * 2, 300)  # cap at 5 min for normal errors
+            # Jitter: ±25% so multiple Render workers (if any) don't resync
+            jitter = 1.0 + random.uniform(-0.25, 0.25)
+            await asyncio.sleep(wait * jitter)
 
 
 def _prune_stale() -> None:

@@ -114,10 +114,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // No vessels yet — use the AIS status to explain why
     let msg = 'Waiting for AIS feed…';
     if (status) {
-      if (!status.configured)        msg = 'AIS feed not configured (AISSTREAM_API_KEY missing).';
-      else if (!status.connected)    msg = 'AIS feed reconnecting…' + (status.last_error ? ` (${status.last_error})` : '');
-      else if (!status.last_message_ts) msg = 'Connected. Waiting for first position report…';
-      else                           msg = 'No vessels currently in the kill zone.';
+      const err = (status.last_error || '').toLowerCase();
+      const isRateLimited = err.includes('429') || err.includes('too many') || (err.includes('rate') && err.includes('limit'));
+      if (!status.configured)            msg = 'AIS feed not configured (AISSTREAM_API_KEY missing).';
+      else if (isRateLimited)            msg = 'AIS feed rate-limited by provider · retrying in a few minutes.';
+      else if (!status.connected)        msg = 'AIS feed reconnecting…' + (status.last_error ? ` (${status.last_error})` : '');
+      else if (!status.last_message_ts)  msg = 'Connected. Waiting for first position report…';
+      else                               msg = 'No vessels currently in the kill zone.';
     }
     gpEls.vesselList.innerHTML = `<div style="${hint}">${escapeHtml(msg)}</div>`;
   }
