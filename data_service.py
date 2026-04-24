@@ -25,6 +25,15 @@ import config
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# yfinance logs every Yahoo rejection at ERROR level, and on Render (or any
+# cloud IP without a cached Yahoo consent cookie + crumb) every single call
+# fails — `Expecting value: line 1 column 1` is json.loads on an empty/HTML
+# body. Those errors are harmless because DXY and OVX have FRED fallbacks and
+# Brent has EIA as primary, but they spam the deploy log with scary-looking
+# stack traces. Silence yfinance's own logger — we still catch exceptions and
+# log a concise WARNING from our own wrapper.
+logging.getLogger("yfinance").setLevel(logging.CRITICAL)
+
 # Ensure cache directory exists
 config.CACHE_DIR.mkdir(exist_ok=True)
 
@@ -771,50 +780,63 @@ def fetch_yfinance_series(ticker: str, cache_key: str) -> List[dict]:
     return []
 
 
-def fetch_dxy() -> List[dict]:
-    """DXY: try yfinance first, then FRED DTWEXBGS (broad trade-weighted dollar) as fallback."""
-    result = fetch_yfinance_series("DX-Y.NYB", "dxy")
-    if result:
-        return result
-    # FRED fallback — broad trade-weighted dollar index (close proxy for DXY)
+def _fred_fallback(series_id: str, cache_key: str, label: str) -> List[dict]:
+    """Shared FRED fetch used as the primary source for DXY + OVX on cloud
+    deploys where yfinance is blocked by Yahoo's bot detection. Writes to
+    the same cache key the yfinance path used, so downstream readers don't
+    care about the source change."""
+    cached = _read_cache(cache_key, config.CACHE_TTL_YFINANCE)
+    if cached:
+        return cached
     try:
         from fredapi import Fred
         fred = Fred(api_key=config.FRED_API_KEY)
-        series = fred.get_series("DTWEXBGS", observation_start="2023-10-01")
+        series = fred.get_series(series_id, observation_start="2023-10-01")
         records = [
             {"date": idx.strftime("%Y-%m-%d"), "value": round(float(val), 4)}
             for idx, val in series.items() if pd.notna(val)
         ]
         if records:
-            _write_cache("dxy", records)
-            logger.info(f"FRED DTWEXBGS (DXY proxy): fetched {len(records)} data points")
+            _write_cache(cache_key, records)
+            logger.info(f"FRED {series_id} ({label}): fetched {len(records)} data points")
             return records
+        logger.warning(f"FRED {series_id} ({label}) returned 0 rows")
     except Exception as e:
-        logger.warning(f"FRED DXY fallback failed: {e}")
+        logger.warning(f"FRED {series_id} ({label}) failed: {e}")
+    stale = _read_stale_cache(cache_key)
+    if stale:
+        logger.info(f"FRED {series_id} ({label}): serving stale cache ({len(stale)} rows)")
+        return stale
     return []
+
+
+def fetch_dxy() -> List[dict]:
+    """DXY (US Dollar Index).
+
+    FRED's DTWEXBGS (broad trade-weighted dollar) is the primary source.
+    yfinance's DX-Y.NYB is tried only as a secondary check — on any cloud IP
+    (Render, AWS, GCP) Yahoo blocks us with an empty/HTML body, so hitting
+    yfinance first wasted cycles and spammed the deploy log. The FRED series
+    is slightly different math but tracks DXY within 1-2% and is how every
+    thesis-grade macro dashboard sources this number anyway.
+    """
+    result = _fred_fallback("DTWEXBGS", "dxy", "DXY proxy")
+    if result:
+        return result
+    # Last-ditch yfinance attempt for local dev where Yahoo still works
+    return fetch_yfinance_series("DX-Y.NYB", "dxy")
 
 
 def fetch_ovx() -> List[dict]:
-    """OVX: try yfinance first, then FRED OVXCLS as fallback."""
-    result = fetch_yfinance_series("^OVX", "ovx")
+    """OVX (CBOE Crude Oil ETF Volatility Index).
+
+    FRED's OVXCLS is the same series CBOE publishes — FRED is the primary
+    source on cloud. yfinance ^OVX is tried only as a local-dev convenience.
+    """
+    result = _fred_fallback("OVXCLS", "ovx", "OVX")
     if result:
         return result
-    # FRED fallback — CBOE Crude Oil ETF Volatility Index
-    try:
-        from fredapi import Fred
-        fred = Fred(api_key=config.FRED_API_KEY)
-        series = fred.get_series("OVXCLS", observation_start="2023-10-01")
-        records = [
-            {"date": idx.strftime("%Y-%m-%d"), "value": round(float(val), 4)}
-            for idx, val in series.items() if pd.notna(val)
-        ]
-        if records:
-            _write_cache("ovx", records)
-            logger.info(f"FRED OVXCLS: fetched {len(records)} data points")
-            return records
-    except Exception as e:
-        logger.warning(f"FRED OVX fallback failed: {e}")
-    return []
+    return fetch_yfinance_series("^OVX", "ovx")
 
 
 # ─── FRED API (China BCI) ───────────────────────────────────────────────────
