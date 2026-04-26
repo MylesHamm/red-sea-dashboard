@@ -204,6 +204,24 @@ function renderPriceVsAttacks(state) {
     attacks = rows.map(r => (r.weekly_attacks != null ? +r.weekly_attacks : 0));
   }
 
+  // Source-band coloring: pre-Oct 2025 = thesis Houthi maritime strikes
+  // (Bab/Yemen subset, red); post-Oct 2025 = HDX Yemen + Iran combined
+  // (broader scope reflecting the Hormuz war front, gold). The y-axis
+  // jump at the boundary is real — coloring makes that visible at a
+  // glance rather than burying it in the subtitle.
+  const THESIS_END = '2025-10-01';
+  const C_HOUTHI   = 'rgba(255,61,94,0.55)';   // C_RED-ish
+  const C_HOUTHI_B = 'rgba(255,61,94,0.85)';
+  const C_WAR      = 'rgba(255,170,0,0.55)';   // amber/gold
+  const C_WAR_B    = 'rgba(255,170,0,0.85)';
+  const barFills   = rows.map(r => (r.date && r.date <= THESIS_END) ? C_HOUTHI   : C_WAR);
+  const barEdges   = rows.map(r => (r.date && r.date <= THESIS_END) ? C_HOUTHI_B : C_WAR_B);
+
+  // Find the index of the first post-thesis row so we can draw a
+  // dashed vertical separator + label.
+  const splitIdx = rows.findIndex(r => r.date && r.date > THESIS_END);
+  const splitX   = (splitIdx > 0) ? labels[splitIdx] : null;
+
   new Chart(canvas, {
     type: 'line',
     data: {
@@ -211,21 +229,53 @@ function renderPriceVsAttacks(state) {
       datasets: [
         { label: 'Brent (USD)', data: prices, borderColor: C_CYAN, backgroundColor: 'rgba(0,212,255,0.08)',
           borderWidth: 2, pointRadius: 0, tension: 0.35, fill: true, yAxisID: 'y', spanGaps: true },
-        { label: 'Weekly attacks', data: attacks, borderColor: C_RED, backgroundColor: 'rgba(255,61,94,0.35)',
-          type: 'bar', yAxisID: 'y1', barThickness: 4 }
+        { label: 'Houthi maritime strikes (thesis · Bab)', data: attacks.map((v,i) => i < (splitIdx === -1 ? rows.length : splitIdx) ? v : null),
+          borderColor: C_HOUTHI_B, backgroundColor: C_HOUTHI, type: 'bar', yAxisID: 'y1', barThickness: 4 },
+        { label: 'Live conflict events (HDX · Yemen + Iran)', data: attacks.map((v,i) => i >= (splitIdx === -1 ? rows.length : splitIdx) ? v : null),
+          borderColor: C_WAR_B, backgroundColor: C_WAR, type: 'bar', yAxisID: 'y1', barThickness: 4 }
       ]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: '#dfe7f0' } } },
+      plugins: {
+        legend: { labels: { color: '#dfe7f0', boxWidth: 14, font: { size: 11 } } },
+        // Vertical separator at the thesis/live data boundary. Drawn as a
+        // tiny inline plugin since we don't want to pull in chartjs-annotation.
+        beforeDraw: undefined,
+      },
       scales: {
         x: { ticks: { color: '#556475', maxTicksLimit: 10 }, grid: { color: 'rgba(0,212,255,0.05)' } },
         y:  { position: 'left',  title: { display: true, text: 'BRENT $/BBL', color: '#556475', font: { size: 10 } },
               ticks: { color: '#8f9db0', callback: v => '$' + v }, grid: { color: 'rgba(0,212,255,0.05)' } },
-        y1: { position: 'right', title: { display: true, text: 'WEEKLY ATTACKS', color: '#556475', font: { size: 10 } },
-              ticks: { color: '#ff3d5e' }, grid: { display: false }, beginAtZero: true }
+        y1: { position: 'right', title: { display: true, text: 'WEEKLY EVENTS', color: '#556475', font: { size: 10 } },
+              ticks: { color: '#8f9db0' }, grid: { display: false }, beginAtZero: true }
       }
-    }
+    },
+    plugins: [{
+      id: 'thesisBoundaryLine',
+      afterDatasetsDraw(chart) {
+        if (!splitX) return;
+        const xScale = chart.scales.x;
+        const xPx    = xScale.getPixelForValue(splitX);
+        if (!isFinite(xPx)) return;
+        const top = chart.chartArea.top, bottom = chart.chartArea.bottom;
+        const ctx = chart.ctx;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,170,0,0.55)';
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(xPx, top);
+        ctx.lineTo(xPx, bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#ffaa00';
+        ctx.font = '10px JetBrains Mono, monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText('THESIS WINDOW ENDS · LIVE HDX FROM HERE', xPx + 6, top + 14);
+        ctx.restore();
+      }
+    }]
   });
 }
 

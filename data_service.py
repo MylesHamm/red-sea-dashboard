@@ -1832,11 +1832,70 @@ def _extend_master_timeseries_with_live(result: dict) -> None:
         var = sum((x - mean) ** 2 for x in rets) / (len(rets) - 1)
         return round((var ** 0.5) * (252 ** 0.5), 4)
 
+    # ── Live event counts from HDX (monthly aggregates) ────────────────
+    # The thesis CSV stops publishing weekly_attacks/fatalities_count past
+    # its observation window (Sep 2025). Without filling these, the main
+    # "Price vs. Conflict Intensity" chart shows live Brent through April
+    # 2026 but ZERO bars across the entire US-Iran war period — visually
+    # implying the war is silent, which is the opposite of the truth.
+    #
+    # The dashboard tracks BOTH chokepoints — Bab (Houthi/Yemen theatre)
+    # and Hormuz (Iran/IRGC theatre). The live signal therefore combines
+    # Yemen + Iran HDX monthly conflict events. This is intentionally a
+    # broader scope than the thesis's curated "Houthi maritime strikes"
+    # subset (which peaked at 47/week) because the conflict itself has
+    # broadened: a chart that only counted Houthi maritime ops during a
+    # multi-front US-Iran war would be misleading by omission.
+    #
+    # The boundary is real and the chart subtitle discloses it: pre-Oct
+    # 2025 = thesis WeeklyAttackFreq (Houthi maritime); post-Oct 2025 =
+    # HDX Yemen + Iran combined. The y-axis scale will jump because the
+    # war IS bigger — that's the honest representation.
+    hdx_snap = _read_cache("hdx_event_counts", 86_400 * 7) or {}
+    hdx_by = hdx_snap.get("by_country") or {}
+
+    # Build {YYYY-MM: {events_per_day, fatalities_per_day}} for both
+    # chokepoint theatres combined. Per-chokepoint live cards still
+    # surface the country-specific counts separately.
+    monthly_per_day: Dict[str, Dict[str, float]] = {}
+    for country_label in ("yemen", "iran"):
+        for r in (hdx_by.get(country_label) or []):
+            ym = r.get("month")
+            if not ym:
+                continue
+            try:
+                y, m = int(ym[:4]), int(ym[5:7])
+                # Days in month — handles leap years
+                if m == 12:
+                    next_month = datetime(y + 1, 1, 1)
+                else:
+                    next_month = datetime(y, m + 1, 1)
+                days_in_month = (next_month - datetime(y, m, 1)).days
+            except Exception:
+                continue
+            slot = monthly_per_day.setdefault(ym, {"events": 0.0, "fatalities": 0.0, "days": days_in_month})
+            slot["events"]     += float(r.get("events", 0) or 0)
+            slot["fatalities"] += float(r.get("fatalities", 0) or 0)
+
+    def _hdx_for_day(date_str):
+        ym = date_str[:7]
+        slot = monthly_per_day.get(ym)
+        if not slot or not slot["days"]:
+            return None, None
+        # Daily share = monthly total / days_in_month
+        return (slot["events"] / slot["days"], slot["fatalities"] / slot["days"])
+
     # Schema-match the static rows so downstream code doesn't have to handle
     # missing keys. Use the last static row as the field template.
     template_keys = list(ts[-1].keys())
 
+    # War onset for the IranIsrael_Escalation flag — set to 1 from this
+    # date forward in live-extension rows so charts that gate on the war
+    # phase don't report "war = false" during the war.
+    WAR_ONSET = "2026-02-28"
+
     appended = 0
+    weekly_buf: List[float] = []  # rolling 7-day attack window
     for d in new_dates:
         bp = brent_by[d]
         if bp is None:
@@ -1849,14 +1908,36 @@ def _extend_master_timeseries_with_live(result: dict) -> None:
         row["ovx"]               = round(float(ovx_by[d]), 2) if ovx_by.get(d) is not None else None
         row["spr_release_volume"] = _spr_for(d)
         row["china_pmi"]         = _pmi_for(d)
-        # Integer-typed event-flag columns: zero out for live rows. Setting
-        # these to None would trip `int()` casts in downstream chart code.
-        for k in ("weekly_attacks", "daily_attacks", "tanker_attacks",
-                  "chokepoint_attacks", "fatalities_count", "opec_dummy",
-                  "russia_ukraine_dummy", "opec_decision",
-                  "russia_ukraine_attacks", "iran_israel_escalation"):
-            if k in template_keys:
-                row[k] = 0
+
+        # Daily attack count — distribute the HDX monthly total across that
+        # month's days. Non-integer estimate; we round only at the weekly
+        # rollup so accumulated fractions don't all snap to zero.
+        daily_ev, daily_fat = _hdx_for_day(d)
+        if daily_ev is not None:
+            weekly_buf.append(daily_ev)
+            if len(weekly_buf) > 7:
+                weekly_buf.pop(0)
+            row["daily_attacks"] = int(round(daily_ev))
+            row["weekly_attacks"] = int(round(sum(weekly_buf)))
+            row["fatalities_count"] = int(round(daily_fat or 0))
+            # We don't know the per-event tanker / chokepoint flags from
+            # HDX (only country-level counts), so leave those at 0 rather
+            # than fabricate a split.
+            row["tanker_attacks"] = 0
+            row["chokepoint_attacks"] = 0
+        else:
+            row["weekly_attacks"]    = 0
+            row["daily_attacks"]     = 0
+            row["fatalities_count"]  = 0
+            row["tanker_attacks"]    = 0
+            row["chokepoint_attacks"] = 0
+
+        # Other 0/1 indicator columns
+        row["opec_dummy"]            = 0
+        row["russia_ukraine_dummy"]  = 0
+        row["opec_decision"]         = 0
+        row["russia_ukraine_attacks"] = 0
+        row["iran_israel_escalation"] = 1 if d >= WAR_ONSET else 0
         ts.append(row)
         appended += 1
 
