@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
 
-<link rel="stylesheet" href="assets/app.css?v=20260424r">
+<link rel="stylesheet" href="assets/app.css?v=20260424s">
 </head>
 <body>
 
@@ -528,7 +528,11 @@
     <section class="hero-narrative compact">
       <div class="hero-eyebrow">ECONOMETRIC ANALYSIS</div>
       <h1 class="section-headline">Three hypotheses. Three verdicts.</h1>
-      <p class="section-body">GJR-GARCH(1,1,1) volatility model with geopolitical and supply-side controls. Attack frequency explains a small but statistically significant share of Brent volatility variance; chokepoint attacks dominate.</p>
+      <p class="section-body">GJR-GARCH(1,1,1) volatility model with 7 geopolitical / supply-side controls. <b>Estimated on the thesis observation window:</b> Oct 2023 – Sep 2025, Houthi-era Brent (N = 505 trading days). The regression coefficients shown below are <b>frozen</b> — they are not re-fit against the live HDX feed that powers the Overview tab. Re-running the model on the broader US–Iran war period would conflate two different conflict regimes. To extend the analysis past Sep 2025 a separate war-period regression is needed; that's future work.</p>
+      <div class="analysis-window-badge">
+        <span class="awb-dot"></span>
+        ANALYSIS WINDOW · OCT 2023 – SEP 2025 · N=505 · LOCKED
+      </div>
     </section>
 
     <!-- How to read this -->
@@ -589,7 +593,7 @@
           <div class="nb-index">§ 04</div>
           <div>
             <h2 class="nb-title">Event-Study Window</h2>
-            <p class="nb-subtitle">Avg Brent, T−2 to T+5 trading days around major attacks · Houthi sample (Oct 2023 – Sep 2025) · <b>not a forecast</b></p>
+            <p class="nb-subtitle">Avg Brent, T−2 to T+5 trading days around major attacks · thesis sample (Oct 2023 – Sep 2025, locked) · <b>not a forecast</b></p>
           </div>
         </div>
         <div class="chart-surface"><canvas id="priceWindowChart"></canvas></div>
@@ -613,7 +617,7 @@
           <div class="nb-index">§ 06</div>
           <div>
             <h2 class="nb-title">GARCH Summary</h2>
-            <p class="nb-subtitle">Conditional-variance model fit on daily Brent log returns. In plain English: a statistical model that learns how today's oil-price volatility depends on yesterday's volatility and yesterday's price shock. Specification + fit statistics below come live from <code>/api/hypothesis</code>.</p>
+            <p class="nb-subtitle">Conditional-variance model fit on daily Brent log returns over the thesis window (Oct 2023 – Sep 2025, N = 505). Specification + fit statistics come from <code>/api/hypothesis</code>; the underlying regression is locked at the thesis result and does not re-estimate against post-Sep-2025 events.</p>
           </div>
           <div class="nb-badges"><span class="badge badge-gold" data-garch-badge>—</span></div>
         </div>
@@ -819,12 +823,12 @@
 </div>
 
 <!-- Scripts -->
-<script src="assets/api.js?v=20260424r"></script>
-<script src="assets/data.js?v=20260424r"></script>
-<script src="assets/hydrate.js?v=20260424r"></script>
-<script src="assets/globe.js?v=20260424r"></script>
-<script src="assets/tacmap.js?v=20260424r"></script>
-<script src="assets/charts.js?v=20260424r"></script>
-<script src="assets/app.js?v=20260424r"></script>
+<script src="assets/api.js?v=20260424s"></script>
+<script src="assets/data.js?v=20260424s"></script>
+<script src="assets/hydrate.js?v=20260424s"></script>
+<script src="assets/globe.js?v=20260424s"></script>
+<script src="assets/tacmap.js?v=20260424s"></script>
+<script src="assets/charts.js?v=20260424s"></script>
+<script src="assets/app.js?v=20260424s"></script>
 </body>
 </html>

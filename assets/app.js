@@ -158,7 +158,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!window.API) return;
     window.CP = window.CP || {};
     window.CP.incidents = window.CP.incidents || {};
-    const targets = ['hormuz', 'bab'];
+    // All three chokepoints with INCIDENT_BOUNDING_BOXES coverage. Originally
+    // 'suez' was omitted here even though INCIDENT_CHOKEPOINTS includes it,
+    // so the Suez sidebar permanently displayed "Loading incidents…" — the
+    // bucket was never populated.
+    const targets = ['hormuz', 'bab', 'suez'];
     await Promise.all(targets.map(async (cp) => {
       try {
         const r = await window.API.chokepointIncidents(cp, 90);

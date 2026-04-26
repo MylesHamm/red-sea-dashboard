@@ -1699,6 +1699,27 @@ button { font-family: inherit; cursor: pointer; }
   padding: 16px 20px;
   margin-bottom: 22px;
 }
+.analysis-window-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 6px 12px;
+  border: 1px solid rgba(255,170,0,0.40);
+  background: rgba(255,170,0,0.08);
+  color: #ffaa00;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  border-radius: 4px;
+}
+.analysis-window-badge .awb-dot {
+  width: 6px; height: 6px;
+  background: #ffaa00;
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(255,170,0,0.6);
+}
 .howto-title {
   font-family: var(--mono);
   font-size: 10px;
