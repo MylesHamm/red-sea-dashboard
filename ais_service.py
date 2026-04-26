@@ -21,7 +21,6 @@ import logging
 import random
 import threading
 import time
-from pathlib import Path
 from typing import Dict, List, Optional
 
 import config
@@ -218,13 +217,42 @@ async def _consumer_loop() -> None:
             _status["connected"] = False
             _status["last_error"] = f"{type(e).__name__}: {e}"
             # Dump everything the websockets library can tell us about this
-            # failure — response headers, status line, body — so we can see
-            # whether AISStream is rejecting on API-key validity, quota,
-            # malformed subscription, or just zombie-connection contention.
-            for attr in ("response", "status_code", "headers"):
-                val = getattr(e, attr, None)
-                if val:
-                    logger.warning(f"[ais] exception.{attr}={str(val)[:400]}")
+            # failure — response status, headers, body — so we can distinguish
+            # API-key invalidity, quota exhaustion, malformed subscription,
+            # and zombie-connection contention. websockets 13.x raises
+            # InvalidStatus(response=Response(status_code, headers, body))
+            # so we have to dig INTO .response, not just str() it.
+            response_retry_after = None
+            response_body_text = None
+            response_status_code = None
+            resp = getattr(e, "response", None)
+            if resp is not None:
+                try:
+                    response_status_code = getattr(resp, "status_code", None)
+                    headers = getattr(resp, "headers", None)
+                    body = getattr(resp, "body", None)
+                    if response_status_code is not None:
+                        logger.warning(f"[ais] handshake response: HTTP {response_status_code}")
+                    if headers is not None:
+                        # Headers can be a Headers/dict/list — normalize to dict-of-str.
+                        try:
+                            hdr_items = headers.raw_items() if hasattr(headers, "raw_items") else (
+                                headers.items() if hasattr(headers, "items") else list(headers)
+                            )
+                            hdr_dict = {str(k).lower(): str(v) for (k, v) in hdr_items}
+                        except Exception:
+                            hdr_dict = {"_raw": str(headers)[:400]}
+                        logger.warning(f"[ais] handshake headers: {json.dumps(hdr_dict)[:600]}")
+                        response_retry_after = hdr_dict.get("retry-after")
+                    if body is not None:
+                        try:
+                            response_body_text = body.decode("utf-8", errors="replace") if isinstance(body, (bytes, bytearray)) else str(body)
+                        except Exception:
+                            response_body_text = repr(body)
+                        if response_body_text:
+                            logger.warning(f"[ais] handshake body: {response_body_text[:600]}")
+                except Exception as diag_err:
+                    logger.warning(f"[ais] could not introspect exception.response: {diag_err!r}")
             err_str = str(e).lower()
             # Parenthesize the `rate ... limit` branch so it doesn't bind as
             # `(... or rate) and limit` — Python's `and` has higher precedence
@@ -235,10 +263,33 @@ async def _consumer_loop() -> None:
                 or ("rate" in err_str and "limit" in err_str)
             )
             if is_rate_limited:
-                wait = max(backoff, 60)          # floor at 60s (zombie lifetime)
-                wait = min(wait, 300)            # cap at 5 min
-                backoff = min(wait * 2, 300)     # next attempt, still capped
-                logger.warning(f"[ais] HTTP 429 rate-limited; retry in {wait}s")
+                # If AISStream sends a Retry-After header, honor it (their
+                # number is authoritative; ours is a guess). Otherwise use
+                # exponential backoff with our floor/cap.
+                hint = None
+                if response_retry_after:
+                    try:
+                        hint = float(response_retry_after)
+                    except ValueError:
+                        hint = None
+                if hint is not None:
+                    wait = max(60, min(hint, 600))  # clamp to [60s, 10min]
+                    backoff = min(wait * 2, 300)
+                    logger.warning(
+                        f"[ais] HTTP 429 rate-limited; provider Retry-After={hint}s, "
+                        f"sleeping {wait}s. Likely cause: another connection holds this "
+                        f"key's slot (zombie process / second consumer / recent redeploy)."
+                    )
+                else:
+                    wait = max(backoff, 60)          # floor at 60s (zombie lifetime)
+                    wait = min(wait, 300)            # cap at 5 min
+                    backoff = min(wait * 2, 300)     # next attempt, still capped
+                    logger.warning(
+                        f"[ais] HTTP 429 rate-limited; retry in {wait}s. "
+                        f"Likely cause: another connection holds this key's slot "
+                        f"(zombie process / second consumer / recent redeploy). "
+                        f"If this persists past 10 min of no deploys, rotate the API key."
+                    )
             else:
                 wait = backoff
                 logger.warning(f"[ais] connection dropped ({e!r}); retry in {wait}s")
@@ -261,30 +312,13 @@ def _prune_stale() -> None:
 
 # ─── Public API ──────────────────────────────────────────────────────────────
 
-_REPRESENTATIVE_PATH = Path(__file__).parent / "data" / "representative_tankers.json"
-_representative_cache: Optional[dict] = None
-
-
-def _load_representative() -> dict:
-    """Load the static representative-tanker fallback dataset once."""
-    global _representative_cache
-    if _representative_cache is None:
-        try:
-            _representative_cache = json.loads(_REPRESENTATIVE_PATH.read_text())
-        except Exception as e:
-            logger.warning(f"[ais] representative tanker file unreadable: {e}")
-            _representative_cache = {}
-    return _representative_cache
-
-
 def get_vessels(chokepoint_id: str) -> List[dict]:
     """Return the current vessel list for a chokepoint, sorted by speed desc.
 
-    If the live AISStream feed hasn't produced any vessels yet (rate-limited,
-    not configured, or just slow to first message), fall back to a static
-    representative-tanker dataset so the chokepoint maps show meaningful
-    traffic instead of being blank. Representative records carry
-    `representative: true` so the UI labels them as synthesized.
+    Real live AIS data only. If the WebSocket feed has produced no messages
+    yet (rate-limited, reconnecting, or not configured), we return an empty
+    list — the UI surfaces the feed state via /api/vessels-status and explains
+    the silence honestly rather than synthesizing illustrative traffic.
     """
     if chokepoint_id not in _vessels:
         return []
@@ -297,12 +331,7 @@ def get_vessels(chokepoint_id: str) -> List[dict]:
         not (v.get("type") and v["type"] != "OTHER"),
         -(v.get("speed") or 0),
     ))
-    if vessels:
-        return vessels[:MAX_RETURNED]
-    # Live feed empty → representative fallback. Clearly flagged so the
-    # frontend can show "representative positions · live feed unavailable".
-    rep = _load_representative().get(chokepoint_id) or []
-    return [dict(v) for v in rep][:MAX_RETURNED]
+    return vessels[:MAX_RETURNED]
 
 
 def get_status() -> dict:

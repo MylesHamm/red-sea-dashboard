@@ -14,16 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
 
-<!-- Leaflet: self-hosted chokepoint vessel maps. Replaces the MarineTraffic
-     iframe whose /ais/embed/ endpoint silently drops vessel-type filters. -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-      crossorigin="anonymous"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-        crossorigin="anonymous"></script>
-
-<link rel="stylesheet" href="assets/app.css?v=20260424j">
+<link rel="stylesheet" href="assets/app.css?v=20260424q">
 </head>
 <body>
 
@@ -84,9 +75,9 @@
       <span class="threat-pill threat-elevated" id="threatPillSuez" data-cp="suez">SUEZ · DEGRADED</span>
       <span class="threat-pill threat-safe" id="threatPillCape" data-cp="cape">CAPE ROUTE · NOMINAL</span>
       <span class="threat-divider"></span>
-      <span class="threat-meta">BRENT <b id="threatBrent">$94.20</b> <span class="delta-up" id="threatBrentDelta">▲ +2.3%</span></span>
-      <span class="threat-meta">OVX <b id="threatOvx">58.4</b> <span class="delta-up" id="threatOvxDelta">▲ +4.1</span></span>
-      <span class="threat-meta">WAR PREM <b id="threatWarPrem">+1.8%</b></span>
+      <span class="threat-meta">BRENT <b id="threatBrent">—</b> <span id="threatBrentDelta">—</span></span>
+      <span class="threat-meta">OVX <b id="threatOvx">—</b> <span id="threatOvxDelta">—</span></span>
+      <span class="threat-meta">WAR PREM <b id="threatWarPrem">—</b></span>
     </div>
   </div>
 </header>
@@ -98,7 +89,7 @@
     <!-- Hero narrative -->
     <section class="hero-narrative">
       <div class="hero-eyebrow">SITUATION REPORT · UPDATED HOURLY</div>
-      <h1 class="hero-headline">Two chokepoints. One conflict. <br><span class="hero-accent">29 mbd of oil at risk.</span></h1>
+      <h1 class="hero-headline">Two chokepoints. One conflict. <br><span class="hero-accent"><span data-hero-flow>—</span> mbd of oil at risk.</span></h1>
       <p class="hero-body">
         The US–Iran war has converged with ongoing Houthi maritime operations to place both Middle East oil chokepoints under simultaneous threat — the most severe dual-chokepoint crisis since the 1980s Tanker War. This dashboard quantifies the market response.
       </p>
@@ -110,12 +101,10 @@
       <div class="kpi-hero">
         <div class="kpi-hero-label">BRENT CRUDE · SPOT</div>
         <div class="kpi-hero-value">
-          <span class="kpi-currency">$</span><span id="heroPrice">94.20</span>
+          <span class="kpi-currency">$</span><span id="heroPrice">—</span>
           <span class="kpi-hero-unit">/ bbl</span>
         </div>
-        <div class="kpi-hero-change up">
-          <span class="change-arrow">▲</span> +$2.14 (+2.33%) · 24h
-        </div>
+        <div class="kpi-hero-change" id="heroChange">—</div>
         <!-- Sparkline -->
         <svg class="kpi-spark" viewBox="0 0 200 50" preserveAspectRatio="none" aria-hidden="true">
           <defs>
@@ -128,8 +117,8 @@
           <path id="sparkLine" d="" fill="none" stroke="#00d4ff" stroke-width="1.5"/>
         </svg>
         <div class="kpi-hero-foot">
-          <span>30D RANGE <b>$76.40 — $119.00</b></span>
-          <span>SINCE WAR ONSET <b class="up">+21.9%</b></span>
+          <span>30D RANGE <b>—</b></span>
+          <span>SINCE WAR ONSET <b>—</b></span>
         </div>
       </div>
 
@@ -146,30 +135,30 @@
 
       <div class="kpi-primary kpi-primary-warn">
         <div class="kpi-label">OIL FLOW AT RISK</div>
-        <div class="kpi-value" data-kpi="flowAtRisk">29.2 <span class="kpi-unit">mbd</span></div>
+        <div class="kpi-value" data-kpi="flowAtRisk">— <span class="kpi-unit">mbd</span></div>
         <div class="kpi-trend">
           <svg viewBox="0 0 60 20" width="60" height="20"><polyline points="0,14 12,14 24,13 36,10 48,8 60,8" fill="none" stroke="#ffab00" stroke-width="1.3"/></svg>
-          <span class="warn">~29% global supply</span>
+          <span class="warn"><span data-hero-flow-pct>—</span> of global supply</span>
         </div>
-        <div class="kpi-foot">Hormuz 21.0 + Bab el-Mandeb 8.2</div>
+        <div class="kpi-foot">Hormuz + Bab el-Mandeb combined</div>
       </div>
 
       <!-- Secondary KPIs -->
       <div class="kpi-sec">
         <div class="kpi-sec-label">OVX VOLATILITY</div>
-        <div class="kpi-sec-value" data-kpi="ovx">58.4 <span class="up">▲</span></div>
+        <div class="kpi-sec-value" data-kpi="ovx">—</div>
       </div>
       <div class="kpi-sec">
         <div class="kpi-sec-label">DXY</div>
-        <div class="kpi-sec-value" data-kpi="dxy">102.1 <span class="down">▼</span></div>
+        <div class="kpi-sec-value" data-kpi="dxy">—</div>
       </div>
       <div class="kpi-sec">
         <div class="kpi-sec-label">SUEZ THROUGHPUT</div>
-        <div class="kpi-sec-value" data-kpi="suez">−60% <span class="down">▼</span></div>
+        <div class="kpi-sec-value" data-kpi="suez">—</div>
       </div>
       <div class="kpi-sec">
         <div class="kpi-sec-label">PEAK DAILY VOL</div>
-        <div class="kpi-sec-value" data-kpi="peakVol">8.7%</div>
+        <div class="kpi-sec-value" data-kpi="peakVol">—</div>
       </div>
 
       <!-- Market Context row — Tier-1 FRED/EIA macro -->
@@ -291,48 +280,39 @@
 
         <div class="gp-stats">
           <div class="gp-stat">
-            <div class="gp-stat-val" id="gpFlow">21.0</div>
+            <div class="gp-stat-val" id="gpFlow">—</div>
             <div class="gp-stat-lbl">MBD FLOW</div>
           </div>
           <div class="gp-stat">
-            <div class="gp-stat-val" id="gpWidth">21 <span>mi</span></div>
+            <div class="gp-stat-val" id="gpWidth">—</div>
             <div class="gp-stat-lbl">NARROWEST</div>
           </div>
           <div class="gp-stat">
-            <div class="gp-stat-val" id="gpVessels">47</div>
+            <div class="gp-stat-val" id="gpVessels">—</div>
             <div class="gp-stat-lbl">VESSELS IN ZONE</div>
           </div>
           <div class="gp-stat">
-            <div class="gp-stat-val" id="gpIncidents">12</div>
+            <div class="gp-stat-val" id="gpIncidents">—</div>
             <div class="gp-stat-lbl">INCIDENTS · 30D</div>
           </div>
         </div>
 
         <div class="gp-section">
-          <div class="gp-section-title">ROUTES AT RISK</div>
+          <div class="gp-section-title">ROUTES AT RISK <span class="gp-section-note">· EIA reference flows</span></div>
           <ul class="gp-list" id="gpRoutes">
-            <li><span class="r-dot r-critical"></span>Ras Tanura → Singapore <b>8.4 mbd</b></li>
-            <li><span class="r-dot r-critical"></span>Kharg Island → China <b>1.6 mbd</b></li>
-            <li><span class="r-dot r-critical"></span>Basrah → Rotterdam <b>3.1 mbd</b></li>
-            <li><span class="r-dot r-critical"></span>Kuwait → S. Korea <b>2.4 mbd</b></li>
+            <!-- Routes are populated from window.CHOKEPOINTS[id].routes (see assets/data.js).
+                 Reference flow rates come from EIA Country Analysis Briefs and JODI export
+                 statistics; they're long-run averages, not live AIS-derived figures. -->
           </ul>
         </div>
 
         <div class="gp-section">
-          <div class="gp-section-title">VESSELS IN KILL ZONE</div>
+          <div class="gp-section-title">RECENT KILL-ZONE INCIDENTS · ACLED</div>
           <div class="gp-vessels" id="gpVesselList">
-            <!-- populated by JS -->
+            <!-- populated by JS from /api/chokepoint-incidents/{cp} -->
           </div>
         </div>
 
-        <div class="gp-section">
-          <div class="gp-section-title">SIGINT · ILLUSTRATIVE</div>
-          <div class="gp-sigint">
-            <div class="sig-row"><span class="sig-time">14:08Z</span> IRGC small boats shadowing VLCC <b>EAGLE ESPERANZA</b></div>
-            <div class="sig-row"><span class="sig-time">11:41Z</span> GPS spoofing reported · 26.4°N 56.8°E</div>
-            <div class="sig-row"><span class="sig-time">04:22Z</span> Panamanian-flag tanker hailed by Iranian navy</div>
-          </div>
-        </div>
       </aside>
     </section>
 
@@ -375,7 +355,7 @@
         <div class="nb-index">§ 02.1</div>
         <div>
           <h2 class="nb-title">Red Sea Tactical View</h2>
-          <p class="nb-subtitle">ACLED events attributed to Houthi / Ansar Allah forces · Red Sea + Gulf of Aden viewport · actor1/actor2 match on "Houthi" or "Ansar Allah". Markers below are illustrative campaign hotspots.</p>
+          <p class="nb-subtitle">ACLED events attributed to Houthi / Ansar Allah forces · Red Sea + Gulf of Aden viewport · actor1/actor2 match on "Houthi" or "Ansar Allah". Markers are geocoded directly from the ACLED feed below.</p>
         </div>
         <div class="nb-badges"><span class="badge badge-gold">ACLED · HOUTHI-ONLY</span></div>
       </div>
@@ -385,19 +365,19 @@
         </div>
         <aside class="tac-side">
           <div class="tac-stat">
-            <div class="tac-stat-val" id="tacTotal">726</div>
+            <div class="tac-stat-val" id="tacTotal">—</div>
             <div class="tac-stat-lbl">TOTAL EVENTS · ACLED</div>
           </div>
           <div class="tac-stat">
-            <div class="tac-stat-val" id="tacSouthRS">88</div>
+            <div class="tac-stat-val" id="tacSouthRS">—</div>
             <div class="tac-stat-lbl">SOUTH RED SEA</div>
           </div>
           <div class="tac-stat">
-            <div class="tac-stat-val" id="tacGoA">51</div>
+            <div class="tac-stat-val" id="tacGoA">—</div>
             <div class="tac-stat-lbl">GULF OF ADEN</div>
           </div>
           <div class="tac-stat">
-            <div class="tac-stat-val tac-red" id="tacChoke">29</div>
+            <div class="tac-stat-val tac-red" id="tacChoke">—</div>
             <div class="tac-stat-lbl">BAB EL-MANDEB</div>
           </div>
           <div class="tac-divider"></div>
@@ -412,6 +392,8 @@
     </section>
 
     <!-- Chokepoint cards -->
+    <div class="cp-live-banner" data-live-events-banner>LIVE ACLED · HDX MIRROR · LOADING…</div>
+
     <section class="chokepoint-cards">
       <div class="cp-card cp-critical" data-cp-card="hormuz">
         <div class="cp-head">
@@ -419,13 +401,19 @@
           <span class="cp-code">HORMUZ-01</span>
         </div>
         <div class="cp-name">Strait of Hormuz</div>
-        <div class="cp-flow"><span data-stat="flow">21.0</span><span>mbd</span></div>
-        <div class="cp-body">21-mile-wide passage controlled by IRGC Navy. ~21% of global petroleum flows through daily. Tankers running at max speed since Feb 28.</div>
+        <div class="cp-flow"><span data-stat="flow">—</span><span>mbd</span></div>
+        <div class="cp-body">21-mile-wide passage controlled by IRGC Navy. ~21% of global seaborne petroleum (EIA reference, slow-moving). Transit volume vs. pre-war baseline: <b><span data-cp-decline="hormuz">—</span></b>.</div>
         <div class="cp-meta">
           <span><b data-stat="vessels">—</b> VESSELS</span>
           <span><b data-stat="premium">—</b> PREMIUM</span>
           <span><b data-stat="incidents">—</b> INCIDENTS/30D</span>
         </div>
+        <div class="cp-live">
+          <span class="cp-live-tag">LIVE · <span data-cp-events-month="hormuz">—</span></span>
+          <span><b data-cp-events-count="hormuz">—</b> EVENTS</span>
+          <span><b data-cp-events-fatal="hormuz">—</b> FATAL</span>
+        </div>
+        <div class="cp-asof" data-cp-asof="hormuz"></div>
       </div>
 
       <div class="cp-card cp-high" data-cp-card="bab">
@@ -434,13 +422,19 @@
           <span class="cp-code">BAB-02</span>
         </div>
         <div class="cp-name">Bab el-Mandeb</div>
-        <div class="cp-flow"><span data-stat="flow">8.2</span><span>mbd</span></div>
+        <div class="cp-flow"><span data-stat="flow">—</span><span>mbd</span></div>
         <div class="cp-body">Iranian proxy operations zone. Houthis have attacked 100+ commercial vessels since Nov 2023. Coordinated second-front pressure on shipping.</div>
         <div class="cp-meta">
           <span><b data-stat="vessels">—</b> VESSELS</span>
           <span><b data-stat="premium">—</b> PREMIUM</span>
           <span><b data-stat="incidents">—</b> INCIDENTS/30D</span>
         </div>
+        <div class="cp-live">
+          <span class="cp-live-tag">LIVE · <span data-cp-events-month="bab">—</span></span>
+          <span><b data-cp-events-count="bab">—</b> EVENTS</span>
+          <span><b data-cp-events-fatal="bab">—</b> FATAL</span>
+        </div>
+        <div class="cp-asof" data-cp-asof="bab"></div>
       </div>
 
       <div class="cp-card cp-safe" data-cp-card="cape">
@@ -450,20 +444,20 @@
         </div>
         <div class="cp-name">Cape of Good Hope</div>
         <div class="cp-flow">+3,500<span>nm</span></div>
-        <div class="cp-body">The only safe route. Adds 10–14 sailing days, +$200–400 per TEU. ~50% of tankers have rerouted here. Vessel availability tightening.</div>
+        <div class="cp-body">The only safe route. Adds 10–14 sailing days, +$200–400/TEU (Drewry reference). Tanker reroute share inferred from the live Bab transit decline shown above.</div>
         <div class="cp-meta">
-          <span><b data-stat="incidents">0</b> INCIDENTS</span>
+          <span><b data-stat="incidents">—</b> INCIDENTS</span>
           <span><b data-stat="diverted">—</b> DIVERTED</span>
           <span><b>+$400</b>/TEU</span>
         </div>
       </div>
     </section>
 
-    <!-- ─── LIVE VESSEL TRAFFIC · AIS ─── -->
+    <!-- ─── LIVE VESSEL TRAFFIC · MARINETRAFFIC ─── -->
     <section class="vessel-traffic">
       <div class="vt-intro">
-        <span class="vt-eyebrow">§ 02.2 · LIVE VESSEL TRAFFIC</span>
-        <span class="vt-caption">Real-time AIS positions · MarineTraffic feed · updated every ~60s</span>
+        <span class="vt-eyebrow">§ 02.2 · VESSEL TRAFFIC · MARINETRAFFIC EMBED</span>
+        <span class="vt-caption">Live AIS positions are sourced from a third-party MarineTraffic embed (not this dashboard's backend). If the embed is blocked by your browser or network, use "open in MarineTraffic" — the tanker-filtered view (vtypes:7) opens in a new tab.</span>
       </div>
       <div class="vt-grid">
 
@@ -473,30 +467,23 @@
               <span class="vt-code">HORMUZ-AIS</span>
               <span class="vt-name">Strait of Hormuz</span>
             </div>
-            <span class="vt-live" data-vm-status="hormuz"><span class="vt-live-dot"></span>LIVE · AIS</span>
-          </div>
-          <div class="vt-filter" data-vm-filter="hormuz">
-            <span class="vt-filter-label">VESSEL CLASS · click to filter the map</span>
-            <div class="vt-chip-row" role="group" aria-label="Vessel type filter">
-              <button class="vt-chip is-active" type="button" data-vm-types="TANKER">TANKERS</button>
-              <button class="vt-chip" type="button" data-vm-types="CARGO">CARGO</button>
-              <button class="vt-chip" type="button" data-vm-types="TANKER,CARGO">TANKER+CARGO</button>
-              <button class="vt-chip" type="button" data-vm-types="ALL">ALL</button>
-            </div>
+            <span class="vt-live"><span class="vt-live-dot"></span>MARINETRAFFIC · 3RD-PARTY</span>
           </div>
           <div class="vt-map-wrap">
-            <div class="vt-map" id="vtHormuzMap"
-                 data-vm-cp="hormuz"
-                 data-vm-center="26.57,56.25"
-                 data-vm-zoom="9"
-                 data-vm-ring-km="17"
-                 aria-label="Live tanker positions — Strait of Hormuz"></div>
-            <div class="vt-map-banner" data-vm-banner="hormuz" hidden></div>
+            <iframe class="vt-iframe"
+                    title="MarineTraffic — Strait of Hormuz live AIS"
+                    src="https://www.marinetraffic.com/en/ais/embed/zoom:9/centery:26.57/centerx:56.25/maptype:4/shownames:false/mmsi:0/shipid:0/fleet:/fleet_id:0/vtypes:/showmenu:false/remember:false"
+                    loading="lazy"
+                    referrerpolicy="no-referrer-when-downgrade"
+                    allow="geolocation"></iframe>
+            <noscript><div class="vt-iframe-fallback">Map embed requires JavaScript and a browser that allows third-party iframes from marinetraffic.com.</div></noscript>
           </div>
           <div class="vt-foot">
-            <span class="vt-foot-meta"><b>26.57°N · 56.25°E</b> · 21-mile narrowest point · <span data-vm-count="hormuz">—</span> TANKERS</span>
+            <span class="vt-foot-meta"><b>26.57°N · 56.25°E</b> · 21-mile narrowest point · <span data-vt-asof="hormuz">live AIS · MarineTraffic embed</span></span>
             <div class="vt-foot-links">
-              <a class="vt-foot-link vt-foot-link-primary" href="https://www.marinetraffic.com/en/ais/home/centerx:56.25/centery:26.57/zoom:9/vtypes:7" target="_blank" rel="noopener">OPEN IN MARINETRAFFIC ↗</a>
+              <a class="vt-foot-link vt-foot-link-primary"
+                 href="https://www.marinetraffic.com/en/ais/home/centerx:56.25/centery:26.57/zoom:9/vtypes:7"
+                 target="_blank" rel="noopener">OPEN IN MARINETRAFFIC ↗</a>
             </div>
           </div>
         </div>
@@ -507,30 +494,23 @@
               <span class="vt-code">BAB-AIS</span>
               <span class="vt-name">Bab el-Mandeb</span>
             </div>
-            <span class="vt-live" data-vm-status="bab"><span class="vt-live-dot"></span>LIVE · AIS</span>
-          </div>
-          <div class="vt-filter" data-vm-filter="bab">
-            <span class="vt-filter-label">VESSEL CLASS · click to filter the map</span>
-            <div class="vt-chip-row" role="group" aria-label="Vessel type filter">
-              <button class="vt-chip is-active" type="button" data-vm-types="TANKER">TANKERS</button>
-              <button class="vt-chip" type="button" data-vm-types="CARGO">CARGO</button>
-              <button class="vt-chip" type="button" data-vm-types="TANKER,CARGO">TANKER+CARGO</button>
-              <button class="vt-chip" type="button" data-vm-types="ALL">ALL</button>
-            </div>
+            <span class="vt-live"><span class="vt-live-dot"></span>MARINETRAFFIC · 3RD-PARTY</span>
           </div>
           <div class="vt-map-wrap">
-            <div class="vt-map" id="vtBabMap"
-                 data-vm-cp="bab"
-                 data-vm-center="12.58,43.33"
-                 data-vm-zoom="9"
-                 data-vm-ring-km="14"
-                 aria-label="Live tanker positions — Bab el-Mandeb"></div>
-            <div class="vt-map-banner" data-vm-banner="bab" hidden></div>
+            <iframe class="vt-iframe"
+                    title="MarineTraffic — Bab el-Mandeb live AIS"
+                    src="https://www.marinetraffic.com/en/ais/embed/zoom:8/centery:13.5/centerx:43.5/maptype:4/shownames:false/mmsi:0/shipid:0/fleet:/fleet_id:0/vtypes:/showmenu:false/remember:false"
+                    loading="lazy"
+                    referrerpolicy="no-referrer-when-downgrade"
+                    allow="geolocation"></iframe>
+            <noscript><div class="vt-iframe-fallback">Map embed requires JavaScript and a browser that allows third-party iframes from marinetraffic.com.</div></noscript>
           </div>
           <div class="vt-foot">
-            <span class="vt-foot-meta"><b>12.58°N · 43.33°E</b> · 18-mile strait · Yemen/Djibouti · <span data-vm-count="bab">—</span> TANKERS</span>
+            <span class="vt-foot-meta"><b>12.58°N · 43.33°E</b> · 18-mile strait · Yemen/Djibouti · <span data-vt-asof="bab">live AIS · MarineTraffic embed</span></span>
             <div class="vt-foot-links">
-              <a class="vt-foot-link vt-foot-link-primary" href="https://www.marinetraffic.com/en/ais/home/centerx:43.33/centery:12.58/zoom:8/vtypes:7" target="_blank" rel="noopener">OPEN IN MARINETRAFFIC ↗</a>
+              <a class="vt-foot-link vt-foot-link-primary"
+                 href="https://www.marinetraffic.com/en/ais/home/centerx:43.5/centery:13.5/zoom:8/vtypes:7"
+                 target="_blank" rel="noopener">OPEN IN MARINETRAFFIC ↗</a>
             </div>
           </div>
         </div>
@@ -555,50 +535,50 @@
     <section class="howto-card">
       <div class="howto-title">HOW TO READ THIS</div>
       <div class="howto-grid">
-        <div><b>β (beta)</b> — the size of the effect. A β of 1.07 means each additional weekly attack is associated with roughly 1.07 percentage points more volatility, holding controls fixed. Bigger β = stronger push.</div>
-        <div><b>p-value</b> — the probability this result came from chance alone. Under 0.05 is the usual bar for "real." 0.003 means 3-in-1000 odds of seeing this by luck — very unlikely to be noise.</div>
-        <div><b>R² (r-squared)</b> — fraction of variance the model explains. 0.29 means 29% of the wiggle in Brent volatility is accounted for; the rest is everything else (inventories, OPEC, weather). Financial R² is usually low.</div>
-        <div><b>Verdict logic</b> — SUPPORTED requires p&nbsp;&lt;&nbsp;0.05 <i>and</i> β in the expected direction. WEAKLY SUPPORTED means the sign is right but p is between 0.05 and 0.10 (suggestive, not conclusive).</div>
+        <div><b>β (beta)</b> — the size and direction of the effect on conditional volatility (after controls). Positive β means the variable raises volatility; negative β means it lowers it. Bigger absolute value = stronger push.</div>
+        <div><b>p-value</b> — the probability of seeing this result by chance alone. Under 0.05 is the usual bar for "statistically significant"; under 0.01 is strong evidence the relationship is real.</div>
+        <div><b>R² (r-squared)</b> — fraction of variance the full model explains. Higher means the model captures more of the wiggle in Brent volatility. The remainder is everything else: inventories, OPEC policy, weather, etc.</div>
+        <div><b>Verdict logic</b> — SUPPORTED requires p&nbsp;&lt;&nbsp;0.05 <i>and</i> β in the hypothesised (positive) direction. NOT SUPPORTED · sig. opposite means p&nbsp;&lt;&nbsp;0.05 but β has the wrong sign — a real effect that contradicts the hypothesis.</div>
       </div>
     </section>
 
-    <!-- Hypothesis cards -->
+    <!-- Hypothesis cards — values populated by hydrate.js from /api/hypothesis -->
     <section class="hypothesis-row">
-      <div class="hyp-card">
+      <div class="hyp-card" data-hyp="h1">
         <div class="hyp-tag">H1</div>
-        <div class="hyp-title">Attack Frequency → Price</div>
-        <div class="hyp-sub">Do more weekly attacks lift Brent?</div>
+        <div class="hyp-title" data-hyp-name>—</div>
+        <div class="hyp-sub" data-hyp-sub>—</div>
         <div class="hyp-metrics">
-          <div><div class="hyp-m-lbl" title="Effect size — how much price moves per attack">β</div><div class="hyp-m-val">0.41</div></div>
-          <div><div class="hyp-m-lbl" title="Probability this is chance (&lt;0.05 = significant)">p-VAL</div><div class="hyp-m-val">0.08</div></div>
-          <div><div class="hyp-m-lbl" title="Share of variance explained by the model">R²</div><div class="hyp-m-val">0.12</div></div>
+          <div><div class="hyp-m-lbl" title="Effect size on conditional volatility, after controls">β</div><div class="hyp-m-val" data-hyp-m="beta">—</div></div>
+          <div><div class="hyp-m-lbl" title="Probability this is chance (&lt;0.05 = significant)">p-VAL</div><div class="hyp-m-val" data-hyp-m="p">—</div></div>
+          <div><div class="hyp-m-lbl" title="Share of variance explained by the full model">R²</div><div class="hyp-m-val" data-hyp-m="r2">—</div></div>
         </div>
-        <div class="hyp-verdict hyp-weak">WEAKLY SUPPORTED</div>
-        <div class="hyp-plain">Plain English: each extra weekly attack nudges Brent by ~$0.41, but the p-value (0.08) is just above the significance bar — suggestive, not conclusive.</div>
+        <div class="hyp-verdict" data-hyp-verdict>—</div>
+        <div class="hyp-plain" data-hyp-plain>Awaiting regression results…</div>
       </div>
-      <div class="hyp-card">
+      <div class="hyp-card" data-hyp="h2">
         <div class="hyp-tag">H2</div>
-        <div class="hyp-title">Chokepoint Attacks → Volatility</div>
-        <div class="hyp-sub">Does proximity to Bab el-Mandeb matter?</div>
+        <div class="hyp-title" data-hyp-name>—</div>
+        <div class="hyp-sub" data-hyp-sub>—</div>
         <div class="hyp-metrics">
-          <div><div class="hyp-m-lbl" title="Effect size — volatility bump per chokepoint attack">β</div><div class="hyp-m-val">1.07</div></div>
-          <div><div class="hyp-m-lbl" title="Probability this is chance (&lt;0.05 = significant)">p-VAL</div><div class="hyp-m-val">0.003</div></div>
-          <div><div class="hyp-m-lbl" title="Share of variance explained by the model">R²</div><div class="hyp-m-val">0.29</div></div>
+          <div><div class="hyp-m-lbl" title="Effect size on conditional volatility, after controls">β</div><div class="hyp-m-val" data-hyp-m="beta">—</div></div>
+          <div><div class="hyp-m-lbl" title="Probability this is chance (&lt;0.05 = significant)">p-VAL</div><div class="hyp-m-val" data-hyp-m="p">—</div></div>
+          <div><div class="hyp-m-lbl" title="Share of variance explained by the full model">R²</div><div class="hyp-m-val" data-hyp-m="r2">—</div></div>
         </div>
-        <div class="hyp-verdict hyp-supported">SUPPORTED</div>
-        <div class="hyp-plain">Plain English: attacks near Bab el-Mandeb add ~1.07pp to volatility each, with 3-in-1000 odds of being a fluke. The chokepoint proximity effect is real and large.</div>
+        <div class="hyp-verdict" data-hyp-verdict>—</div>
+        <div class="hyp-plain" data-hyp-plain>Awaiting regression results…</div>
       </div>
-      <div class="hyp-card">
+      <div class="hyp-card" data-hyp="h3">
         <div class="hyp-tag">H3</div>
-        <div class="hyp-title">Tanker-Specific → Spike</div>
-        <div class="hyp-sub">Do tanker targets produce sharper jumps?</div>
+        <div class="hyp-title" data-hyp-name>—</div>
+        <div class="hyp-sub" data-hyp-sub>—</div>
         <div class="hyp-metrics">
-          <div><div class="hyp-m-lbl" title="Effect size — extra volatility when a tanker is hit">β</div><div class="hyp-m-val">2.14</div></div>
-          <div><div class="hyp-m-lbl" title="Probability this is chance (&lt;0.05 = significant)">p-VAL</div><div class="hyp-m-val">0.001</div></div>
-          <div><div class="hyp-m-lbl" title="Share of variance explained by the model">R²</div><div class="hyp-m-val">0.34</div></div>
+          <div><div class="hyp-m-lbl" title="Effect size on conditional volatility, after controls">β</div><div class="hyp-m-val" data-hyp-m="beta">—</div></div>
+          <div><div class="hyp-m-lbl" title="Probability this is chance (&lt;0.05 = significant)">p-VAL</div><div class="hyp-m-val" data-hyp-m="p">—</div></div>
+          <div><div class="hyp-m-lbl" title="Share of variance explained by the full model">R²</div><div class="hyp-m-val" data-hyp-m="r2">—</div></div>
         </div>
-        <div class="hyp-verdict hyp-supported">STRONGLY SUPPORTED</div>
-        <div class="hyp-plain">Plain English: a tanker strike roughly doubles the vol impact of a non-tanker attack (~2.14pp), at 1-in-1000 odds of being chance. Market treats tanker hits as a distinct, larger shock.</div>
+        <div class="hyp-verdict" data-hyp-verdict>—</div>
+        <div class="hyp-plain" data-hyp-plain>Awaiting regression results…</div>
       </div>
     </section>
 
@@ -633,19 +613,17 @@
           <div class="nb-index">§ 06</div>
           <div>
             <h2 class="nb-title">GARCH Summary</h2>
-            <p class="nb-subtitle">GJR-GARCH(1,1,1) on daily log returns. In plain English: a statistical model that learns how oil-price volatility today depends on yesterday's volatility, yesterday's shock, and whether that shock was a price <i>drop</i> (leverage effect).</p>
+            <p class="nb-subtitle">Conditional-variance model fit on daily Brent log returns. In plain English: a statistical model that learns how today's oil-price volatility depends on yesterday's volatility and yesterday's price shock. Specification + fit statistics below come live from <code>/api/hypothesis</code>.</p>
           </div>
-          <div class="nb-badges"><span class="badge badge-gold">ASYMMETRIC</span></div>
+          <div class="nb-badges"><span class="badge badge-gold" data-garch-badge>—</span></div>
         </div>
         <div class="garch-grid">
-          <div class="garch-cell" title="Baseline/minimum level of volatility the model expects regardless of recent shocks."><div class="gc-lbl">ω (CONSTANT)</div><div class="gc-val">0.008</div><div class="gc-hint">baseline vol</div></div>
-          <div class="garch-cell" title="How sharply yesterday's price shock feeds into today's volatility. Higher = twitchier market."><div class="gc-lbl">α (ARCH)</div><div class="gc-val">0.064</div><div class="gc-hint">shock sensitivity</div></div>
-          <div class="garch-cell" title="How much yesterday's volatility persists into today. 0.90 means vol decays slowly — shocks linger."><div class="gc-lbl">β (GARCH)</div><div class="gc-val">0.901</div><div class="gc-hint">vol persistence</div></div>
-          <div class="garch-cell" title="Asymmetry term. Positive γ means bad news (price drops) raises volatility more than equally-sized good news."><div class="gc-lbl">γ (LEVERAGE)</div><div class="gc-val up-alert">0.118</div><div class="gc-hint">bad-news bias</div></div>
-          <div class="garch-cell" title="How well the model fits the data (higher is better). Used for comparing models."><div class="gc-lbl">LOG-LIKELIHOOD</div><div class="gc-val">−1824.6</div><div class="gc-hint">fit quality</div></div>
-          <div class="garch-cell" title="Akaike Information Criterion. Penalized fit score — lower is better when comparing rival specifications."><div class="gc-lbl">AIC</div><div class="gc-val">3659.2</div><div class="gc-hint">model score</div></div>
-          <div class="garch-cell" title="α + β + γ/2. How stubborn volatility is. >0.95 means shocks fade slowly."><div class="gc-lbl">PERSISTENCE</div><div class="gc-val">0.965</div><div class="gc-hint">shock stickiness</div></div>
-          <div class="garch-cell" title="Time for a volatility shock to halve. 19.5 days ≈ 4 weeks — a Houthi strike's vol footprint lingers a month."><div class="gc-lbl">HALF-LIFE</div><div class="gc-val">19.5d</div><div class="gc-hint">decay time</div></div>
+          <div class="garch-cell" title="Model specification — symmetric (GARCH) or asymmetric (GJR-GARCH) with leverage term."><div class="gc-lbl">MODEL</div><div class="gc-val" data-garch="model">—</div><div class="gc-hint">specification</div></div>
+          <div class="garch-cell" title="Innovation (residual) distribution assumption."><div class="gc-lbl">DISTRIBUTION</div><div class="gc-val" data-garch="distribution">—</div><div class="gc-hint">residual density</div></div>
+          <div class="garch-cell" title="Number of trading days used to estimate the model."><div class="gc-lbl">OBSERVATIONS</div><div class="gc-val" data-garch="observations">—</div><div class="gc-hint">trading days</div></div>
+          <div class="garch-cell" title="Log-likelihood at the MLE. Higher is better; useful for likelihood-ratio tests vs nested models."><div class="gc-lbl">LOG-LIKELIHOOD</div><div class="gc-val" data-garch="log_likelihood">—</div><div class="gc-hint">fit quality</div></div>
+          <div class="garch-cell" title="Akaike Information Criterion. Penalized fit score — lower is better when comparing rival specifications."><div class="gc-lbl">AIC</div><div class="gc-val" data-garch="aic">—</div><div class="gc-hint">model score</div></div>
+          <div class="garch-cell" title="Bayesian Information Criterion. Stricter penalty than AIC; lower is better."><div class="gc-lbl">BIC</div><div class="gc-val" data-garch="bic">—</div><div class="gc-hint">model score (strict)</div></div>
         </div>
       </div>
       <div class="narrative-block compact">
@@ -754,7 +732,7 @@
         <div class="nb-index">§ 10</div>
         <div>
           <h2 class="nb-title">30-Day Scenario Forecast</h2>
-          <p class="nb-subtitle">From current $94.20. Ranges derived from historical precedents: 1990 Gulf War, 1979 Revolution, 2019 Aramco.</p>
+          <p class="nb-subtitle">From current spot of $<span data-scenario-base>—</span>. Price ranges are recomputed against the live Brent baseline; multipliers and probabilities are <b>analyst priors</b>, anchored to historical precedents (1990 Gulf War, 1979 Revolution, 2019 Aramco) — they are not derived from the regression.</p>
         </div>
         <div class="nb-badges"><span class="badge badge-red">FORECAST</span></div>
       </div>
@@ -762,27 +740,30 @@
         <div class="sc-card sc-escalation">
           <div class="sc-head">
             <span class="sc-tag">ESCALATION</span>
-            <span class="sc-prob">P ≈ 25%</span>
+            <span class="sc-prob" title="Analyst prior, not regression-derived">PRIOR · 25%</span>
           </div>
-          <div class="sc-target">$140–160</div>
+          <div class="sc-target" data-sc-mult-low="1.49" data-sc-mult-high="1.70">—</div>
+          <div class="sc-target-note">+49% to +70% vs. spot</div>
           <div class="sc-body">Hormuz closed, war widens to Gulf infrastructure. ~13–15 mbd net disruption. 1990 Gulf War precedent.</div>
           <div class="sc-bar"><div class="sc-fill" style="width:95%;background:#ff5252"></div></div>
         </div>
         <div class="sc-card sc-sustained">
           <div class="sc-head">
             <span class="sc-tag">SUSTAINED</span>
-            <span class="sc-prob">P ≈ 55%</span>
+            <span class="sc-prob" title="Analyst prior, not regression-derived">PRIOR · 55%</span>
           </div>
-          <div class="sc-target">$105–120</div>
+          <div class="sc-target" data-sc-mult-low="1.12" data-sc-mult-high="1.28">—</div>
+          <div class="sc-target-note">+12% to +28% vs. spot</div>
           <div class="sc-body">Partial blockade, insurance-driven disruption, SPR releases partially offset. Slow grind higher.</div>
           <div class="sc-bar"><div class="sc-fill" style="width:65%;background:#ffab00"></div></div>
         </div>
         <div class="sc-card sc-ceasefire">
           <div class="sc-head">
             <span class="sc-tag">CEASEFIRE</span>
-            <span class="sc-prob">P ≈ 20%</span>
+            <span class="sc-prob" title="Analyst prior, not regression-derived">PRIOR · 20%</span>
           </div>
-          <div class="sc-target">$75–85</div>
+          <div class="sc-target" data-sc-mult-low="0.80" data-sc-mult-high="0.90">—</div>
+          <div class="sc-target-note">−20% to −10% vs. spot</div>
           <div class="sc-body">Diplomatic breakthrough, Hormuz reopens. Risk premium unwinds but remains above pre-war.</div>
           <div class="sc-bar"><div class="sc-fill" style="width:35%;background:#00e676"></div></div>
         </div>
@@ -838,13 +819,12 @@
 </div>
 
 <!-- Scripts -->
-<script src="assets/api.js?v=20260424j"></script>
-<script src="assets/data.js?v=20260424j"></script>
-<script src="assets/hydrate.js?v=20260424j"></script>
-<script src="assets/globe.js?v=20260424j"></script>
-<script src="assets/tacmap.js?v=20260424j"></script>
-<script src="assets/charts.js?v=20260424j"></script>
-<script src="assets/vessel-map.js?v=20260424j"></script>
-<script src="assets/app.js?v=20260424j"></script>
+<script src="assets/api.js?v=20260424q"></script>
+<script src="assets/data.js?v=20260424q"></script>
+<script src="assets/hydrate.js?v=20260424q"></script>
+<script src="assets/globe.js?v=20260424q"></script>
+<script src="assets/tacmap.js?v=20260424q"></script>
+<script src="assets/charts.js?v=20260424q"></script>
+<script src="assets/app.js?v=20260424q"></script>
 </body>
 </html>

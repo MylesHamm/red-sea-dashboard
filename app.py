@@ -308,22 +308,76 @@ async def get_gdelt_tone():
 
 
 # ─── Live AIS Vessel Feed (AISStream.io WebSocket) ───────────────────────────
+# DEPRECATED: AISStream.io's free tier allows one concurrent WebSocket per key.
+# Render's free tier free-restarts the worker often enough that we live in 429
+# purgatory (see AIS_DEPRECATION.md / commit history). The endpoints stay so
+# old cached frontends don't 404, but they always return empty.
 
 @app.get("/api/vessels/{chokepoint}")
 async def get_vessels(chokepoint: str):
-    """Current vessels inside a chokepoint bounding box, from live AIS feed.
-
-    Chokepoint must be one of: hormuz, bab. Returns an empty list if the AIS
-    feed isn't connected yet or the chokepoint is unknown.
-    """
-    vessels = ais_service.get_vessels(chokepoint)
-    return {"chokepoint": chokepoint, "count": len(vessels), "data": vessels}
+    """DEPRECATED. Live AIS replaced by /api/chokepoint-incidents/{chokepoint}.
+    Returns an empty list to keep stale frontends quiet."""
+    return {"chokepoint": chokepoint, "count": 0, "data": [], "deprecated": True}
 
 
 @app.get("/api/vessels-status")
 async def get_vessels_status():
-    """Diagnostic: AIS WebSocket connection state + per-chokepoint counts."""
-    return ais_service.get_status()
+    """DEPRECATED — see /api/chokepoint-incidents."""
+    return {"deprecated": True, "successor": "/api/chokepoint-incidents/{cp}"}
+
+
+# ─── Chokepoint Incident Overlay (real ACLED + iran-events) ──────────────────
+
+@app.get("/api/chokepoint-incidents/{chokepoint}")
+async def get_chokepoint_incidents(chokepoint: str, days: int = 90, limit: int = 200):
+    """Real ACLED + Iran-events incidents inside a chokepoint zone.
+
+    Chokepoint must be one of: hormuz, bab, suez. Returns the most recent
+    `limit` events from the last `days` days that either fall inside the
+    chokepoint's incident bounding box OR are attributed to actors operating
+    against shipping there (Houthi for Bab, IRGC for Hormuz). Each record
+    carries lat/lon, date, fatalities, source, and notes — all real, all
+    geocoded directly from ACLED.
+    """
+    events = await _run_sync(lambda: data_service.get_chokepoint_incidents(chokepoint, days, limit))
+    return {
+        "chokepoint": chokepoint,
+        "days": days,
+        "count": len(events),
+        "data": events,
+    }
+
+
+@app.get("/api/chokepoint-incidents-meta")
+async def get_chokepoint_incidents_meta():
+    """Diagnostic: incident bounding boxes + ACLED fetch meta."""
+    return data_service.get_chokepoint_incidents_meta()
+
+
+@app.get("/api/freshness")
+async def get_freshness():
+    """Per-source data freshness (newest event date + origin) for the UI.
+
+    Powers the top-right status pill and the chokepoint card "data through"
+    captions. Reads memos/caches only — never triggers a live fetch — so it's
+    safe to poll on a 60s interval. See `data_service.get_freshness_snapshot`
+    for the response schema.
+    """
+    return data_service.get_freshness_snapshot()
+
+
+@app.get("/api/live-event-counts")
+async def get_live_event_counts(force: int = 0):
+    """Live ACLED monthly event counts via the HDX mirror (no auth required).
+
+    Returns guaranteed-fresh aggregate counts (events + fatalities by month)
+    for every chokepoint-relevant country: Yemen, Iran, Saudi Arabia, Egypt,
+    Lebanon. Refreshed every 6 hours from data.humdata.org which itself
+    re-publishes ACLED's weekly drop every Wednesday.
+
+    Use `?force=1` to bypass the 6-hour cache (admin / debugging only).
+    """
+    return await _run_sync(lambda: data_service.fetch_hdx_event_counts(force=bool(force)))
 
 
 # ─── Data Refresh ─────────────────────────────────────────────────────────────
@@ -350,7 +404,10 @@ def _do_refresh():
                        "spr_data", "dxy", "ovx", "china_pmi",
                        "eia_commercial_crude", "eia_cushing_stocks",
                        "fred_wti", "fred_breakeven5", "fred_vix", "fred_hy_yield",
-                       "gdelt_tone_90d"}
+                       "gdelt_tone_90d",
+                       # HDX live ACLED mirror — clear so the refresh actually
+                       # pulls a new monthly drop (HDX republishes weekly).
+                       "hdx_event_counts"}
         for cache_file in config.CACHE_DIR.glob("*.json"):
             if cache_file.stem in _api_caches:
                 try:
@@ -359,10 +416,10 @@ def _do_refresh():
                     pass
 
         # Re-fetch all data sources in parallel — including Tier-1 (EIA / FRED /
-        # GDELT). Without this, a refresh clears those cache files but never
-        # repopulates them, leaving the UI blank until a user-facing request
-        # happens to trigger the live fetcher.
-        with data_service.ThreadPoolExecutor(max_workers=7) as pool:
+        # GDELT) and the no-auth HDX ACLED mirror. Without this, a refresh
+        # clears those cache files but never repopulates them, leaving the UI
+        # blank until a user-facing request happens to trigger the live fetcher.
+        with data_service.ThreadPoolExecutor(max_workers=8) as pool:
             f_events = pool.submit(data_service.fetch_acled_events)
             f_iran = pool.submit(data_service.fetch_iran_events)
             f_brent = pool.submit(data_service.fetch_brent_prices)
@@ -370,6 +427,7 @@ def _do_refresh():
             f_eia = pool.submit(data_service.fetch_eia_inventories)
             f_macro = pool.submit(data_service.fetch_macro_context)
             f_gdelt = pool.submit(data_service.fetch_gdelt_tone)
+            f_hdx = pool.submit(data_service.fetch_hdx_event_counts, True)
 
         events = f_events.result()
         iran = f_iran.result()
@@ -377,7 +435,7 @@ def _do_refresh():
         f_news.result()
         # Tier-1 results aren't used here directly — we just need the side
         # effect of re-populated caches.
-        for fut in (f_eia, f_macro, f_gdelt):
+        for fut in (f_eia, f_macro, f_gdelt, f_hdx):
             try:
                 fut.result()
             except Exception as e:
@@ -479,15 +537,35 @@ async def preload_data():
         except Exception as e:
             print(f"  [preload] ACLED: FAILED ({e}) — will lazy-load on first request")
         gc.collect()
+
+        # Phase 4: HDX live ACLED mirror (no auth, ~1MB total). Critical for
+        # the freshness pill — even when the live ACLED OAuth path fails on
+        # Render's egress, HDX gives us a guaranteed-fresh monthly count
+        # within ~7 days of wall-clock. Runs last so it doesn't compete
+        # for ACLED bandwidth with phase 3.
+        try:
+            print("  [preload] HDX live ACLED mirror: warming...")
+            t0 = time.time()
+            snap = data_service.fetch_hdx_event_counts()
+            countries = list((snap or {}).get("by_country", {}).keys())
+            print(f"  [preload] HDX: OK — {len(countries)} countries, newest={snap.get('newest_month')}, took {time.time()-t0:.1f}s")
+        except Exception as e:
+            print(f"  [preload] HDX: FAILED ({e}) — pill will show ACLED fallback date")
+        gc.collect()
         print("  [preload] Cache warming complete")
 
     # Fire-and-forget in a daemon thread — server starts immediately
     t = threading.Thread(target=_preload, daemon=True)
     t.start()
 
-    # Live AIS feed: a separate daemon thread running its own asyncio loop.
-    # No-ops if AISSTREAM_API_KEY isn't set — safe to always call.
-    ais_service.start()
+    # Live AIS feed: DISABLED. AISStream.io free tier (one concurrent
+    # WebSocket per key) is incompatible with Render free-tier deploy
+    # cycles — the new worker's connection always loses to the old worker's
+    # not-yet-timed-out socket, producing a permanent HTTP 429 retry loop.
+    # The `ais_service` module is preserved so reactivation is one line if
+    # we ever migrate to a paid AIS provider with HTTP polling. The chokepoint
+    # maps now show live ACLED incidents from /api/chokepoint-incidents/{cp}.
+    # ais_service.start()
 
 
 # ─── Frontend Entry Point ────────────────────────────────────────────────────

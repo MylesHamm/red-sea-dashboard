@@ -53,6 +53,127 @@
     }
   }
 
+  // ── Per-source freshness pill + chokepoint card "data through" captions ──
+  // Backed by /api/freshness, polled every 60s. The endpoint returns the
+  // *newest event date* (not last-fetch ts) for every source, plus an
+  // aggregate `status.level` of "live" | "stale" | "frozen". The pill text
+  // and dot color are derived from that — no hardcoded "LIVE" claim.
+  // Surfaces a per-card caption (e.g. "EVENTS THROUGH MAR 2025 · ACLED
+  // FALLBACK") so users see exactly which window they're looking at.
+  const FR_MONTH_ABBR = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  function _frFmtDate(iso) {
+    if (!iso || iso.length < 10) return '—';
+    const [y, m, d] = iso.split('-').map(s => parseInt(s, 10));
+    if (!y || !m) return iso;
+    return `${String(d || 1).padStart(2,'0')} ${FR_MONTH_ABBR[m-1]} ${y}`;
+  }
+  function _frFmtMonth(ym) {
+    if (!ym || ym.length < 7) return '—';
+    const [y, m] = ym.split('-').map(s => parseInt(s, 10));
+    return (m && y) ? `${FR_MONTH_ABBR[m-1]} ${y}` : ym;
+  }
+  function hydrateFreshness(snap) {
+    if (!snap || typeof snap !== 'object') return;
+    window.FRESHNESS = snap;
+
+    // Aggregate pill (top-right)
+    const lvl = (snap.status && snap.status.level) || 'frozen';
+    const sev = lvl === 'live' ? 'live' : (lvl === 'stale' ? 'warn' : 'err');
+    const acledMax  = snap.acled  && snap.acled.newest_date;
+    const brentMax  = snap.brent  && snap.brent.newest_date;
+    let label;
+    if (lvl === 'live') {
+      label = `LIVE · MARKETS ${_frFmtDate(brentMax)} · EVENTS ${_frFmtDate(acledMax)}`;
+    } else if (lvl === 'stale') {
+      label = `STALE · EVENTS THROUGH ${_frFmtDate(acledMax)}`;
+    } else {
+      // FROZEN — usually means ACLED/Iran data is locked at the thesis window
+      // even though Brent + transits are live. Be specific so the user knows
+      // exactly which sources are current and which are not.
+      const marketBit = brentMax ? `MARKETS ${_frFmtDate(brentMax)}` : 'MARKETS N/A';
+      const eventBit  = acledMax ? `EVENTS ${_frFmtDate(acledMax)}`   : 'EVENTS N/A';
+      label = `${marketBit} · ${eventBit}`;
+    }
+    setConnectionStatus(lvl !== 'frozen', label, sev);
+
+    // Per-chokepoint "data through" caption — only update if the element
+    // is present (rendered by hydrateChokepointCards).
+    const transitMap = {
+      hormuz: snap.hormuz_transits && snap.hormuz_transits.newest_month,
+      bab:    snap.bab_transits    && snap.bab_transits.newest_month,
+      suez:   snap.suez_transits   && snap.suez_transits.newest_month,
+    };
+    document.querySelectorAll('[data-cp-asof]').forEach(el => {
+      const cp = el.getAttribute('data-cp-asof');
+      const m  = transitMap[cp];
+      el.textContent = m ? `Transit data through ${_frFmtMonth(m)} · IMF PortWatch` : '';
+    });
+
+    // §02.2 vt-foot freshness — make iframe panels honest about the AIS
+    // source (3rd-party MarineTraffic embed; not our backend).
+    document.querySelectorAll('[data-vt-asof]').forEach(el => {
+      el.textContent = 'Live AIS · MarineTraffic embed';
+    });
+  }
+
+  // ── Live monthly event counts (HDX ACLED mirror) ──────────────────────────
+  // Backed by /api/live-event-counts which pulls the public ACLED→HDX feed.
+  // HDX republishes ACLED weekly, so even when the live ACLED OAuth API is
+  // unreachable from Render, this gives the dashboard a guaranteed-fresh
+  // monthly events series. We map countries → chokepoints:
+  //   Yemen + Saudi    → bab    (Houthi attacks + Saudi naval responses)
+  //   Iran             → hormuz (IRGC, Iranian-coast operations)
+  //   Egypt + Lebanon  → suez   (Sinai militancy, Hezbollah cross-fires)
+  // Sums the most recent month across each chokepoint's contributing
+  // countries and writes a "<month> · <count> events" caption to the
+  // [data-cp-events-month] / [data-cp-events-count] elements.
+  const FR_CP_COUNTRY_MAP = {
+    bab:    ['yemen', 'saudi'],
+    hormuz: ['iran'],
+    suez:   ['egypt', 'lebanon'],
+  };
+  function hydrateLiveEventCounts(snap) {
+    if (!snap || !snap.by_country) return;
+    window.LIVE_EVENT_COUNTS = snap;
+
+    const newestMonth = snap.newest_month || null;
+
+    for (const [cp, countries] of Object.entries(FR_CP_COUNTRY_MAP)) {
+      let totalEvents = 0;
+      let totalFatal = 0;
+      let monthsAvail = new Set();
+      let cpNewest = '';
+      for (const c of countries) {
+        const rows = snap.by_country[c] || [];
+        if (!rows.length) continue;
+        // Use the newest month each country has — if they're not aligned,
+        // we still pick the most recent point to keep the freshness pill honest.
+        const last = rows[rows.length - 1];
+        if (last.month > cpNewest) cpNewest = last.month;
+        totalEvents += Number(last.events || 0);
+        totalFatal  += Number(last.fatalities || 0);
+        monthsAvail.add(last.month);
+      }
+      const monthEl = document.querySelector(`[data-cp-events-month="${cp}"]`);
+      const countEl = document.querySelector(`[data-cp-events-count="${cp}"]`);
+      const fatalEl = document.querySelector(`[data-cp-events-fatal="${cp}"]`);
+      if (monthEl) monthEl.textContent = cpNewest ? _frFmtMonth(cpNewest) : '—';
+      if (countEl) countEl.textContent = totalEvents > 0 ? totalEvents.toLocaleString() : '—';
+      if (fatalEl) fatalEl.textContent = totalFatal > 0 ? totalFatal.toLocaleString() + '†' : '—';
+    }
+
+    // Top-of-section banner for §02 — single-line "live data through <month>"
+    const banner = document.querySelector('[data-live-events-banner]');
+    if (banner) {
+      const mon = newestMonth ? _frFmtMonth(newestMonth) : '—';
+      const ctry = Object.keys(snap.by_country || {}).length;
+      const errors = Object.keys(snap.errors || {}).length;
+      banner.textContent = errors
+        ? `LIVE ACLED · HDX MIRROR · ${ctry} OF ${ctry + errors} COUNTRIES · THROUGH ${mon}`
+        : `LIVE ACLED · HDX MIRROR · ${ctry} COUNTRIES · THROUGH ${mon}`;
+    }
+  }
+
   // ── CHOKEPOINT STATUS FROM LIVE TRANSITS + EVENTS ─────────────────────────
   // Backend gives us month-level transit counts. We turn those into:
   //   - threat level (safe/elevated/high/critical)
@@ -747,6 +868,134 @@
     });
   }
 
+  // ── Hypothesis cards (Analysis tab) — backed by /api/hypothesis ──
+  // Critical: the previous static markup carried fabricated coefficients with
+  // SUPPORTED verdicts. The thesis regression actually returns *negative*
+  // coefficients (market adaptation), so verdicts are NOT SUPPORTED. Render
+  // the live values verbatim with no opinion.
+  function hydrateHypothesis(resp) {
+    if (!resp) return;
+    const fmt = (v, d = 3) => (v == null || isNaN(v)) ? '—' : Number(v).toFixed(d);
+    ['h1', 'h2', 'h3'].forEach(key => {
+      const card = document.querySelector(`.hyp-card[data-hyp="${key}"]`);
+      if (!card) return;
+      const h = resp[key];
+      if (!h) return;
+      const setSel = (sel, txt) => { const el = card.querySelector(sel); if (el) el.textContent = txt; };
+      // Title — strip leading "H1: " / "H2: " etc. since the tag chip already shows it
+      const cleanName = (h.name || '').replace(/^H\d:\s*/i, '') || '—';
+      setSel('[data-hyp-name]', cleanName);
+      setSel('[data-hyp-sub]', h.description || '—');
+      setSel('[data-hyp-m="beta"]', fmt(h.coefficient, 3));
+      setSel('[data-hyp-m="p"]',    fmt(h.p_value, 3));
+      setSel('[data-hyp-m="r2"]',   fmt(h.r_squared, 3));
+
+      // Verdict — derive from `supported` flag. Backend uses False for both
+      // "not significant" and "significant but wrong sign"; distinguish so the
+      // card communicates the actual finding (e.g. H1/H2 are sig. opposite).
+      const verdict = card.querySelector('[data-hyp-verdict]');
+      if (verdict) {
+        verdict.classList.remove('hyp-supported', 'hyp-weak', 'hyp-not', 'hyp-not-sig');
+        const beta = +h.coefficient;
+        const p    = +h.p_value;
+        if (h.supported === true) {
+          verdict.textContent = 'SUPPORTED';
+          verdict.classList.add('hyp-supported');
+        } else if (h.supported === false) {
+          if (!isNaN(p) && p < 0.05 && !isNaN(beta) && beta < 0) {
+            verdict.textContent = 'NOT SUPPORTED · sig. opposite';
+            verdict.classList.add('hyp-not');
+          } else if (!isNaN(p) && p >= 0.05) {
+            verdict.textContent = 'NOT SUPPORTED · n.s.';
+            verdict.classList.add('hyp-not-sig');
+          } else {
+            verdict.textContent = 'NOT SUPPORTED';
+            verdict.classList.add('hyp-not');
+          }
+        } else {
+          verdict.textContent = '—';
+        }
+      }
+      setSel('[data-hyp-plain]', h.conclusion || '—');
+    });
+  }
+
+  // ── GARCH summary (Analysis tab §06) — fit stats from /api/hypothesis ──
+  // Only fields the backend actually returns are surfaced. Fabricated ω/α/β/γ
+  // parameter cells were removed from the markup.
+  function hydrateGarch(resp) {
+    const g = resp && resp.garch_summary;
+    if (!g) return;
+    const fmtNum = (v, d) => (v == null || isNaN(v)) ? '—' : Number(v).toFixed(d);
+    document.querySelectorAll('[data-garch]').forEach(el => {
+      const k = el.getAttribute('data-garch');
+      const v = g[k];
+      if (v == null || v === '') { el.textContent = '—'; return; }
+      if (typeof v === 'number') {
+        if (k === 'log_likelihood') el.textContent = fmtNum(v, 2);
+        else if (k === 'aic' || k === 'bic') el.textContent = fmtNum(v, 1);
+        else el.textContent = String(v);
+      } else {
+        el.textContent = String(v);
+      }
+    });
+    // Section badge — show the actual model name instead of a fixed "ASYMMETRIC"
+    const badge = document.querySelector('[data-garch-badge]');
+    if (badge && g.model) badge.textContent = String(g.model).toUpperCase();
+  }
+
+  // ── Hero "X mbd of oil at risk" / "Y of global supply" claim ──
+  // Sums Hormuz + Bab flows from CHOKEPOINTS (already populated above) and
+  // expresses the share of ~100 mbd global liquids consumption (EIA).
+  function hydrateHeroFlowClaim() {
+    const h = window.CHOKEPOINTS && window.CHOKEPOINTS.hormuz;
+    const b = window.CHOKEPOINTS && window.CHOKEPOINTS.bab;
+    if (!h || !b || h.flowMbd == null || b.flowMbd == null) return;
+    const total = h.flowMbd + b.flowMbd;
+    const GLOBAL_LIQUIDS_MBD = 102; // EIA STEO 2026 forecast for world liquids consumption
+    const pct = (total / GLOBAL_LIQUIDS_MBD) * 100;
+    document.querySelectorAll('[data-hero-flow]').forEach(el => {
+      el.textContent = total.toFixed(1);
+    });
+    document.querySelectorAll('[data-hero-flow-pct]').forEach(el => {
+      el.textContent = `~${pct.toFixed(0)}%`;
+    });
+  }
+
+  // ── Chokepoint card body sentence — transit decline vs pre-war ──
+  // Replaces the previously-hardcoded "Tankers running at max speed since
+  // Feb 28" claim with the live computed pctDecline.
+  function hydrateChokepointDecline() {
+    document.querySelectorAll('[data-cp-decline]').forEach(el => {
+      const key = el.getAttribute('data-cp-decline');
+      const cp = window.CHOKEPOINTS && window.CHOKEPOINTS[key];
+      if (!cp) { el.textContent = '—'; return; }
+      const d = cp.pctDecline;
+      if (d == null || isNaN(d)) { el.textContent = '—'; return; }
+      const sign = d >= 0 ? '−' : '+';        // Decline is positive ⇒ display as "−42%"
+      el.textContent = `${sign}${Math.abs(d).toFixed(0)}% vs. pre-Feb 2026`;
+    });
+  }
+
+  // ── Scenario cards — recompute target ranges against live Brent ──
+  // The data-sc-mult-low / data-sc-mult-high attributes are analyst-set
+  // multipliers (e.g. ESCALATION 1.49–1.70x). Multiplying by current spot
+  // keeps the displayed dollar range honest as Brent moves.
+  function hydrateScenarios(brent) {
+    const last = (Array.isArray(brent) && brent.length) ? brent[brent.length - 1] : null;
+    const spot = last && last.price != null ? +last.price : null;
+    document.querySelectorAll('[data-scenario-base]').forEach(el => {
+      el.textContent = spot != null ? spot.toFixed(2) : '—';
+    });
+    if (spot == null) return;
+    document.querySelectorAll('.sc-target[data-sc-mult-low]').forEach(el => {
+      const lo = +el.getAttribute('data-sc-mult-low');
+      const hi = +el.getAttribute('data-sc-mult-high');
+      if (isNaN(lo) || isNaN(hi)) return;
+      el.textContent = `$${(spot * lo).toFixed(0)}–${(spot * hi).toFixed(0)}`;
+    });
+  }
+
   // ── US-Iran tab KPIs (4 cards) — backed by /api/iran-impact ──
   function hydrateIranKpis(resp) {
     const k = (resp && resp.kpis) || {};
@@ -804,10 +1053,33 @@
     const S = window.CP.state;
     const errors = [];
 
-    // Health (non-blocking)
+    // Health (non-blocking) — sets a generic "LIVE" pill. Immediately
+    // overridden by hydrateFreshness() below as soon as the per-source
+    // dates land, so the pill text reflects actual data freshness.
     API.health()
       .then(() => setConnectionStatus(true))
       .catch(() => setConnectionStatus(false));
+
+    // Per-source freshness — replaces the generic pill with a date-stamped
+    // honest summary (e.g. "MARKETS 30 MAR 2026 · EVENTS 16 MAR 2025").
+    // Polled every 60s so refreshes update without a page reload.
+    API.freshness()
+      .then(snap => hydrateFreshness(snap))
+      .catch(() => {});
+
+    // Live HDX-mirrored ACLED monthly counts (no auth, ~7-day-old at worst).
+    // Surfaces a "LIVE · APR 2026 · 312 events" caption on each chokepoint
+    // card even when the live ACLED OAuth API is unreachable. After this
+    // resolves the freshness pill auto-upgrades from "frozen" → "live"
+    // because hdx_event_counts cache is now populated.
+    API.liveEventCounts()
+      .then(snap => {
+        hydrateLiveEventCounts(snap);
+        // Re-pull freshness so the pill picks up the now-cached HDX month.
+        API.invalidate('/api/freshness');
+        return API.freshness().then(s => hydrateFreshness(s));
+      })
+      .catch(() => {});
 
     // Parallel fetch of LIGHT endpoints — events is heavy (10MB+) so it's
     // fetched separately below and never blocks the hydrated promise.
@@ -849,7 +1121,17 @@
     hydrateSecondaryKpis(master, suez, hormuz, bab);
     hydrateThreatPills();
     hydrateChokepointCards();
+    hydrateHeroFlowClaim();
+    hydrateChokepointDecline();
+    hydrateScenarios(brent);
     hydrateFeed((iranResp && iranResp.news) || []);
+
+    // Hypothesis + GARCH (Analysis tab) — non-blocking; the cards show "—"
+    // until this lands. Critical to fetch live: previous static markup carried
+    // values opposite to the actual regression.
+    API.hypothesis()
+      .then(resp => { try { hydrateHypothesis(resp); hydrateGarch(resp); } catch (e) { console.warn('hypothesis render failed', e); } })
+      .catch(() => {});
 
     // Iran-events first-fetch may have failed silently (Render free tier
     // cold-start, transient network). Schedule a single background retry so
@@ -956,6 +1238,16 @@
     API.invalidate();
     loadOnce().catch(e => console.error('Refresh failed:', e));
   }, 5 * 60 * 1000);
+
+  // ── Freshness re-poll every 60s (lightweight) ──────────────────────────────
+  // Independent of the heavy 5-min reload so the status pill stays honest
+  // without re-hitting /api/master + /api/events.
+  setInterval(() => {
+    API.invalidate('/api/freshness');
+    API.freshness()
+      .then(snap => hydrateFreshness(snap))
+      .catch(() => {});
+  }, 60 * 1000);
 
   // Expose manual refresh for console use
   window.CP.refresh = () => { API.invalidate(); return loadOnce(); };

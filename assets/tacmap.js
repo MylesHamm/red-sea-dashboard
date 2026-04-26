@@ -135,51 +135,106 @@
       .attr('stroke','#00d4ff').attr('stroke-width',1.2)
       .attr('stroke-opacity',0.5).attr('stroke-dasharray','3 5');
 
-    // Real attack markers — approximate lat/lon for recorded incidents (ACLED-style)
-    const attacks = [
-      { lat: 12.72, lon: 43.25, type: 'tanker', intensity: 'high' },
-      { lat: 12.60, lon: 43.40, type: 'tanker', intensity: 'high' },
-      { lat: 13.20, lon: 42.80, type: 'drone',  intensity: 'high' },
-      { lat: 14.10, lon: 42.50, type: 'missile',intensity: 'high' },
-      { lat: 14.85, lon: 42.60, type: 'tanker', intensity: 'med' },
-      { lat: 15.30, lon: 41.80, type: 'drone',  intensity: 'med' },
-      { lat: 16.10, lon: 41.30, type: 'missile',intensity: 'med' },
-      { lat: 17.50, lon: 40.20, type: 'drone',  intensity: 'low' },
-      { lat: 18.70, lon: 39.50, type: 'tanker', intensity: 'low' },
-      { lat: 20.40, lon: 38.50, type: 'drone',  intensity: 'med' },
-      { lat: 12.90, lon: 43.70, type: 'tanker', intensity: 'high' },
-      { lat: 13.50, lon: 43.10, type: 'missile',intensity: 'high' },
-      { lat: 14.50, lon: 42.30, type: 'drone',  intensity: 'med' },
-      { lat: 13.00, lon: 44.20, type: 'drone',  intensity: 'med' },
-      { lat: 11.90, lon: 44.10, type: 'missile',intensity: 'low' },
-      { lat: 19.00, lon: 38.90, type: 'drone',  intensity: 'low' },
-      { lat: 22.50, lon: 37.20, type: 'tanker', intensity: 'low' }
-    ];
-    // Expose for filter wiring & stats
-    window.TAC_ATTACKS = attacks;
-    window.__tacLayers = { heatLayer, chokeLayer, markerLayer, labelLayer };
-
+    // Real attack markers — pulled directly from the live ACLED feed. We
+    // filter to Houthi-attributed events within the Red Sea / Gulf of Aden
+    // viewport, map ACLED event categories onto the three marker classes
+    // (tanker / missile / drone), and rebuild on `events-ready` when the
+    // heavy /api/events payload arrives. If events haven't loaded yet (or
+    // the dataset is empty for the selected time window) the marker layer
+    // is empty — we never synthesize placeholder positions.
     const color = t => t === 'tanker' ? '#ff3d5e' : t === 'missile' ? '#ff8c42' : '#ffab00';
     const rSize = i => i === 'high' ? 4 : i === 'med' ? 3 : 2.2;
 
-    const g = markerLayer.selectAll('g.atk')
-      .data(attacks).enter().append('g')
-      .attr('class','atk')
-      .attr('data-atk-type', d => d.type);
-    g.append('circle')
-      .attr('cx', d => projection([d.lon,d.lat])[0])
-      .attr('cy', d => projection([d.lon,d.lat])[1])
-      .attr('r', d => rSize(d.intensity) + 4)
-      .attr('fill','none')
-      .attr('stroke', d => color(d.type))
-      .attr('stroke-opacity', 0.3)
-      .attr('class','tac-pulse');
-    g.append('circle')
-      .attr('cx', d => projection([d.lon,d.lat])[0])
-      .attr('cy', d => projection([d.lon,d.lat])[1])
-      .attr('r', d => rSize(d.intensity))
-      .attr('fill', d => color(d.type))
-      .attr('stroke', '#fff').attr('stroke-width', 0.5);
+    function classifyEvent(e) {
+      const hay = (
+        (e.sub_event_type || '') + ' ' +
+        (e.event_type || '') + ' ' +
+        (e.notes || '') + ' ' +
+        (e.source || '')
+      ).toLowerCase();
+      if (hay.includes('naval') || hay.includes('tanker') || hay.includes('vessel') || hay.includes('ship') || hay.includes('boarding') || hay.includes('hijack')) return 'tanker';
+      if (hay.includes('drone') || hay.includes('uav') || hay.includes('usv') || hay.includes('unmanned')) return 'drone';
+      if (hay.includes('missile') || hay.includes('shelling') || hay.includes('artillery') || hay.includes('rocket')) return 'missile';
+      // Fall back on event_type — Explosions/Remote → missile, everything
+      // else → drone (the weakest inference but still real data).
+      if ((e.event_type || '').toLowerCase().includes('explosion')) return 'missile';
+      return 'drone';
+    }
+
+    function classifyIntensity(e) {
+      const f = +e.fatalities || 0;
+      if (f >= 3) return 'high';
+      if (f >= 1) return 'med';
+      return 'low';
+    }
+
+    function isHouthi(e) {
+      const a = ((e.actor1 || '') + ' ' + (e.actor2 || '')).toLowerCase();
+      return a.includes('houthi') || a.includes('ansar allah');
+    }
+
+    // Viewport bounds — match the projection's visible area (32°E–56°E, 5°N–30°N).
+    function inViewport(lat, lon) {
+      return lon >= 32 && lon <= 56 && lat >= 5 && lat <= 30;
+    }
+
+    function eventsToAttacks(events) {
+      if (!Array.isArray(events)) return [];
+      const out = [];
+      for (const e of events) {
+        if (!isHouthi(e)) continue;
+        const lat = +e.latitude, lon = +e.longitude;
+        if (!lat || !lon) continue;
+        if (!inViewport(lat, lon)) continue;
+        out.push({
+          lat, lon,
+          type: classifyEvent(e),
+          intensity: classifyIntensity(e),
+          date: e.event_date || e.date,
+          notes: e.notes || '',
+          fatalities: +e.fatalities || 0,
+        });
+      }
+      return out;
+    }
+
+    function renderAttacks(attacks) {
+      window.TAC_ATTACKS = attacks;
+      const sel = markerLayer.selectAll('g.atk').data(attacks, (d, i) => `${d.lat}|${d.lon}|${d.date || i}`);
+      sel.exit().remove();
+      const g = sel.enter().append('g')
+        .attr('class','atk')
+        .attr('data-atk-type', d => d.type);
+      g.append('circle')
+        .attr('cx', d => projection([d.lon,d.lat])[0])
+        .attr('cy', d => projection([d.lon,d.lat])[1])
+        .attr('r', d => rSize(d.intensity) + 4)
+        .attr('fill','none')
+        .attr('stroke', d => color(d.type))
+        .attr('stroke-opacity', 0.3)
+        .attr('class','tac-pulse');
+      g.append('circle')
+        .attr('cx', d => projection([d.lon,d.lat])[0])
+        .attr('cy', d => projection([d.lon,d.lat])[1])
+        .attr('r', d => rSize(d.intensity))
+        .attr('fill', d => color(d.type))
+        .attr('stroke', '#fff').attr('stroke-width', 0.5);
+    }
+
+    window.__tacLayers = { heatLayer, chokeLayer, markerLayer, labelLayer };
+    window.__tacRenderAttacks = renderAttacks;
+    window.__tacEventsToAttacks = eventsToAttacks;
+
+    // If events already loaded by the time we got here, render immediately.
+    const earlyEvents = (window.CP && window.CP.data && window.CP.data.events);
+    if (earlyEvents && earlyEvents.length) {
+      renderAttacks(eventsToAttacks(earlyEvents));
+    }
+    // Re-render whenever new ACLED events land.
+    window.addEventListener('events-ready', (ev) => {
+      const events = (ev && ev.detail && ev.detail.events) || [];
+      renderAttacks(eventsToAttacks(events));
+    });
 
     // ── Cross-filter: dim non-matching attack markers when a doughnut filter
     //    is active. ACLED categories don't map perfectly onto tanker/missile/
@@ -227,11 +282,12 @@
       .attr('x', 18).attr('y', H - 28)
       .attr('font-family',"'JetBrains Mono', monospace").attr('font-size',9).attr('fill','#3a4756').attr('letter-spacing',2)
       .text('● TANKER  ● MISSILE  ● DRONE');
-    // Markers are representative geographic samples drawn from the ACLED
-    // events visible in the data tab — not a real-time AIS / threat feed.
+    // Footer label reflects live data source — each marker is a real ACLED
+    // event geocoded to its reported lat/lon. Category is inferred from
+    // sub_event_type + notes keywords; intensity from fatalities count.
     labelLayer.append('text')
       .attr('x', 18).attr('y', H - 14)
       .attr('font-family',"'JetBrains Mono', monospace").attr('font-size',8).attr('fill','#556475').attr('letter-spacing',1.5)
-      .text('MARKERS · ILLUSTRATIVE · derived from ACLED 2024–2026');
+      .text('MARKERS · LIVE ACLED · Houthi-attributed events · refreshed with feed');
   }
 })();

@@ -79,95 +79,111 @@ document.addEventListener('DOMContentLoaded', () => {
     renderVesselList(id, cp);
   }
 
-  // ── Vessel list rendering — fed by live AISStream.io WebSocket via backend ──
-  // Only populated for chokepoints that have a bounding box server-side (hormuz,
-  // bab). Other chokepoints show a contextual message instead of a lying list.
-  const LIVE_AIS_CHOKEPOINTS = new Set(['hormuz', 'bab']);
+  // ── Sidebar "kill-zone incidents" list ──
+  // Live AIS feeds are unreliable on free tiers (AISStream rate-limits a single
+  // concurrent socket per key, MarineTraffic charges for the API). Instead the
+  // sidebar reads the same ACLED-driven /api/chokepoint-incidents endpoint that
+  // powers the analytical layers, so the list is an honest answer to "who is
+  // operating against shipping in this zone right now."
+  const INCIDENT_CHOKEPOINTS = new Set(['hormuz', 'bab', 'suez']);
   function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, c => (
       { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]
     ));
   }
+  function classifySidebarEvent(ev) {
+    const sub = (ev.sub_event_type || '').toLowerCase();
+    const typ = (ev.event_type || '').toLowerCase();
+    if (sub.includes('air/drone') || sub.includes('drone'))                                 return { tag: 'DRONE',   cls: 'v-type-drone' };
+    if (sub.includes('shelling') || sub.includes('artillery') || sub.includes('missile'))  return { tag: 'MISSILE', cls: 'v-type-missile' };
+    if (sub.includes('attack') && (typ.includes('battle') || typ.includes('violence')))    return { tag: 'NAVAL',   cls: 'v-type-naval' };
+    if (sub.includes('abduction') || sub.includes('looting') || sub.includes('seizure'))   return { tag: 'HIJACK',  cls: 'v-type-hijack' };
+    if (typ.includes('protest') || typ.includes('riot'))                                    return { tag: 'PROTEST', cls: 'v-type-protest' };
+    return { tag: 'EVENT', cls: 'v-type-other' };
+  }
+  function relativeDays(iso, anchorTs) {
+    if (!iso) return '';
+    const t = Date.parse(iso);
+    if (!isFinite(t)) return '';
+    const days = Math.max(0, Math.round(((anchorTs || Date.now()) - t) / 86400000));
+    if (days === 0) return 'today';
+    if (days === 1) return '1d ago';
+    if (days < 30)  return `${days}d ago`;
+    return `${Math.round(days / 30)}mo ago`;
+  }
   function renderVesselList(id, cp) {
     if (!gpEls.vesselList) return;
-    const vessels = Array.isArray(cp && cp.liveVessels) ? cp.liveVessels : [];
-    const status = window.CP && window.CP.aisStatus;
     const hint = 'color:var(--text-mute);font-family:var(--mono);font-size:11px;padding:6px 2px';
 
-    if (!LIVE_AIS_CHOKEPOINTS.has(id)) {
-      gpEls.vesselList.innerHTML = `<div style="${hint}">Live AIS coverage is limited to Hormuz and Bab el-Mandeb.</div>`;
+    if (!INCIDENT_CHOKEPOINTS.has(id)) {
+      gpEls.vesselList.innerHTML = `<div style="${hint}">Incident overlay covers Hormuz, Bab el-Mandeb, and Suez.</div>`;
       return;
     }
-    if (vessels.length) {
-      const anyRepresentative = vessels.some(v => v.representative);
-      const banner = anyRepresentative
-        ? `<div style="${hint}">Showing representative tanker positions · live AIS feed unavailable.</div>`
-        : '';
-      gpEls.vesselList.innerHTML = banner + vessels.map(v => {
-        const type  = escapeHtml(v.type || 'OTHER');
-        const name  = escapeHtml(v.name || `MMSI ${v.mmsi}`);
-        const speed = v.speed == null ? '—' : v.speed.toFixed(1);
-        const cls   = v.representative ? 'vessel-row v-representative' : 'vessel-row';
-        return `<div class="${cls}">
-          <span class="v-type">${type}</span>
-          <span class="v-name">${name}</span>
-          <span class="v-speed">${speed} kt</span>
-        </div>`;
-      }).join('');
+    const bucket = window.CP && window.CP.incidents && window.CP.incidents[id];
+    if (!bucket) {
+      gpEls.vesselList.innerHTML = `<div style="${hint}">Loading incidents…</div>`;
       return;
     }
-    // No vessels yet — use the AIS status to explain why, with a real
-    // countdown to the next retry so users see progress instead of a vague
-    // "a few minutes" that never resolves.
-    let msg = 'Waiting for AIS feed…';
-    if (status) {
-      const err = (status.last_error || '').toLowerCase();
-      const isRateLimited = err.includes('429') || err.includes('too many') || (err.includes('rate') && err.includes('limit'));
-      const etaSec = status.retry_eta_ts ? Math.max(0, Math.round(status.retry_eta_ts - Date.now()/1000)) : null;
-      const etaTxt = etaSec != null ? ` · next retry ${etaSec < 60 ? etaSec + 's' : Math.round(etaSec/60) + 'm'}` : '';
-      const lastOk = status.last_connected_ts ? Math.round((Date.now()/1000 - status.last_connected_ts) / 60) : null;
-      const lastOkTxt = lastOk != null && lastOk < 240 ? ` · last ok ${lastOk}m ago` : '';
-      if (!status.configured)            msg = 'AIS feed not configured (AISSTREAM_API_KEY missing).';
-      else if (isRateLimited)            msg = 'AIS feed rate-limited by provider' + etaTxt + lastOkTxt + '.';
-      else if (!status.connected)        msg = 'AIS feed reconnecting…' + etaTxt + (status.last_error ? ` (${status.last_error})` : '');
-      else if (!status.last_message_ts)  msg = 'Connected. Waiting for first position report…';
-      else                               msg = 'No vessels currently in the kill zone.';
+    if (bucket.error) {
+      gpEls.vesselList.innerHTML = `<div style="${hint}">Incident feed unavailable (${escapeHtml(bucket.error)}).</div>`;
+      return;
     }
-    gpEls.vesselList.innerHTML = `<div style="${hint}">${escapeHtml(msg)}</div>`;
+    const events = Array.isArray(bucket.events) ? bucket.events : [];
+    if (!events.length) {
+      gpEls.vesselList.innerHTML = `<div style="${hint}">No ACLED incidents in this zone over the last 90 days.</div>`;
+      return;
+    }
+    // Show the 6 most recent — sidebar is narrow, full set is on the §02.2 maps
+    // (and the upstream ACLED dashboard via the footer link).
+    const anchor = bucket.anchor_ts ? bucket.anchor_ts * 1000 : Date.now();
+    const top = events.slice(0, 6);
+    gpEls.vesselList.innerHTML = top.map(ev => {
+      const cls   = classifySidebarEvent(ev);
+      const where = escapeHtml(ev.location || ev.country || '—');
+      const actor = escapeHtml((ev.actor1 || '').split(/[(:]/)[0].trim() || '—');
+      const fat   = ev.fatalities && Number(ev.fatalities) > 0 ? `${Number(ev.fatalities)}†` : '—';
+      const when  = escapeHtml(relativeDays(ev.date, anchor));
+      return `<div class="vessel-row">
+        <span class="v-type ${cls.cls}">${cls.tag}</span>
+        <span class="v-name" title="${escapeHtml(ev.notes || '')}">${where} · ${actor}</span>
+        <span class="v-speed">${when} · ${fat}</span>
+      </div>`;
+    }).join('');
   }
 
-  // Poll /api/vessels/{cp} on an interval. 30s is well under the 30-min vessel
-  // TTL and below most intermittent-noise thresholds. Uses the shared API
-  // cache (15s TTL) so a page that renders both panels only hits the network
-  // once per cycle.
-  async function refreshLiveVessels() {
-    if (!window.API || !window.CHOKEPOINTS) return;
-    try {
-      const [status, hormuz, bab] = await Promise.all([
-        window.API.vesselsStatus().catch(() => null),
-        window.API.vessels('hormuz').catch(() => null),
-        window.API.vessels('bab').catch(() => null),
-      ]);
-      window.CP = window.CP || {};
-      window.CP.aisStatus = status;
-      if (window.CHOKEPOINTS.hormuz) {
-        window.CHOKEPOINTS.hormuz.liveVessels = (hormuz && hormuz.data) || [];
-        const hUpd = (hormuz && hormuz.data) ? hormuz.data.length : null;
-        if (hUpd != null) window.CHOKEPOINTS.hormuz.vesselsInZone = hUpd;
+  // Poll /api/chokepoint-incidents/{cp} on an interval. The backend already
+  // caches the underlying ACLED frame, so 5 min on the client is plenty —
+  // events don't move and the dataset itself only refreshes a few times a day.
+  async function refreshSidebarIncidents() {
+    if (!window.API) return;
+    window.CP = window.CP || {};
+    window.CP.incidents = window.CP.incidents || {};
+    const targets = ['hormuz', 'bab'];
+    await Promise.all(targets.map(async (cp) => {
+      try {
+        const r = await window.API.chokepointIncidents(cp, 90);
+        const events = Array.isArray(r && r.data) ? r.data : [];
+        // Anchor "X days ago" labels to the dataset's newest event ts
+        // (ACLED feeds lag wall-clock; using Date.now() makes everything
+        // look "13 months ago" which is misleading).
+        let anchor = 0;
+        for (const ev of events) {
+          if (ev.ts && ev.ts > anchor) anchor = ev.ts;
+        }
+        window.CP.incidents[cp] = {
+          events,
+          anchor_ts: anchor || null,
+          window_days: r && r.days,
+          error: null,
+        };
+      } catch (e) {
+        window.CP.incidents[cp] = { events: [], anchor_ts: null, error: (e && e.message) || 'fetch failed' };
       }
-      if (window.CHOKEPOINTS.bab) {
-        window.CHOKEPOINTS.bab.liveVessels = (bab && bab.data) || [];
-        const bUpd = (bab && bab.data) ? bab.data.length : null;
-        if (bUpd != null) window.CHOKEPOINTS.bab.vesselsInZone = bUpd;
-      }
-      renderChokepoint(currentChokepoint);
-    } catch (e) {
-      // Swallow — the panel has a fallback message
-      console.warn('AIS poll failed:', e);
-    }
+    }));
+    renderChokepoint(currentChokepoint);
   }
-  refreshLiveVessels();
-  setInterval(refreshLiveVessels, 30_000);
+  refreshSidebarIncidents();
+  setInterval(refreshSidebarIncidents, 300_000);
 
   let currentChokepoint = 'hormuz';
   window.addEventListener('chokepoint-select', (e) => {
@@ -519,8 +535,9 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
     // NOTE: Side-panel stats reflect the full ACLED dataset (N=726) from the
-    // thesis and are intentionally NOT recomputed from the visible illustrative
-    // markers. Toggles only affect map layer visibility.
+    // thesis observation window. Toggles only affect tactical-map layer
+    // visibility — they do not recompute the underlying KPIs, which are
+    // model inputs and must stay constant.
   }
 
   // Expose for the timeline listener so scrubbing can re-run it
@@ -546,8 +563,8 @@ document.addEventListener('DOMContentLoaded', () => {
   updateClock();
   setInterval(updateClock, 30000);
 
-  // The chokepoint vessel maps (formerly MarineTraffic iframes) are now
-  // self-hosted Leaflet maps managed by assets/vessel-map.js. That module
-  // owns its own polling + filter-chip wiring, so app.js doesn't need to do
-  // anything for them here.
+  // The §02.2 chokepoint panels embed MarineTraffic via iframe (live AIS).
+  // The sidebar "kill-zone incidents" list is fed by /api/chokepoint-incidents
+  // and rendered above by refreshSidebarIncidents + renderVesselList — no
+  // Leaflet/AIS-WebSocket plumbing required here.
 });

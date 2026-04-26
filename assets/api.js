@@ -41,6 +41,15 @@ window.API = (function () {
     BASE,
     invalidate,
     health:           ()  => _fetch('/api/health'),
+    // Per-source freshness: newest event date + origin (api/cache/fallback) for
+    // every analytical source. Drives the top-right status pill and the
+    // "data through <date>" captions on each chokepoint card.
+    freshness:        ()  => _fetch('/api/freshness',            { ttlMs: 30_000 }),
+    // Live monthly ACLED event counts via the HDX mirror (no auth, weekly
+    // refresh). Used to populate "EVENTS · APR 2026 · 312" tags on each
+    // chokepoint card so the dashboard surfaces a guaranteed-fresh signal
+    // even when the live ACLED OAuth path is unreachable.
+    liveEventCounts:  ()  => _fetch('/api/live-event-counts',    { ttlMs: 6 * 3600_000 }),
     master:           ()  => _fetch('/api/master',               { ttlMs: 60_000 }),
     events:           ()  => _fetch('/api/events',               { ttlMs: 60_000 }),
     // Heavy payload with `notes` — only used by Data Explorer search.
@@ -68,9 +77,14 @@ window.API = (function () {
     eiaInventories:   ()  => _fetch('/api/eia-inventories',     { ttlMs: 900_000 }),
     macroContext:     ()  => _fetch('/api/macro-context',       { ttlMs: 300_000 }),
     gdeltTone:        ()  => _fetch('/api/gdelt-tone',          { ttlMs: 1_800_000 }),
-    // Live AIS — short TTL because vessels move in real time
-    vessels:          (cp) => _fetch(`/api/vessels/${encodeURIComponent(cp)}`, { ttlMs: 15_000 }),
-    vesselsStatus:    ()   => _fetch('/api/vessels-status', { ttlMs: 15_000 }),
+    // DEPRECATED: live AIS replaced by chokepoint-incidents (see below).
+    // Stubs kept so old cached frontends don't 404.
+    vessels:          (cp) => _fetch(`/api/vessels/${encodeURIComponent(cp)}`, { ttlMs: 60_000 }),
+    vesselsStatus:    ()   => _fetch('/api/vessels-status', { ttlMs: 60_000 }),
+    // Live ACLED-incident overlay for the chokepoint Leaflet maps. Cached
+    // 60s on the client (data refreshes server-side every 30 min).
+    chokepointIncidents: (cp, days = 90) =>
+      _fetch(`/api/chokepoint-incidents/${encodeURIComponent(cp)}?days=${days}`, { ttlMs: 60_000 }),
   };
 })();
 

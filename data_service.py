@@ -13,7 +13,7 @@ import threading
 from pathlib import Path
 from collections import defaultdict, OrderedDict
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 import pandas as pd
 import numpy as np
@@ -165,17 +165,35 @@ def _get_acled_token() -> str:
         if not config.ACLED_USERNAME or not config.ACLED_PASSWORD:
             raise ValueError("ACLED credentials not configured (set ACLED_USERNAME and ACLED_PASSWORD env vars)")
 
-        resp = requests.post(
-            config.ACLED_TOKEN_URL,
-            data={
-                "username": config.ACLED_USERNAME,
-                "password": config.ACLED_PASSWORD,
-                "grant_type": "password",
-                "client_id": "acled",
-            },
-            headers={**_BROWSER_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
-            timeout=8,
-        )
+        # Token endpoint: bumped from 8s → 20s with one retry. Render's egress
+        # to acleddata.com routinely hits 10-15s on cold starts, and an 8s
+        # timeout was deterministically falling through to the frozen JSON
+        # fallback even when the API was healthy. We can afford to wait for the
+        # OAuth handshake — it's a one-time hit per process.
+        last_err = None
+        resp = None
+        for attempt in range(2):
+            try:
+                resp = requests.post(
+                    config.ACLED_TOKEN_URL,
+                    data={
+                        "username": config.ACLED_USERNAME,
+                        "password": config.ACLED_PASSWORD,
+                        "grant_type": "password",
+                        "client_id": "acled",
+                    },
+                    headers={**_BROWSER_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
+                    timeout=20,
+                )
+                last_err = None
+                break
+            except (requests.Timeout, requests.ConnectionError) as e:
+                last_err = e
+                if attempt == 0:
+                    logger.warning(f"ACLED token: {type(e).__name__}, retrying once")
+                    continue
+        if last_err is not None or resp is None:
+            raise (last_err or RuntimeError("ACLED token request returned no response"))
         if not resp.ok:
             raise requests.HTTPError(
                 f"{resp.status_code} for {resp.url} | resp={resp.text[:300]}",
@@ -430,6 +448,405 @@ def get_acled_fetch_meta() -> dict:
         "error": _acled_fetch_error,
         "credentials_configured": bool(config.ACLED_USERNAME and config.ACLED_PASSWORD),
     }
+
+
+# ─── Chokepoint incident overlay ────────────────────────────────────────────
+#
+# Replaces the old AISStream.io live-vessel feed (which was unusable on Render
+# free tier — single-slot key + zombie-connection cycle = perpetual 429). The
+# thesis is about chokepoint *risk* and the model's dependent variable is
+# event frequency, so plotting real ACLED incidents inside the chokepoint zone
+# is more directly informative than vessel positions ever were.
+#
+# Bounding boxes are intentionally larger than the AIS kill-zone rings: ACLED
+# geocodes events to launch sites or impact sites, which can be tens of km
+# inland from a strait. We want to surface "Houthi missile launched from inland
+# Yemen targeting a tanker in Bab" even though the launch coordinate is well
+# outside the 14km kill ring.
+#
+# (lat_top_left, lon_top_left), (lat_bottom_right, lon_bottom_right)
+INCIDENT_BOUNDING_BOXES = {
+    "hormuz": ((30.5, 50.0), (22.5, 60.5)),  # Persian Gulf + Gulf of Oman + Iran coast + UAE/Oman
+    "bab":    ((20.0, 39.0), (10.0, 49.0)),  # South Red Sea + Yemen + Gulf of Aden + Djibouti/Eritrea
+    "suez":   ((33.0, 30.0), (27.0, 36.0)),  # Suez Canal + Sinai
+}
+
+# Actor keywords that we accept *anywhere on the globe* for each chokepoint
+# (so a Houthi attack coded in inland Yemen still shows up for Bab even if
+# coordinates would otherwise put it outside the bounding box). These match
+# both `actor1` and `actor2` substring-insensitive.
+INCIDENT_ACTOR_HINTS = {
+    "hormuz": ("irgc", "iranian navy", "military forces of iran", "islamic revolutionary guard"),
+    "bab":    ("houthi", "ansar allah"),
+    "suez":   (),
+}
+
+
+def _incident_in_box(lat: float, lon: float, box) -> bool:
+    (lat_n, lon_w), (lat_s, lon_e) = box
+    return lat_s <= lat <= lat_n and lon_w <= lon <= lon_e
+
+
+def _incident_actor_match(event: dict, hints: tuple) -> bool:
+    if not hints:
+        return False
+    blob = ((event.get("actor1") or "") + " " + (event.get("actor2") or "")).lower()
+    return any(h in blob for h in hints)
+
+
+def get_chokepoint_incidents(chokepoint_id: str, days: int = 90, limit: int = 200) -> List[dict]:
+    """Real ACLED + iran-events incidents inside a chokepoint zone.
+
+    Returns events from the last `days` days that satisfy EITHER:
+      (a) lat/lon falls inside the chokepoint's incident bounding box, OR
+      (b) actor1/actor2 matches the chokepoint's actor hints (Houthi for Bab,
+          IRGC/Iran for Hormuz) — surfaces events whose coordinates are
+          inland but whose target was the chokepoint.
+
+    Each returned record carries: event_date, event_type, sub_event_type,
+    actor1, location, latitude, longitude, fatalities, source, notes.
+
+    No synthesis. If the data files are empty or stale beyond `days`, returns
+    [] and the frontend surfaces that state honestly.
+    """
+    if chokepoint_id not in INCIDENT_BOUNDING_BOXES:
+        return []
+    box = INCIDENT_BOUNDING_BOXES[chokepoint_id]
+    actor_hints = INCIDENT_ACTOR_HINTS.get(chokepoint_id, ())
+
+    # Date cutoff. We use the dataset's own newest event as the anchor (rather
+    # than wall-clock now) because the cached ACLED dump can lag the calendar
+    # by weeks — using wall-clock would silently produce empty results when
+    # the dump is stale.
+
+    # Prefer the LIVE ACLED memo / cache over the bundled JSON fallback. The
+    # bundled file is from the last manual refresh (currently Mar 2025) and
+    # was silently being preferred even when fetch_acled_events() had pulled
+    # current data into the in-process memo. Result: the chokepoint incident
+    # sidebar showed 13-month-old events even with a healthy ACLED API.
+    acled = _acled_events_memo or []
+    if not acled:
+        try:
+            acled = _read_cache("acled_events", config.CACHE_TTL_ACLED) or []
+        except Exception:
+            acled = []
+    if not acled:
+        acled = _load_acled_fallback() or []
+
+    iran = _iran_fallback_memo or []
+    if not iran:
+        try:
+            iran = _read_cache("iran_events", 86_400) or []
+        except Exception:
+            iran = []
+    if not iran:
+        iran = _load_iran_json_fallback() or []
+
+    pool = list(acled) + list(iran)
+
+    if not pool:
+        return []
+
+    # Find dataset anchor (newest event_date present)
+    newest_ts = 0
+    for e in pool:
+        d = e.get("event_date") or e.get("date")
+        if not d:
+            continue
+        try:
+            ts = time.mktime(time.strptime(d[:10], "%Y-%m-%d"))
+            if ts > newest_ts:
+                newest_ts = ts
+        except Exception:
+            continue
+    if newest_ts == 0:
+        newest_ts = time.time()
+    cutoff_ts = newest_ts - days * 86400
+
+    seen_ids = set()
+    out = []
+    for e in pool:
+        eid = e.get("event_id_cnty") or e.get("event_id")
+        if eid:
+            if eid in seen_ids:
+                continue
+            seen_ids.add(eid)
+
+        # Coords (ACLED stores them as strings, sometimes empty)
+        try:
+            lat = float(e.get("latitude") or 0)
+            lon = float(e.get("longitude") or 0)
+        except (TypeError, ValueError):
+            lat = lon = 0.0
+
+        in_box = (lat or lon) and _incident_in_box(lat, lon, box)
+        actor_match = _incident_actor_match(e, actor_hints)
+        if not (in_box or actor_match):
+            continue
+
+        # Date filter
+        d = e.get("event_date") or e.get("date") or ""
+        try:
+            ts = time.mktime(time.strptime(d[:10], "%Y-%m-%d"))
+        except Exception:
+            continue
+        if ts < cutoff_ts:
+            continue
+
+        out.append({
+            "event_id": eid or "",
+            "date": d[:10],
+            "ts": ts,
+            "event_type": e.get("event_type") or "",
+            "sub_event_type": e.get("sub_event_type") or "",
+            "actor1": e.get("actor1") or "",
+            "actor2": e.get("actor2") or "",
+            "location": e.get("location") or "",
+            "country": e.get("country") or "",
+            "lat": round(lat, 4) if lat else None,
+            "lon": round(lon, 4) if lon else None,
+            "fatalities": int(e.get("fatalities") or 0),
+            "source": e.get("source") or "",
+            "notes": e.get("notes") or "",
+            "in_box": bool(in_box),
+            "actor_attributed": bool(actor_match),
+        })
+
+    # Newest first
+    out.sort(key=lambda x: x["ts"], reverse=True)
+    return out[:limit]
+
+
+def get_chokepoint_incidents_meta() -> dict:
+    """Diagnostic info for the chokepoint-incidents endpoint."""
+    return {
+        "source": "ACLED + iran_events JSON",
+        "acled_meta": get_acled_fetch_meta(),
+        "boxes": {
+            cp: {"top_left": list(box[0]), "bottom_right": list(box[1])}
+            for cp, box in INCIDENT_BOUNDING_BOXES.items()
+        },
+    }
+
+
+def get_freshness_snapshot() -> dict:
+    """Per-source data freshness for the UI status pill + chokepoint cards.
+
+    Returns the newest data date and origin (api / cache / fallback) for every
+    source that feeds an analytical claim. The frontend uses this to
+    (a) replace the "LIVE · ACLED + EIA" pill text with an honest summary,
+    (b) gate the green dot to only fire when data is genuinely fresh, and
+    (c) print a "data through <date>" caption next to each chokepoint card.
+
+    Reads memos and on-disk caches WITHOUT triggering live fetches so it's
+    safe to poll on a 60s interval. The "max" date returned for each source is
+    the actual newest event/observation date present, not the last fetch
+    timestamp — that distinction matters when the API is reachable but the
+    upstream provider hasn't updated their feed yet (common with ACLED, which
+    has a documented 1-2 week lag).
+    """
+    import time as _time
+
+    out: Dict[str, Dict[str, Any]] = {"server_ts": _time.time()}
+
+    def _newest_date(events, key="event_date"):
+        m = ""
+        for e in events or ():
+            d = (e.get(key) or e.get("date") or "")[:10]
+            if d and d > m:
+                m = d
+        return m or None
+
+    def _newest_field(rows, key):
+        m = ""
+        for r in rows or ():
+            d = (r.get(key) or "")[:10]
+            if d and d > m:
+                m = d
+        return m or None
+
+    # ── ACLED events ─────────────────────────────────────────────────────
+    # Prefer the live in-memory memo. If the memo is empty (pre-warm hasn't
+    # run yet, fresh process), fall back to the on-disk cache and finally
+    # to the JSON fallback file. We never trigger a network fetch from the
+    # freshness endpoint — it's poll-safe.
+    acled_meta = get_acled_fetch_meta()
+    acled_events = _acled_events_memo or []
+    acled_source_label = acled_meta.get("source")
+    if not acled_events:
+        try:
+            disk = _read_cache("acled_events", 86_400 * 30) or []
+        except Exception:
+            disk = []
+        if disk:
+            acled_events = disk
+            if not acled_source_label:
+                acled_source_label = "cache"
+    if not acled_events:
+        try:
+            fb_path = config.DATA_DIR / "acled_events.json"
+            if fb_path.exists():
+                acled_events = json.loads(fb_path.read_text())
+                if not acled_source_label:
+                    acled_source_label = "fallback"
+        except Exception:
+            pass
+    out["acled"] = {
+        "newest_date": _newest_date(acled_events),
+        "count": len(acled_events),
+        "source": acled_source_label,                # "api" | "cache" | "fallback"
+        "fetched_ts": acled_meta.get("ts"),
+        "error": acled_meta.get("error"),
+    }
+
+    # ── Iran events ──────────────────────────────────────────────────────
+    iran_events = _iran_fallback_memo or []
+    if not iran_events:
+        # Probe the on-disk cache without forcing a live fetch
+        try:
+            iran_events = _read_cache("iran_events", 86_400 * 30) or []
+        except Exception:
+            iran_events = []
+    if not iran_events:
+        # Final fallback: bundled iran_events.json (same source the data
+        # service uses when the live API is unreachable).
+        try:
+            iran_events = _load_iran_json_fallback() or []
+        except Exception:
+            iran_events = []
+    out["iran"] = {
+        "newest_date": _newest_date(iran_events),
+        "count": len(iran_events),
+        "error": get_iran_fetch_error(),
+    }
+
+    # ── Brent (cache → CSV fallback) ─────────────────────────────────────
+    try:
+        brent_cached = _read_cache("brent_prices", 86_400 * 30) or []
+    except Exception:
+        brent_cached = []
+    if not brent_cached:
+        try:
+            brent_cached = _load_brent_csv_fallback() or []
+        except Exception:
+            brent_cached = []
+    out["brent"] = {
+        "newest_date": _newest_field(brent_cached, "date"),
+        "count": len(brent_cached),
+    }
+
+    # ── DXY / OVX (yfinance) ─────────────────────────────────────────────
+    for k, cache_key in (("dxy", "dxy"), ("ovx", "ovx")):
+        try:
+            rows = _read_cache(cache_key, 86_400 * 7) or []
+        except Exception:
+            rows = []
+        out[k] = {
+            "newest_date": _newest_field(rows, "date"),
+            "count": len(rows),
+        }
+
+    # ── PortWatch transit data (monthly) ─────────────────────────────────
+    for k, fn_name, cache_key in (
+        ("hormuz", "fetch_hormuz_transits", "hormuz_transits"),
+        ("bab",    "fetch_bab_el_mandeb_transits", "bab_el_mandeb_transits"),
+        ("suez",   "fetch_suez_transits", "suez_transits"),
+    ):
+        try:
+            rows = _read_cache(cache_key, 86_400 * 30) or []
+        except Exception:
+            rows = []
+        # PortWatch returns monthly buckets keyed by `month`
+        latest_month = ""
+        for r in rows:
+            m = (r.get("month") or "")[:7]
+            if m and m > latest_month:
+                latest_month = m
+        out[k + "_transits"] = {
+            "newest_month": latest_month or None,
+            "count": len(rows),
+        }
+
+    # ── HDX live ACLED mirror (no-auth, no live fetch — just read cache) ─
+    # If the HDX cache exists, surface its freshness so the pill upgrades
+    # from "frozen" → "live" once the user has called /api/live-event-counts
+    # at least once. Never trigger a network fetch from here — keep this
+    # endpoint poll-safe.
+    hdx_newest_month = None
+    hdx_country_max: Dict[str, str] = {}
+    hdx_fetched_utc = None
+    try:
+        hdx_cached = _read_cache("hdx_event_counts", 86_400 * 7) or {}
+        hdx_newest_month = hdx_cached.get("newest_month")
+        hdx_fetched_utc  = hdx_cached.get("fetched_utc")
+        for country, rows in (hdx_cached.get("by_country") or {}).items():
+            if rows:
+                hdx_country_max[country] = rows[-1].get("month")
+    except Exception:
+        pass
+    out["hdx_acled"] = {
+        "newest_month": hdx_newest_month,
+        "by_country_newest_month": hdx_country_max,
+        "fetched_utc": hdx_fetched_utc,
+    }
+
+    # ── Aggregate health: green if every critical source has data within
+    #    30 days of its respective newest record; amber if 30-180d; red if
+    #    older or missing. The frontend uses this single field to color
+    #    the top-right status pill. HDX freshness is preferred over ACLED
+    #    fallback when available (HDX is updated weekly; the bundled JSON
+    #    can be months stale).
+    today = _time.strftime("%Y-%m-%d", _time.gmtime(_time.time()))
+
+    def _days_old(d):
+        if not d:
+            return 10_000
+        try:
+            t = _time.mktime(_time.strptime(d[:10], "%Y-%m-%d"))
+            return max(0, int((_time.time() - t) / 86_400))
+        except Exception:
+            return 10_000
+
+    # Effective ACLED freshness: prefer the HDX monthly aggregate (which is
+    # always within ~7 days of wall-clock when reachable) over the bundled
+    # JSON fallback (which can be 13+ months old). HDX gives us "YYYY-MM";
+    # treat the 1st of the following month as the freshness boundary.
+    def _month_end(ym):
+        if not ym or len(ym) < 7:
+            return None
+        try:
+            y = int(ym[:4]); m = int(ym[5:7])
+            # End-of-month estimate so a 2026-04 month doesn't read as
+            # "2026-04-01" (1st) which would be artificially stale.
+            ny, nm = (y + 1, 1) if m == 12 else (y, m + 1)
+            return f"{ny:04d}-{nm:02d}-01"
+        except Exception:
+            return None
+    hdx_eff_date = _month_end(out["hdx_acled"]["newest_month"])
+    acled_eff_date = out["acled"]["newest_date"]
+    if hdx_eff_date and (not acled_eff_date or hdx_eff_date > acled_eff_date):
+        acled_eff_date = hdx_eff_date
+        out["acled"]["effective_source"] = "hdx_mirror"
+    else:
+        out["acled"]["effective_source"] = out["acled"].get("source") or "bundled"
+    out["acled"]["effective_date"] = acled_eff_date
+
+    critical_age = max(
+        _days_old(acled_eff_date),
+        _days_old(out["brent"]["newest_date"]),
+    )
+    if critical_age <= 7:
+        status = "live"
+    elif critical_age <= 45:
+        status = "stale"
+    else:
+        status = "frozen"
+    out["status"] = {
+        "level": status,                # "live" | "stale" | "frozen"
+        "critical_age_days": critical_age,
+        "today_utc": today,
+    }
+    return out
 
 
 def _load_acled_fallback() -> List[dict]:
@@ -842,7 +1259,19 @@ def fetch_ovx() -> List[dict]:
 # ─── FRED API (China BCI) ───────────────────────────────────────────────────
 
 def fetch_china_pmi() -> List[dict]:
-    """Fetch China business confidence from FRED."""
+    """Fetch China business confidence (FRED BSCICP03CNM665S, monthly).
+
+    KNOWN ISSUE (verified 2026-04-26): FRED has stopped publishing
+    BSCICP03CNM665S past Jan 2024 — `fred.get_series()` returns 0 points for
+    any observation_start later than that. The frozen Jan 2024 reading is
+    carried forward into the master timeseries via _extend_master_timeseries
+    so the regression's china_pmi control variable stays defined for new
+    rows; downstream charts handle the flat-line. If/when FRED republishes
+    or we adopt a substitute (CSCICP02CNM665S / Caixin PMI / NBS feed) this
+    fetcher will start returning fresh points automatically.
+
+    Stale-cache fallback so an FRED outage doesn't blank the macro panel.
+    """
     cached = _read_cache("china_pmi", config.CACHE_TTL_FRED)
     if cached:
         return cached
@@ -861,8 +1290,12 @@ def fetch_china_pmi() -> List[dict]:
             logger.info(f"FRED China BCI: fetched {len(records)} data points")
             return records
     except Exception as e:
-        logger.warning(f"FRED API failed: {e}")
-    return []
+        logger.warning(f"FRED China PMI fetch failed: {e}")
+
+    stale = _read_stale_cache("china_pmi") or []
+    if stale:
+        logger.info(f"FRED China PMI: serving stale cache ({len(stale)} pts)")
+    return stale
 
 
 # ─── Tier-1 Free API Integrations (EIA inventories, FRED macro, GDELT) ──────
@@ -1057,7 +1490,383 @@ def fetch_gdelt_tone(timespan: str = "90d") -> dict:
     return result
 
 
+# ─── HDX Live ACLED Mirror (no-auth, weekly refresh) ────────────────────────
+#
+# Why this exists: the bundled ACLED JSON fallback in data/acled_events.json is
+# point-in-time (as of the last manual refresh). When the live ACLED OAuth API
+# is unreachable (Render egress timeouts, expired credentials, etc.) the
+# dashboard silently freezes at the fallback's date.
+#
+# ACLED publishes country-level monthly aggregates to the Humanitarian Data
+# Exchange (data.humdata.org) every Wednesday — typically 4–7 days behind
+# wall-clock. Those aggregates are fetched without authentication and so
+# provide a guaranteed-fresh "events per month" series even when the
+# authenticated API is down. The data is granular enough to populate
+# (a) a freshness timestamp visible in the UI status pill, and
+# (b) per-country monthly event counts shown next to chokepoint cards.
+#
+# We surface this through /api/live-event-counts and merge the freshness
+# timestamp into get_freshness_snapshot() so the pill says
+# "EVENTS THROUGH <month> · ACLED HDX" instead of the frozen fallback date.
+
+# Known package IDs on HDX. Each ACLED country dataset on HDX has a stable
+# slug — we hit the package_show metadata to find the active resource URL
+# (which rotates weekly when ACLED republishes).
+_HDX_API = "https://data.humdata.org/api/3/action/package_show"
+_HDX_PACKAGES = {
+    "yemen": "yemen-acled-conflict-data",
+    "iran":  "iran-acled-conflict-data",
+    "saudi": "saudi-arabia-acled-conflict-data",
+    "egypt": "egypt-acled-conflict-data",
+    "lebanon": "lebanon-acled-conflict-data",
+}
+
+
+def _hdx_resource_url(package_id: str) -> Optional[Dict[str, Any]]:
+    """Look up the most recent 'political_violence' XLSX URL for an HDX package.
+
+    Returns {url, name, last_modified} or None on failure.
+    """
+    try:
+        resp = requests.get(_HDX_API, params={"id": package_id},
+                            headers=_BROWSER_HEADERS, timeout=15)
+        if not resp.ok:
+            return None
+        result = resp.json().get("result", {}) or {}
+        for r in result.get("resources", []) or []:
+            name = (r.get("name") or "").lower()
+            if "political_violence" in name and (r.get("format", "").lower() == "xlsx"):
+                return {
+                    "url": r.get("url"),
+                    "name": r.get("name"),
+                    "last_modified": (r.get("last_modified") or result.get("metadata_modified") or "")[:19],
+                }
+    except Exception as e:
+        logger.warning(f"HDX lookup failed for {package_id}: {e}")
+    return None
+
+
+_HDX_MONTH_LOOKUP = {
+    "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+    "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "jun": 6, "jul": 7, "aug": 8,
+    "sep": 9, "sept": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+
+def _parse_hdx_monthly_xlsx(content: bytes, country_label: str) -> List[dict]:
+    """Parse one HDX ACLED admin-level XLSX into [{month, events, fatalities}].
+
+    HDX's ACLED files are workbooks with two sheets:
+      * "TOU"   — terms-of-use boilerplate (one column "Licensing")
+      * "Data"  — the row-level admin-month data with columns:
+                  Country, Admin1, Admin2, ISO3, Admin2 Pcode, Admin1 Pcode,
+                  Month (English name), Year (int), Events, Fatalities
+
+    We aggregate the admin-level rows up to (Year, Month) so the output is
+    one record per calendar month. Month names are translated via
+    _HDX_MONTH_LOOKUP so locale-specific casing ("April" vs "april" vs "APR")
+    all parse correctly.
+    """
+    import io as _io
+    try:
+        # Try the named "Data" sheet first; fall back to the second sheet by
+        # index in case ACLED renames it. Reading sheet_name=None here would
+        # parse every sheet (including the 1-row TOU) — wasteful for ~2MB
+        # workbooks loaded for 5 countries.
+        try:
+            df = pd.read_excel(_io.BytesIO(content), sheet_name="Data")
+        except Exception:
+            xls = pd.ExcelFile(_io.BytesIO(content))
+            data_sheet = next((s for s in xls.sheet_names if s.lower() != "tou"), xls.sheet_names[-1])
+            df = pd.read_excel(_io.BytesIO(content), sheet_name=data_sheet)
+    except Exception as e:
+        logger.warning(f"HDX XLSX parse failed for {country_label}: {e}")
+        return []
+
+    cols = {c.lower().strip(): c for c in df.columns}
+
+    def _find(*needles):
+        for k, original in cols.items():
+            if all(n in k for n in needles):
+                return original
+        return None
+
+    year_col   = _find("year")
+    month_col  = _find("month")
+    events_col = _find("event") or _find("incident") or _find("count")
+    fatal_col  = _find("fatal")
+
+    if not (year_col and month_col and events_col):
+        logger.warning(f"HDX {country_label}: unrecognised schema {list(df.columns)[:8]}")
+        return []
+
+    # Aggregate admin-level rows to (year, month) totals. Vectorise via
+    # groupby so we don't iterrows over 45 000 rows per country.
+    df = df[[year_col, month_col, events_col] + ([fatal_col] if fatal_col else [])].copy()
+    df.rename(columns={
+        year_col: "_year",
+        month_col: "_month_raw",
+        events_col: "_events",
+        **({fatal_col: "_fatal"} if fatal_col else {}),
+    }, inplace=True)
+
+    # Translate month names → integers; keep numeric values as-is.
+    def _to_month_int(v):
+        if isinstance(v, (int, float)) and not pd.isna(v):
+            try:
+                return int(v)
+            except Exception:
+                return None
+        if isinstance(v, str):
+            return _HDX_MONTH_LOOKUP.get(v.strip().lower())
+        return None
+
+    df["_month_int"] = df["_month_raw"].map(_to_month_int)
+    df["_year"] = pd.to_numeric(df["_year"], errors="coerce")
+    df["_events"] = pd.to_numeric(df["_events"], errors="coerce").fillna(0)
+    if "_fatal" in df.columns:
+        df["_fatal"] = pd.to_numeric(df["_fatal"], errors="coerce").fillna(0)
+    df = df.dropna(subset=["_year", "_month_int"])
+    if df.empty:
+        return []
+
+    grouped = df.groupby(["_year", "_month_int"], as_index=False).agg(
+        events=("_events", "sum"),
+        fatalities=("_fatal", "sum") if "_fatal" in df.columns else ("_events", lambda _: 0),
+    )
+
+    out = []
+    for _, row in grouped.iterrows():
+        y = int(row["_year"]); m = int(row["_month_int"])
+        out.append({
+            "month": f"{y:04d}-{m:02d}",
+            "events": int(row["events"]),
+            "fatalities": int(row["fatalities"]),
+            "country": country_label,
+        })
+    out.sort(key=lambda r: r["month"])
+    return out
+
+
+def fetch_hdx_event_counts(force: bool = False) -> Dict[str, Any]:
+    """Live monthly ACLED event counts for every chokepoint-relevant country.
+
+    No authentication required — pulls the public ACLED→HDX mirror that
+    refreshes every Wednesday. Cache TTL is 6 hours (HDX is stable between
+    refreshes and we don't want to thrash their API).
+
+    Returns:
+        {
+          "fetched_utc": ISO-8601,
+          "newest_month": "YYYY-MM",        # max across all countries
+          "by_country": {
+            "yemen": [{month, events, fatalities, country}, ...],
+            "iran":  [...],
+            ...
+          },
+          "errors": {country: error_str, ...}
+        }
+    """
+    cache_key = "hdx_event_counts"
+    if not force:
+        cached = _read_cache(cache_key, 6 * 3600)
+        if cached:
+            return cached
+
+    out: Dict[str, Any] = {
+        "fetched_utc": datetime.utcnow().isoformat() + "Z",
+        "by_country": {},
+        "by_country_meta": {},
+        "errors": {},
+    }
+    newest = ""
+
+    # Sequential fetch — 5 countries × ~1MB each is fast enough and keeps us
+    # under HDX's rate limits.
+    for label, pkg in _HDX_PACKAGES.items():
+        meta = _hdx_resource_url(pkg)
+        if not meta or not meta.get("url"):
+            out["errors"][label] = "package_show returned no political_violence resource"
+            continue
+        try:
+            r = requests.get(meta["url"], headers=_BROWSER_HEADERS,
+                             timeout=30, allow_redirects=True)
+            if not r.ok:
+                out["errors"][label] = f"HTTP {r.status_code}"
+                continue
+            rows = _parse_hdx_monthly_xlsx(r.content, label)
+            if not rows:
+                out["errors"][label] = "parser returned 0 rows"
+                continue
+            out["by_country"][label] = rows
+            out["by_country_meta"][label] = {
+                "resource_name": meta.get("name"),
+                "last_modified": meta.get("last_modified"),
+                "row_count": len(rows),
+            }
+            cur = rows[-1]["month"]
+            if cur > newest:
+                newest = cur
+        except Exception as e:
+            out["errors"][label] = f"{type(e).__name__}: {e}"
+            logger.warning(f"HDX {label} fetch failed: {e}")
+
+    out["newest_month"] = newest or None
+    if out["by_country"]:
+        _write_cache(cache_key, out)
+    else:
+        # Don't cache an all-errors snapshot — it'd block recovery for 6h.
+        # But return a stale cache if available so the UI doesn't go blank.
+        stale = _read_stale_cache(cache_key)
+        if stale:
+            stale["served_stale"] = True
+            return stale
+    return out
+
+
 # ─── Master Dataset (CSV Backbone) ──────────────────────────────────────────
+
+def _extend_master_timeseries_with_live(result: dict) -> None:
+    """Append live daily rows to the static master timeseries (in-place).
+
+    The static `data/master_dataset.json` is built when the developer last
+    regenerated it; without intervention it stays frozen at that date even
+    when the live Brent / DXY / OVX / SPR caches are weeks ahead. This
+    function fills the gap so the Volatility / Time-Series / Scatter charts
+    extend all the way to today's print.
+
+    Live sources used (read from on-disk caches — never triggers a fetch):
+        Brent_Price          ← brent_prices.json (daily, EIA + CSV fallback)
+        DXY                  ← dxy.json (daily, yfinance)
+        OVX                  ← ovx.json (daily, yfinance)
+        SPR_Release_Volume   ← spr_data.json (weekly carry-forward)
+        China_PMI            ← china_pmi.json (monthly carry-forward)
+
+    Daily_Volatility for new rows is computed as the rolling 5-day standard
+    deviation of Brent log returns × √252 to match the static file's units.
+    Attack-frequency and event-flag columns are set to 0 / NaN for new rows;
+    the live HDX monthly counts are surfaced separately via /api/live-event-counts
+    (we don't fabricate daily granularity from monthly aggregates).
+
+    Mutates `result["timeseries"]` in place; no-op if no rows would be added.
+    """
+    ts = result.get("timeseries") or []
+    if not ts:
+        return
+    last_static_date = ts[-1].get("date")
+    if not last_static_date:
+        return
+
+    # Read live caches without triggering network IO. If any of these are
+    # missing we still proceed with whatever IS available; the merge handles
+    # missing per-row fields gracefully.
+    brent = _read_cache("brent_prices",  config.CACHE_TTL_BRENT)    or []
+    dxy   = _read_cache("dxy",            config.CACHE_TTL_YFINANCE) or []
+    ovx   = _read_cache("ovx",            config.CACHE_TTL_YFINANCE) or []
+    spr   = _read_cache("spr_data",       86_400 * 14)               or []
+    pmi   = _read_cache("china_pmi",      config.CACHE_TTL_FRED)     or []
+
+    if not brent:
+        return  # no live data → nothing to extend with
+
+    # Index everything by date for O(1) lookup.
+    def _by_date(rows, val_key):
+        return {r["date"]: r.get(val_key) for r in rows if r.get("date")}
+
+    brent_by = _by_date(brent, "price")
+    dxy_by   = _by_date(dxy,   "value")
+    ovx_by   = _by_date(ovx,   "value")
+    spr_by   = _by_date(spr,   "value") if spr else {}
+    # China PMI is monthly (YYYY-MM-01); we use last-known carry-forward.
+    pmi_sorted = sorted([(r["date"][:10], r.get("value")) for r in pmi if r.get("date")])
+
+    def _pmi_for(date):
+        # Most recent PMI observation on/before `date`.
+        last = None
+        for d, v in pmi_sorted:
+            if d <= date:
+                last = v
+            else:
+                break
+        return last
+
+    # SPR is weekly with carry-forward semantics.
+    spr_sorted = sorted([(d, v) for d, v in spr_by.items()])
+
+    def _spr_for(date):
+        last = 0
+        for d, v in spr_sorted:
+            if d <= date:
+                last = v
+            else:
+                break
+        return last
+
+    # Build the union of dates we have live data for, beyond last_static.
+    new_dates = sorted({d for d in brent_by if d > last_static_date})
+    if not new_dates:
+        return
+
+    # Daily_Volatility: rolling 5-day std of log returns. Seed with the last
+    # 5 prices from the static series to keep the boundary smooth.
+    import math
+    seed = []
+    for r in ts[-6:]:
+        if r.get("brent_price") is not None:
+            seed.append(r["brent_price"])
+    rolling = list(seed)
+
+    def _vol_after_appending(price):
+        rolling.append(price)
+        if len(rolling) < 6:
+            return None
+        window = rolling[-6:]
+        rets = []
+        for i in range(1, len(window)):
+            if window[i-1] and window[i] and window[i-1] > 0:
+                rets.append(math.log(window[i] / window[i-1]))
+        if len(rets) < 2:
+            return None
+        mean = sum(rets) / len(rets)
+        var = sum((x - mean) ** 2 for x in rets) / (len(rets) - 1)
+        return round((var ** 0.5) * (252 ** 0.5), 4)
+
+    # Schema-match the static rows so downstream code doesn't have to handle
+    # missing keys. Use the last static row as the field template.
+    template_keys = list(ts[-1].keys())
+
+    appended = 0
+    for d in new_dates:
+        bp = brent_by[d]
+        if bp is None:
+            continue
+        row = {k: None for k in template_keys}
+        row["date"] = d
+        row["brent_price"] = round(float(bp), 2)
+        row["daily_volatility"] = _vol_after_appending(float(bp))
+        row["dxy"]               = round(float(dxy_by[d]), 2) if dxy_by.get(d) is not None else None
+        row["ovx"]               = round(float(ovx_by[d]), 2) if ovx_by.get(d) is not None else None
+        row["spr_release_volume"] = _spr_for(d)
+        row["china_pmi"]         = _pmi_for(d)
+        # Integer-typed event-flag columns: zero out for live rows. Setting
+        # these to None would trip `int()` casts in downstream chart code.
+        for k in ("weekly_attacks", "daily_attacks", "tanker_attacks",
+                  "chokepoint_attacks", "fatalities_count", "opec_dummy",
+                  "russia_ukraine_dummy", "opec_decision",
+                  "russia_ukraine_attacks", "iran_israel_escalation"):
+            if k in template_keys:
+                row[k] = 0
+        ts.append(row)
+        appended += 1
+
+    if appended:
+        logger.info(f"Master timeseries: extended with {appended} live rows ({new_dates[0]} → {new_dates[-1]})")
+        # Update KPI block so /api/master is internally consistent.
+        result.setdefault("kpis", {})
+        result["kpis"]["timeseries_newest_date"] = new_dates[-1]
+        result["kpis"]["timeseries_extended_rows"] = appended
+
 
 def load_master_dataset() -> dict:
     """Load the master dataset CSV and return as structured JSON.
@@ -1091,6 +1900,17 @@ def load_master_dataset() -> dict:
                     result.setdefault("kpis", {})["latest_ovx"] = round(live_ovx[-1]["value"], 2)
             except Exception as e:
                 logger.warning(f"master_dataset.json: could not refresh live KPIs: {e}")
+            # Extend the timeseries with live daily prices so the main charts
+            # stop ending at the static file's frozen date. Without this,
+            # the volatility / Brent / DXY / OVX charts dead-end at whatever
+            # date the dev last regenerated master_dataset.json — currently
+            # 2025-10-01 — even though Brent + macro caches are within days
+            # of wall-clock. See _extend_master_timeseries_with_live for
+            # the merge logic.
+            try:
+                _extend_master_timeseries_with_live(result)
+            except Exception as e:
+                logger.warning(f"master_dataset.json: live timeseries extend failed: {e}")
             return result
         except Exception as e:
             logger.error(f"master_dataset.json read failed, falling back to live: {e}")
@@ -1480,8 +2300,14 @@ def get_curated_iran_events() -> List[dict]:
 
 
 def fetch_iran_news() -> List[dict]:
-    """Fetch live Iran/oil war news headlines from Google News RSS. No API key needed."""
-    cached = _read_cache("iran_news", 7200)  # 30-minute cache
+    """Fetch live Iran/oil war news headlines from Google News RSS. No API key needed.
+
+    Cache TTL is 2 hours but we also serve stale cache as the FINAL fallback
+    when the live fetch fails — better to show yesterday's headlines than
+    a blank feed (the 3-second per-RSS timeout means transient network blips
+    used to silently empty the news ticker).
+    """
+    cached = _read_cache("iran_news", 7200)  # 2-hour cache
     if cached:
         logger.info("Iran news: serving from cache")
         return cached
@@ -1587,7 +2413,14 @@ def fetch_iran_news() -> List[dict]:
 
     except Exception as e:
         logger.warning(f"Iran news fetch failed: {e}")
-        return []
+
+    # Final fallback: serve the most recent cached headlines even past TTL.
+    # Without this, a single RSS hiccup wipes the news ticker until the next
+    # successful fetch — empty UI is worse than a 3-hour-old headline.
+    stale = _read_stale_cache("iran_news") or []
+    if stale:
+        logger.info(f"Iran news: serving stale cache ({len(stale)} items)")
+    return stale
 
 
 # ─── IMF PortWatch — Chokepoint Transit Data ─────────────────────────────────
@@ -2301,21 +3134,23 @@ def get_war_phases() -> List[dict]:
 
 def get_comparative_data() -> dict:
     """Build Houthi vs Iran comparative analysis dataset."""
-    # Houthi data from master dataset CSV
-    thesis_df = None
-    try:
-        thesis_df = pd.read_csv(config.MYLES_DATASET_PATH)
-    except Exception as e:
-        logger.warning(f"Failed to load master dataset for comparative: {e}")
+    # Houthi/baseline timeseries — pulled from load_master_dataset() so it
+    # picks up the live-extended rows. Reading the raw CSV directly (as this
+    # function used to) freezes the timeseries at whatever date the dev last
+    # regenerated master_dataset.csv, which left charts dead-ending months
+    # before wall-clock.
     houthi_ts = []
-    if thesis_df is not None and not thesis_df.empty:
-        for _, row in thesis_df.iterrows():
+    try:
+        master = load_master_dataset()
+        for row in (master.get("timeseries") or []):
             houthi_ts.append({
-                "date": str(row.get("Date", ""))[:10],
-                "brent_price": float(row["Brent_Price"]) if pd.notna(row.get("Brent_Price")) else None,
-                "weekly_attacks": float(row["WeeklyAttackFreq"]) if pd.notna(row.get("WeeklyAttackFreq")) else None,
-                "daily_volatility": float(row["Daily_Volatility"]) if pd.notna(row.get("Daily_Volatility")) else None,
+                "date": (row.get("date") or "")[:10],
+                "brent_price": row.get("brent_price"),
+                "weekly_attacks": row.get("weekly_attacks"),
+                "daily_volatility": row.get("daily_volatility"),
             })
+    except Exception as e:
+        logger.warning(f"Comparative: master timeseries load failed: {e}")
 
     # Iran intensity data
     iran_intensity = compute_iran_intensity()
