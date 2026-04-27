@@ -629,11 +629,52 @@ document.addEventListener('DOMContentLoaded', () => {
       const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
       const k  = (label, val, errClass) =>
         `<span class="xf-diag-key">${label.padEnd(22, ' ')}</span> <span class="${errClass ? 'xf-diag-err' : ''}">${esc(val)}</span>`;
-      const errStr = a.last_fetch_error || '(no error — last fetch may have succeeded but returned only old events)';
+      const errStr = a.last_fetch_error || '(no error — last fetch succeeded; data freshness is upstream-gated)';
+
+      // Diagnose the most likely root cause from the symptom pattern so
+      // the user sees the answer instead of having to interpret raw
+      // diagnostic fields.
+      let rootCause = '';
+      const newestStr = (a.max || '').slice(0, 10);
+      let newestAge = null;
+      if (newestStr) {
+        try {
+          newestAge = Math.floor((Date.now() - new Date(newestStr + 'T00:00:00Z').getTime()) / 86400000);
+        } catch (_) {}
+      }
+      if (a.last_fetch_source === 'api' && newestAge != null && newestAge >= 300 && newestAge <= 430) {
+        rootCause = [
+          '🛑  ROOT CAUSE: ACLED FREE-TIER 12-MONTH DATA EMBARGO',
+          '',
+          '   The API call SUCCEEDED — but ACLED\'s academic / free tier',
+          '   embargoes row-level events for ~12 months. The "newest event"',
+          '   shown is approximately 365 days behind today, which exactly',
+          '   matches that embargo window.',
+          '',
+          '   This is NOT a bug. There is no code change that bypasses it.',
+          '',
+          '   Options to unlock real-time row-level events:',
+          '     (1) Subscribe to ACLED Premium (~$/mo) for live API access.',
+          '     (2) Use the HDX monthly aggregates for current-month counts',
+          '         — already wired into the chokepoint cards and §01 chart.',
+          '         (HDX republishes ACLED monthly summaries WITHOUT embargo.)',
+          '     (3) Pair ACLED row-level (frozen 12mo) with HDX monthly (live)',
+          '         for a hybrid view, which is what this dashboard already does.',
+          '',
+        ].join('\n');
+      } else if (!a.credentials_configured) {
+        rootCause = '🛑  ROOT CAUSE: ACLED env vars not set on Render. Set\n   ACLED_USERNAME and ACLED_PASSWORD in the Render dashboard.\n\n';
+      } else if (a.last_fetch_source === 'fallback' && (a.last_fetch_error || '').match(/timeout|ConnectionError/i)) {
+        rootCause = '🛑  ROOT CAUSE: ACLED API unreachable from Render (timeout).\n   Click "⟳ REFRESH ACLED" to retry, or check ACLED status.\n\n';
+      } else if ((a.last_fetch_error || '').match(/401|missing access_token|invalid_grant/i)) {
+        rootCause = '🛑  ROOT CAUSE: ACLED credentials rejected. Rotate\n   ACLED_USERNAME / ACLED_PASSWORD on Render.\n\n';
+      }
+
       const html = [
         '<span class="xf-diag-close" title="Close">✕</span>',
         '<span class="xf-diag-key">ACLED FETCH DIAGNOSTIC</span>',
         '─────────────────────────',
+        rootCause ? '<span class="xf-diag-err">' + esc(rootCause) + '</span>' : '',
         k('credentials_configured', a.credentials_configured),
         k('last_fetch_source', a.last_fetch_source || '(none)'),
         k('last_fetch_utc', a.last_fetch_utc || '(never)'),
@@ -644,21 +685,13 @@ document.addEventListener('DOMContentLoaded', () => {
         k('token_expires_in', a.token_expires_in_s != null ? fmtAge(a.token_expires_in_s) : '(no token)'),
         k('events in memo', a.count || 0),
         k('oldest event', a.min || '(empty)'),
-        k('newest event', a.max || '(empty)'),
+        k('newest event', a.max || '(empty)') + (newestAge != null ? '  (' + newestAge + 'd behind today)' : ''),
         '',
         '<span class="xf-diag-key">last_fetch_error:</span>',
         '  <span class="xf-diag-err">' + esc(errStr) + '</span>',
         '',
-        '<span class="xf-diag-key">Common causes:</span>',
-        '  • "401" / "missing access_token" → rotate ACLED creds on Render',
-        '  • "ReadTimeout" → ACLED slow; retry or check status page',
-        '  • "credentials_configured: false" → env vars unset on Render',
-        '  • API succeeds but newest event is months old → ACLED tier may',
-        '    cap historical query depth. Open an ACLED support ticket or',
-        '    tighten query_date_range to the last 90 days.',
-        '',
         '<span class="xf-diag-key">Server time:</span> ' + esc(d && d.server_time_utc),
-      ].join('\n');
+      ].filter(Boolean).join('\n');
       panel.innerHTML = html;
     } catch (e) {
       panel.innerHTML = '<span class="xf-diag-close" title="Close">✕</span><span class="xf-diag-err">Failed to load /api/diag: ' + (e && e.message || e) + '</span>';

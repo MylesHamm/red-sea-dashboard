@@ -380,10 +380,12 @@ function renderEventTypesChart(state) {
   if (overlay) overlay.remove();
 
   // Update the §03 subtitle so the user SEES the data window. Without
-  // this the donut looks "live" while actually showing a frozen
-  // March-2025 cross-section. The badge is now clickable and shows
-  // the actual ACLED fetch error from /api/diag so the user can
-  // self-diagnose (expired creds, IP block, timeout, etc.).
+  // this the donut looks "live" while actually showing a year-old
+  // cross-section. ACLED's free / academic API tier embargoes events
+  // for ~12 months — paid Premium gets real-time. So a "365d behind"
+  // newest_event with last_fetch_source=api is NOT a bug, it's the
+  // documented embargo. Distinguish that case from genuine API
+  // failures by age band; the badge wording matches.
   const subtitleEl = document.querySelector('[data-event-mix-subtitle]');
   if (subtitleEl && windowNewest) {
     const m = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
@@ -391,10 +393,13 @@ function renderEventTypesChart(state) {
     const newestLabel = `${String(d).padStart(2,'0')} ${m[mm-1]} ${y}`;
     const todayMs = Date.now();
     const ageDays = Math.max(0, Math.floor((todayMs - new Date(windowNewest + 'T00:00:00Z').getTime()) / 86400000));
-    const stale = ageDays > 30;
     let badge = '';
-    if (stale) {
-      badge = ` <span class="xf-stale-tag" data-acled-diag="1" tabindex="0" role="button" title="Click for ACLED diagnostic info">⚠ ${ageDays}d OLD · live ACLED API failing · WHY?</span>`;
+    if (ageDays >= 300 && ageDays <= 430) {
+      // Age band consistent with ACLED's ~12-month embargo on free-tier
+      // API access. Paid Premium tier removes this.
+      badge = ` <span class="xf-stale-tag" data-acled-diag="1" tabindex="0" role="button" title="ACLED free-tier API embargoes events for ~12 months. Click for diagnostic info.">ACLED FREE TIER · ~12 MO EMBARGO · DETAILS</span>`;
+    } else if (ageDays > 30) {
+      badge = ` <span class="xf-stale-tag" data-acled-diag="1" tabindex="0" role="button" title="Click for ACLED diagnostic info">⚠ ${ageDays}d OLD · DETAILS</span>`;
     }
     subtitleEl.innerHTML = `ACLED categories · last 90 days through <b>${newestLabel}</b>${badge} · click a wedge to cross-filter.`;
   }
