@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
 
-<link rel="stylesheet" href="assets/app.css?v=20260424s">
+<link rel="stylesheet" href="assets/app.css?v=20260424t">
 </head>
 <body>
 
@@ -214,7 +214,10 @@
           <div class="nb-index">§ 03</div>
           <div>
             <h2 class="nb-title">Event Type Mix</h2>
-            <p class="nb-subtitle">ACLED breakdown — click a wedge to cross-filter.</p>
+            <p class="nb-subtitle" data-event-mix-subtitle>ACLED categories · last 90 days · click a wedge to cross-filter.</p>
+          </div>
+          <div class="nb-badges">
+            <button class="refresh-btn" data-action="refresh-acled" title="Trigger backend re-fetch of live ACLED data, then reload the page.">⟳ REFRESH ACLED</button>
           </div>
         </div>
         <div class="chart-surface"><canvas id="eventTypesChart"></canvas></div>
@@ -823,12 +826,12 @@
 </div>
 
 <!-- Scripts -->
-<script src="assets/api.js?v=20260424s"></script>
-<script src="assets/data.js?v=20260424s"></script>
-<script src="assets/hydrate.js?v=20260424s"></script>
-<script src="assets/globe.js?v=20260424s"></script>
-<script src="assets/tacmap.js?v=20260424s"></script>
-<script src="assets/charts.js?v=20260424s"></script>
-<script src="assets/app.js?v=20260424s"></script>
+<script src="assets/api.js?v=20260424t"></script>
+<script src="assets/data.js?v=20260424t"></script>
+<script src="assets/hydrate.js?v=20260424t"></script>
+<script src="assets/globe.js?v=20260424t"></script>
+<script src="assets/tacmap.js?v=20260424t"></script>
+<script src="assets/charts.js?v=20260424t"></script>
+<script src="assets/app.js?v=20260424t"></script>
 </body>
 </html>

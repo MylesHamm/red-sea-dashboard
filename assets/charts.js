@@ -342,17 +342,58 @@ function renderEventTypesChart(state) {
   }
   // Apply temporal scrubber: only count events at or before the scrubbed date
   const tlCut = tlCutoffDate();
-  const events = tlCut
+  const tlEvents = tlCut
     ? allEvents.filter(e => e.event_date && e.event_date <= tlCut)
     : allEvents;
-  if (!events.length) {
+  if (!tlEvents.length) {
     // Pre-crisis era: nothing to show but the chart, not the loading state
     destroyChartOn(canvas);
     return showChartEmpty(canvas, 'no events in window');
   }
+
+  // ── Filter to the most recent 90 days of AVAILABLE data ────────────
+  // Showing all 17 974 events spanning 17 months made the donut a
+  // historical aggregate of the entire Houthi+war period, dominated by
+  // the long quiet 2024–25 stretch. Users reading the chart wanted
+  // "what's the conflict mix RIGHT NOW" — so we anchor the 90-day
+  // window to the dataset's own newest event date, not wall-clock,
+  // because the bundled fallback may be months stale. The subtitle
+  // discloses both the window and the data-through date.
+  let windowNewest = '';
+  for (const e of tlEvents) {
+    const d = (e.event_date || '').slice(0, 10);
+    if (d && d > windowNewest) windowNewest = d;
+  }
+  let cutoffISO = '';
+  if (windowNewest) {
+    const t = new Date(windowNewest + 'T00:00:00Z').getTime();
+    if (isFinite(t)) {
+      cutoffISO = new Date(t - 90 * 86400000).toISOString().slice(0, 10);
+    }
+  }
+  const events = cutoffISO
+    ? tlEvents.filter(e => (e.event_date || '').slice(0, 10) >= cutoffISO)
+    : tlEvents;
+
   const parent = canvas.parentElement;
   const overlay = parent && parent.querySelector('.chart-empty');
   if (overlay) overlay.remove();
+
+  // Update the §03 subtitle so the user SEES the data window. Without
+  // this the donut looks "live" while actually showing a frozen
+  // March-2025 cross-section.
+  const subtitleEl = document.querySelector('[data-event-mix-subtitle]');
+  if (subtitleEl && windowNewest) {
+    const m = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    const [y, mm, d] = windowNewest.split('-').map(Number);
+    const newestLabel = `${String(d).padStart(2,'0')} ${m[mm-1]} ${y}`;
+    const todayMs = Date.now();
+    const ageDays = Math.max(0, Math.floor((todayMs - new Date(windowNewest + 'T00:00:00Z').getTime()) / 86400000));
+    const stale = ageDays > 30;
+    subtitleEl.innerHTML = `ACLED categories · last 90 days through <b>${newestLabel}</b>` +
+      (stale ? ` <span class="xf-stale-tag">⚠ ${ageDays}d OLD · live ACLED API failing</span>` : '') +
+      ` · click a wedge to cross-filter.`;
+  }
 
   const counts = new Map();
   for (const e of events) {

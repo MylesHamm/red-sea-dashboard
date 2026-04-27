@@ -1699,6 +1699,40 @@ button { font-family: inherit; cursor: pointer; }
   padding: 16px 20px;
   margin-bottom: 22px;
 }
+.refresh-btn {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  padding: 5px 10px;
+  border: 1px solid rgba(0,212,255,0.40);
+  background: rgba(0,212,255,0.08);
+  color: var(--cyan);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.refresh-btn:hover:not(:disabled) {
+  background: rgba(0,212,255,0.15);
+  border-color: var(--cyan);
+}
+.refresh-btn:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+.xf-stale-tag {
+  display: inline-block;
+  margin: 0 6px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: rgba(255,170,0,0.12);
+  border: 1px solid rgba(255,170,0,0.40);
+  color: #ffaa00;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+}
 .analysis-window-badge {
   display: inline-flex;
   align-items: center;

@@ -571,4 +571,42 @@ document.addEventListener('DOMContentLoaded', () => {
   // The sidebar "kill-zone incidents" list is fed by /api/chokepoint-incidents
   // and rendered above by refreshSidebarIncidents + renderVesselList — no
   // Leaflet/AIS-WebSocket plumbing required here.
+
+  // ── Force-refresh button (any [data-action="refresh-acled"]) ─────────────
+  // Fires POST /api/refresh on the backend, which clears API-driven caches
+  // and re-fetches ACLED + Iran + Brent + EIA + FRED + GDELT + HDX in
+  // parallel. The backend returns immediately (the work happens in a
+  // background task), so we poll briefly and reload the page once the
+  // refresh-status endpoint reports completion. Without this affordance
+  // a stale ACLED cache stays stuck until the next 5-min auto-refresh
+  // — a poor UX when the user can SEE the data is months old.
+  document.addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('[data-action="refresh-acled"]');
+    if (!btn) return;
+    if (!window.API) return;
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⟳ REFRESHING…';
+    try {
+      await API.refresh();
+      // Poll status; backend takes ~30-90s for full re-fetch.
+      let done = false;
+      const t0 = Date.now();
+      while (!done && (Date.now() - t0) < 120_000) {
+        await new Promise(r => setTimeout(r, 4000));
+        try {
+          const s = await API.refreshStatus();
+          if (s && s.in_progress === false) { done = true; break; }
+        } catch (_) {}
+      }
+      btn.textContent = '⟳ DONE · RELOADING';
+      // Cache-bust the API caches and reload
+      API.invalidate();
+      setTimeout(() => location.reload(), 800);
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = original;
+      alert('Refresh failed: ' + (e && e.message || e));
+    }
+  });
 });
