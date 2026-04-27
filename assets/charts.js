@@ -379,13 +379,16 @@ function renderEventTypesChart(state) {
   const overlay = parent && parent.querySelector('.chart-empty');
   if (overlay) overlay.remove();
 
-  // Update the §03 subtitle so the user SEES the data window. Without
-  // this the donut looks "live" while actually showing a year-old
-  // cross-section. ACLED's free / academic API tier embargoes events
-  // for ~12 months — paid Premium gets real-time. So a "365d behind"
-  // newest_event with last_fetch_source=api is NOT a bug, it's the
-  // documented embargo. Distinguish that case from genuine API
-  // failures by age band; the badge wording matches.
+  // Update the §03 subtitle so the user SEES the data window. ACLED's
+  // free / academic API tier embargoes row-level events for ~12 months —
+  // paid Premium gets real-time. We use a hybrid model by design:
+  //   • §03 donut here: ACLED row-level event-type breakdown (12-mo
+  //     lag, but rich category granularity)
+  //   • §01 chart + chokepoint cards: HDX monthly aggregates (live,
+  //     no embargo, but no per-event detail)
+  // The badge wording reflects that hybrid choice rather than implying
+  // anything is broken — "EMBARGOED ROW-LEVEL · LIVE COUNTS ON §01" makes
+  // the design legible to a first-time viewer.
   const subtitleEl = document.querySelector('[data-event-mix-subtitle]');
   if (subtitleEl && windowNewest) {
     const m = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
@@ -395,13 +398,15 @@ function renderEventTypesChart(state) {
     const ageDays = Math.max(0, Math.floor((todayMs - new Date(windowNewest + 'T00:00:00Z').getTime()) / 86400000));
     let badge = '';
     if (ageDays >= 300 && ageDays <= 430) {
-      // Age band consistent with ACLED's ~12-month embargo on free-tier
-      // API access. Paid Premium tier removes this.
-      badge = ` <span class="xf-stale-tag" data-acled-diag="1" tabindex="0" role="button" title="ACLED free-tier API embargoes events for ~12 months. Click for diagnostic info.">ACLED FREE TIER · ~12 MO EMBARGO · DETAILS</span>`;
+      // Cyan = "working as designed" (ACLED free-tier embargo, not a fault).
+      badge = ` <span class="xf-stale-tag xf-info-tag" data-acled-diag="1" tabindex="0" role="button" title="ACLED free-tier API embargoes row-level events for ~12 months. Live monthly counts are on the §01 chart and chokepoint cards. Click for details.">ACLED ROW-LEVEL · 12-MO EMBARGO · LIVE COUNTS ABOVE</span>`;
     } else if (ageDays > 30) {
+      // Amber = unexpected staleness (something IS wrong).
       badge = ` <span class="xf-stale-tag" data-acled-diag="1" tabindex="0" role="button" title="Click for ACLED diagnostic info">⚠ ${ageDays}d OLD · DETAILS</span>`;
     }
-    subtitleEl.innerHTML = `ACLED categories · last 90 days through <b>${newestLabel}</b>${badge} · click a wedge to cross-filter.`;
+    subtitleEl.innerHTML =
+      `Event-type breakdown from ACLED row-level data, last 90 days through <b>${newestLabel}</b>. ` +
+      `Categories shown here have a ~12-month publication delay; <b>live monthly counts</b> for the current war period are on the §01 chart and the chokepoint cards (HDX mirror, no embargo).${badge} Click a wedge to cross-filter.`;
   }
 
   const counts = new Map();

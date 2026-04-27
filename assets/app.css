@@ -1744,6 +1744,20 @@ button { font-family: inherit; cursor: pointer; }
 }
 .xf-stale-tag:focus { outline: 2px solid #ffaa00; outline-offset: 2px; }
 .xf-stale-tag:active { transform: translateY(1px); }
+/* Variant: working-as-designed (cyan), used when the staleness is the
+   intentional ACLED 12-month embargo rather than a fault. Applied via
+   chart code by re-tagging the element. */
+.xf-stale-tag.xf-info-tag {
+  background: rgba(0,212,255,0.10);
+  border-color: rgba(0,212,255,0.45);
+  color: var(--cyan);
+}
+.xf-stale-tag.xf-info-tag:hover {
+  background: rgba(0,212,255,0.22);
+  border-color: var(--cyan);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(0,212,255,0.40);
+}
 .xf-diag-panel {
   margin-top: 12px;
   padding: 14px 16px;
