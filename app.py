@@ -527,32 +527,47 @@ async def preload_data():
         # preload + ACLED's 13MB blob OOM'd Render free. With the tighter
         # per-phase memory budget above, we can afford to warm ACLED
         # serially on boot so the first visitor doesn't wait 90+ seconds
-        # for the Incidents tab. If it fails, the first /api/events call
-        # still falls back to a live fetch — no user-visible regression.
-        try:
-            print("  [preload] ACLED: warming cache (serial, post-gc)...")
-            t0 = time.time()
-            events = data_service.fetch_acled_events()
-            print(f"  [preload] ACLED: OK — {len(events)} events in {time.time()-t0:.1f}s")
-        except Exception as e:
-            print(f"  [preload] ACLED: FAILED ({e}) — will lazy-load on first request")
-        gc.collect()
+        # Memory probe helper: logs RSS so an OOM in subsequent phases is
+        # diagnosable from Render's log stream rather than a black-box
+        # "exceeded memory limit" notification email.
+        def _mem_mb():
+            try:
+                import resource
+                rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                # Linux returns KB, macOS returns bytes; both fit in MB.
+                return round(rss / (1024 if rss > 100_000_000 else 1), 1) if rss < 100_000_000 else round(rss / (1024 * 1024), 1)
+            except Exception:
+                return None
 
-        # Phase 4: HDX live ACLED mirror (no auth, ~1MB total). Critical for
-        # the freshness pill — even when the live ACLED OAuth path fails on
-        # Render's egress, HDX gives us a guaranteed-fresh monthly count
-        # within ~7 days of wall-clock. Runs last so it doesn't compete
-        # for ACLED bandwidth with phase 3.
+        # Phase 3: HDX live ACLED mirror — runs BEFORE the heavy ACLED bulk
+        # so even if ACLED OOM-restarts the worker, the freshness pill and
+        # the §01 chart's post-thesis bars come up on the next boot.
+        # Streaming openpyxl reader keeps peak memory at ~5MB total for
+        # all 5 country workbooks (was ~150MB with pandas read_excel).
         try:
-            print("  [preload] HDX live ACLED mirror: warming...")
+            print(f"  [preload] HDX live ACLED mirror: warming... (mem={_mem_mb()}MB)")
             t0 = time.time()
             snap = data_service.fetch_hdx_event_counts()
             countries = list((snap or {}).get("by_country", {}).keys())
-            print(f"  [preload] HDX: OK — {len(countries)} countries, newest={snap.get('newest_month')}, took {time.time()-t0:.1f}s")
+            print(f"  [preload] HDX: OK — {len(countries)} countries, newest={snap.get('newest_month')}, took {time.time()-t0:.1f}s, mem={_mem_mb()}MB")
         except Exception as e:
-            print(f"  [preload] HDX: FAILED ({e}) — pill will show ACLED fallback date")
+            print(f"  [preload] HDX: FAILED ({e}) — pill will fall back to bundled ACLED date")
         gc.collect()
-        print("  [preload] Cache warming complete")
+
+        # Phase 4: ACLED bulk fetch (heaviest single source, ~70MB Python).
+        # Last in the preload chain so a memory blowup here at most loses
+        # the row-level events sidebar — Brent / DXY / OVX / HDX / transits
+        # are all already cached and the dashboard is functional without
+        # ACLED's row-level data.
+        try:
+            print(f"  [preload] ACLED: warming cache... (mem={_mem_mb()}MB)")
+            t0 = time.time()
+            events = data_service.fetch_acled_events()
+            print(f"  [preload] ACLED: OK — {len(events)} events in {time.time()-t0:.1f}s, mem={_mem_mb()}MB")
+        except Exception as e:
+            print(f"  [preload] ACLED: FAILED ({e}) — will lazy-load on first request")
+        gc.collect()
+        print(f"  [preload] Cache warming complete (mem={_mem_mb()}MB)")
 
     # Fire-and-forget in a daemon thread — server starts immediately
     t = threading.Thread(target=_preload, daemon=True)

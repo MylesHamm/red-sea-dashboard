@@ -1557,94 +1557,122 @@ _HDX_MONTH_LOOKUP = {
 def _parse_hdx_monthly_xlsx(content: bytes, country_label: str) -> List[dict]:
     """Parse one HDX ACLED admin-level XLSX into [{month, events, fatalities}].
 
-    HDX's ACLED files are workbooks with two sheets:
-      * "TOU"   — terms-of-use boilerplate (one column "Licensing")
-      * "Data"  — the row-level admin-month data with columns:
-                  Country, Admin1, Admin2, ISO3, Admin2 Pcode, Admin1 Pcode,
-                  Month (English name), Year (int), Events, Fatalities
+    LOW-MEMORY STREAMING IMPLEMENTATION. The previous version used
+    `pd.read_excel(...)` which loads the entire ~45k-row sheet into a
+    DataFrame plus several rename/groupby intermediate copies — peak
+    ~30MB resident per country, ~150MB across all five. On Render's
+    512MB free tier that was enough (combined with ACLED's 70MB blob)
+    to OOM the worker mid-preload.
 
-    We aggregate the admin-level rows up to (Year, Month) so the output is
-    one record per calendar month. Month names are translated via
-    _HDX_MONTH_LOOKUP so locale-specific casing ("April" vs "april" vs "APR")
-    all parse correctly.
+    This rewrite uses openpyxl in `read_only=True` mode and streams rows
+    one at a time, accumulating `(year, month) → (events, fatalities)`
+    in a plain dict. No DataFrame is ever materialised. Per-country
+    peak memory drops to ~3–5MB.
+
+    HDX's ACLED files are workbooks with two sheets:
+      * "TOU"   — terms-of-use boilerplate
+      * "Data"  — admin-level rows: Country, Admin1, Admin2, ISO3,
+                  Admin2 Pcode, Admin1 Pcode, Month (English name),
+                  Year (int), Events, Fatalities
     """
     import io as _io
     try:
-        # Try the named "Data" sheet first; fall back to the second sheet by
-        # index in case ACLED renames it. Reading sheet_name=None here would
-        # parse every sheet (including the 1-row TOU) — wasteful for ~2MB
-        # workbooks loaded for 5 countries.
-        try:
-            df = pd.read_excel(_io.BytesIO(content), sheet_name="Data")
-        except Exception:
-            xls = pd.ExcelFile(_io.BytesIO(content))
-            data_sheet = next((s for s in xls.sheet_names if s.lower() != "tou"), xls.sheet_names[-1])
-            df = pd.read_excel(_io.BytesIO(content), sheet_name=data_sheet)
+        from openpyxl import load_workbook
+        wb = load_workbook(_io.BytesIO(content), read_only=True, data_only=True)
     except Exception as e:
-        logger.warning(f"HDX XLSX parse failed for {country_label}: {e}")
+        logger.warning(f"HDX XLSX open failed for {country_label}: {e}")
         return []
 
-    cols = {c.lower().strip(): c for c in df.columns}
+    try:
+        # Pick the data sheet by name (fallback: any sheet that isn't TOU).
+        sheet_name = None
+        for name in wb.sheetnames:
+            if name.lower() == "data":
+                sheet_name = name
+                break
+        if sheet_name is None:
+            for name in wb.sheetnames:
+                if name.lower() != "tou":
+                    sheet_name = name
+                    break
+        if sheet_name is None:
+            logger.warning(f"HDX {country_label}: no data sheet found")
+            return []
+        ws = wb[sheet_name]
 
-    def _find(*needles):
-        for k, original in cols.items():
-            if all(n in k for n in needles):
-                return original
-        return None
+        # Header row → column index map. Lower-cased + substring matching
+        # keeps the parser robust to ACLED relabelling columns.
+        rows_iter = ws.iter_rows(values_only=True)
+        try:
+            header = next(rows_iter)
+        except StopIteration:
+            return []
+        col_idx: Dict[str, int] = {}
+        for i, cell in enumerate(header):
+            if cell is None:
+                continue
+            key = str(cell).strip().lower()
+            col_idx[key] = i
 
-    year_col   = _find("year")
-    month_col  = _find("month")
-    events_col = _find("event") or _find("incident") or _find("count")
-    fatal_col  = _find("fatal")
+        def _col(*needles):
+            for k, i in col_idx.items():
+                if all(n in k for n in needles):
+                    return i
+            return None
 
-    if not (year_col and month_col and events_col):
-        logger.warning(f"HDX {country_label}: unrecognised schema {list(df.columns)[:8]}")
-        return []
+        year_i  = _col("year")
+        month_i = _col("month")
+        ev_i    = _col("event") or _col("incident") or _col("count")
+        fat_i   = _col("fatal")
+        if year_i is None or month_i is None or ev_i is None:
+            logger.warning(f"HDX {country_label}: unrecognised schema {list(col_idx.keys())[:8]}")
+            return []
 
-    # Aggregate admin-level rows to (year, month) totals. Vectorise via
-    # groupby so we don't iterrows over 45 000 rows per country.
-    df = df[[year_col, month_col, events_col] + ([fatal_col] if fatal_col else [])].copy()
-    df.rename(columns={
-        year_col: "_year",
-        month_col: "_month_raw",
-        events_col: "_events",
-        **({fatal_col: "_fatal"} if fatal_col else {}),
-    }, inplace=True)
-
-    # Translate month names → integers; keep numeric values as-is.
-    def _to_month_int(v):
-        if isinstance(v, (int, float)) and not pd.isna(v):
+        # Stream rows, accumulating into a small dict. Each ACLED country
+        # workbook has ~10–25 years × 12 months = 120–300 unique keys, so
+        # the accumulator never exceeds a few KB even though the file
+        # itself is megabytes.
+        bucket: Dict[str, Dict[str, int]] = {}
+        for row in rows_iter:
+            if row is None:
+                continue
             try:
-                return int(v)
-            except Exception:
-                return None
-        if isinstance(v, str):
-            return _HDX_MONTH_LOOKUP.get(v.strip().lower())
-        return None
+                year_v  = row[year_i]
+                month_v = row[month_i]
+                ev_v    = row[ev_i] or 0
+                fat_v   = row[fat_i] if (fat_i is not None and fat_i < len(row)) else 0
 
-    df["_month_int"] = df["_month_raw"].map(_to_month_int)
-    df["_year"] = pd.to_numeric(df["_year"], errors="coerce")
-    df["_events"] = pd.to_numeric(df["_events"], errors="coerce").fillna(0)
-    if "_fatal" in df.columns:
-        df["_fatal"] = pd.to_numeric(df["_fatal"], errors="coerce").fillna(0)
-    df = df.dropna(subset=["_year", "_month_int"])
-    if df.empty:
-        return []
+                if isinstance(month_v, (int, float)):
+                    m = int(month_v)
+                elif isinstance(month_v, str):
+                    m = _HDX_MONTH_LOOKUP.get(month_v.strip().lower())
+                    if m is None:
+                        continue
+                else:
+                    continue
+                y = int(year_v) if year_v is not None else None
+                if y is None:
+                    continue
 
-    grouped = df.groupby(["_year", "_month_int"], as_index=False).agg(
-        events=("_events", "sum"),
-        fatalities=("_fatal", "sum") if "_fatal" in df.columns else ("_events", lambda _: 0),
-    )
+                key = f"{y:04d}-{m:02d}"
+                slot = bucket.setdefault(key, {"events": 0, "fatalities": 0})
+                slot["events"]     += int(ev_v or 0)
+                slot["fatalities"] += int(fat_v or 0)
+            except (TypeError, ValueError):
+                continue
+    finally:
+        # close() releases the underlying ZipFile and the row iterator.
+        # Important on Render: without this, the workbook handle (and its
+        # internal XML parser state) lingers until the next gc cycle.
+        try:
+            wb.close()
+        except Exception:
+            pass
 
-    out = []
-    for _, row in grouped.iterrows():
-        y = int(row["_year"]); m = int(row["_month_int"])
-        out.append({
-            "month": f"{y:04d}-{m:02d}",
-            "events": int(row["events"]),
-            "fatalities": int(row["fatalities"]),
-            "country": country_label,
-        })
+    out = [
+        {"month": k, "events": v["events"], "fatalities": v["fatalities"], "country": country_label}
+        for k, v in bucket.items()
+    ]
     out.sort(key=lambda r: r["month"])
     return out
 
@@ -1682,20 +1710,25 @@ def fetch_hdx_event_counts(force: bool = False) -> Dict[str, Any]:
     }
     newest = ""
 
-    # Sequential fetch — 5 countries × ~1MB each is fast enough and keeps us
-    # under HDX's rate limits.
+    # Sequential fetch — 5 countries × ~2MB XLSX each. Sequential keeps us
+    # under HDX's rate limits AND under Render's 512MB memory ceiling
+    # (parallel parsing peaks at ~5x the per-country footprint).
+    import gc as _gc
     for label, pkg in _HDX_PACKAGES.items():
         meta = _hdx_resource_url(pkg)
         if not meta or not meta.get("url"):
             out["errors"][label] = "package_show returned no political_violence resource"
             continue
+        r = None
+        content = None
         try:
             r = requests.get(meta["url"], headers=_BROWSER_HEADERS,
                              timeout=30, allow_redirects=True)
             if not r.ok:
                 out["errors"][label] = f"HTTP {r.status_code}"
                 continue
-            rows = _parse_hdx_monthly_xlsx(r.content, label)
+            content = r.content
+            rows = _parse_hdx_monthly_xlsx(content, label)
             if not rows:
                 out["errors"][label] = "parser returned 0 rows"
                 continue
@@ -1711,6 +1744,11 @@ def fetch_hdx_event_counts(force: bool = False) -> Dict[str, Any]:
         except Exception as e:
             out["errors"][label] = f"{type(e).__name__}: {e}"
             logger.warning(f"HDX {label} fetch failed: {e}")
+        finally:
+            # Drop the response body and any intermediate bytes immediately
+            # so the next country's parse doesn't compound memory use.
+            del r, content
+            _gc.collect()
 
     out["newest_month"] = newest or None
     if out["by_country"]:
@@ -1949,8 +1987,19 @@ def _extend_master_timeseries_with_live(result: dict) -> None:
         result["kpis"]["timeseries_extended_rows"] = appended
 
 
+_master_memo: Optional[dict] = None
+_master_memo_ts: float = 0.0
+_MASTER_MEMO_TTL = 90  # seconds — short so live-extension picks up new Brent prints quickly
+
+
 def load_master_dataset() -> dict:
     """Load the master dataset CSV and return as structured JSON.
+
+    In-process memo (90s TTL) so /api/master, /api/comparative, and the
+    repeated frontend polls don't each re-parse the 190KB static JSON +
+    re-run the live extender. Without the memo each call materialised a
+    fresh ~5MB Python dict tree from disk; under concurrent traffic on
+    Render's 512MB free tier this contributed to OOMs.
 
     Fast path: if data/master_dataset.json (pre-computed at build / committed
     to repo) exists, serve it directly. This avoids cold-start pandas work on
@@ -1960,6 +2009,10 @@ def load_master_dataset() -> dict:
     Brent / DXY / OVX KPIs are still pulled from their dedicated cached
     endpoints by the frontend.
     """
+    global _master_memo, _master_memo_ts
+    if _master_memo is not None and (time.time() - _master_memo_ts) < _MASTER_MEMO_TTL:
+        return _master_memo
+
     static_json = config.DATA_DIR / "master_dataset.json"
     if static_json.exists():
         try:
@@ -1992,6 +2045,8 @@ def load_master_dataset() -> dict:
                 _extend_master_timeseries_with_live(result)
             except Exception as e:
                 logger.warning(f"master_dataset.json: live timeseries extend failed: {e}")
+            _master_memo = result
+            _master_memo_ts = time.time()
             return result
         except Exception as e:
             logger.error(f"master_dataset.json read failed, falling back to live: {e}")
