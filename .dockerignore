@@ -1,0 +1,31 @@
+# Don't ship local secrets, caches, IDE state, or git history into the
+# Hugging Face Spaces image — they bloat the build and (in the case of
+# .env) leak credentials.
+
+.env
+.env.*
+!.env.example
+.cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+.github/
+
+# Claude Code workspace files
+.claude/
+
+# Local build artifacts
+*.log
+*.tmp
