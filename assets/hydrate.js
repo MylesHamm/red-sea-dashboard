@@ -110,9 +110,11 @@
     });
 
     // §02.2 vt-foot freshness — make iframe panels honest about the AIS
-    // source (3rd-party MarineTraffic embed; not our backend).
+    // source (3rd-party MarineTraffic free embed; shows all vessel
+    // classes because MarineTraffic gates server-side filtering behind
+    // a paid plan).
     document.querySelectorAll('[data-vt-asof]').forEach(el => {
-      el.textContent = 'Live AIS · MarineTraffic embed';
+      el.textContent = 'live AIS · all classes (free MT embed)';
     });
   }
 
