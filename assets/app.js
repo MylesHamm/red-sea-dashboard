@@ -585,10 +585,37 @@ document.addEventListener('DOMContentLoaded', () => {
   //   • "0 events for every query" → ACLED accepted the request but the
   //     date range / actor filter is too narrow (unlikely with our
   //     queries, but possible if ACLED schema changes).
+  // Click handler for the §03 'WHY?' badge AND the inline panel's close
+  // button. Renders the diag inline below the chart subtitle (instead of
+  // alert(), which Chrome blocks after auto-dismissed prompts) so the
+  // info is persistent and screenshot-friendly.
   document.addEventListener('click', async (ev) => {
+    // Close button on the inline panel
+    const closeBtn = ev.target.closest('.xf-diag-close');
+    if (closeBtn) {
+      const panel = closeBtn.closest('.xf-diag-panel');
+      if (panel) panel.remove();
+      return;
+    }
+
     const tag = ev.target.closest('[data-acled-diag]');
     if (!tag) return;
+    ev.preventDefault();
     if (!window.API) return;
+
+    // Find / create the inline panel right after the subtitle that holds the badge.
+    const subtitleEl = tag.closest('.nb-subtitle, [data-event-mix-subtitle]') || tag.parentElement;
+    const host = subtitleEl && subtitleEl.parentElement;
+    if (!host) return;
+    let panel = host.querySelector('.xf-diag-panel');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.className = 'xf-diag-panel';
+      // Insert right after the subtitle line, before the chart canvas.
+      subtitleEl.insertAdjacentElement('afterend', panel);
+    }
+    panel.innerHTML = '<span class="xf-diag-close" title="Close">✕</span><span class="xf-diag-key">Loading /api/diag…</span>';
+
     try {
       const d = await API.diag();
       const a = (d && d.acled) || {};
@@ -599,37 +626,42 @@ document.addEventListener('DOMContentLoaded', () => {
         if (s < 86400) return `${Math.round(s/3600)}h`;
         return `${Math.round(s/86400)}d`;
       };
-      const lines = [
-        `ACLED FETCH DIAGNOSTIC`,
-        `─────────────────────────`,
-        `credentials_configured: ${a.credentials_configured}`,
-        `last_fetch_source:      ${a.last_fetch_source || '(none)'}`,
-        `last_fetch_utc:         ${a.last_fetch_utc || '(never)'}`,
-        `cache_file_age:         ${fmtAge(a.cache_file_age_s)}`,
-        `query_date_range:       ${a.query_date_range || '(unknown)'}`,
-        `token_present:          ${a.token_present}`,
-        `token_expires_utc:      ${a.token_expires_utc || '(no token)'}`,
-        `token_expires_in:       ${a.token_expires_in_s != null ? fmtAge(a.token_expires_in_s) : '(no token)'}`,
-        `events in memo:         ${a.count || 0}`,
-        `oldest event:           ${a.min || '(empty)'}`,
-        `newest event:           ${a.max || '(empty)'}`,
-        ``,
-        `last_fetch_error:`,
-        `  ${a.last_fetch_error || '(no error captured — last fetch may have succeeded but returned only old events)'}`,
-        ``,
-        `Common causes:`,
-        `  • "401" / "missing access_token" → rotate ACLED creds on Render`,
-        `  • "ReadTimeout" → ACLED slow; retry or check status page`,
-        `  • "credentials_configured: false" → env vars unset on Render`,
-        `  • API succeeds but newest event is months old → ACLED tier may`,
-        `    cap historical query depth, or our query_date_range needs to`,
-        `    be tightened to the last N days. Open an ACLED support ticket.`,
-        ``,
-        `Server time: ${d && d.server_time_utc}`,
-      ];
-      alert(lines.join('\n'));
+      const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+      const k  = (label, val, errClass) =>
+        `<span class="xf-diag-key">${label.padEnd(22, ' ')}</span> <span class="${errClass ? 'xf-diag-err' : ''}">${esc(val)}</span>`;
+      const errStr = a.last_fetch_error || '(no error — last fetch may have succeeded but returned only old events)';
+      const html = [
+        '<span class="xf-diag-close" title="Close">✕</span>',
+        '<span class="xf-diag-key">ACLED FETCH DIAGNOSTIC</span>',
+        '─────────────────────────',
+        k('credentials_configured', a.credentials_configured),
+        k('last_fetch_source', a.last_fetch_source || '(none)'),
+        k('last_fetch_utc', a.last_fetch_utc || '(never)'),
+        k('cache_file_age', fmtAge(a.cache_file_age_s)),
+        k('query_date_range', a.query_date_range || '(unknown)'),
+        k('token_present', a.token_present),
+        k('token_expires_utc', a.token_expires_utc || '(no token)'),
+        k('token_expires_in', a.token_expires_in_s != null ? fmtAge(a.token_expires_in_s) : '(no token)'),
+        k('events in memo', a.count || 0),
+        k('oldest event', a.min || '(empty)'),
+        k('newest event', a.max || '(empty)'),
+        '',
+        '<span class="xf-diag-key">last_fetch_error:</span>',
+        '  <span class="xf-diag-err">' + esc(errStr) + '</span>',
+        '',
+        '<span class="xf-diag-key">Common causes:</span>',
+        '  • "401" / "missing access_token" → rotate ACLED creds on Render',
+        '  • "ReadTimeout" → ACLED slow; retry or check status page',
+        '  • "credentials_configured: false" → env vars unset on Render',
+        '  • API succeeds but newest event is months old → ACLED tier may',
+        '    cap historical query depth. Open an ACLED support ticket or',
+        '    tighten query_date_range to the last 90 days.',
+        '',
+        '<span class="xf-diag-key">Server time:</span> ' + esc(d && d.server_time_utc),
+      ].join('\n');
+      panel.innerHTML = html;
     } catch (e) {
-      alert('Failed to load /api/diag: ' + (e && e.message || e));
+      panel.innerHTML = '<span class="xf-diag-close" title="Close">✕</span><span class="xf-diag-err">Failed to load /api/diag: ' + (e && e.message || e) + '</span>';
     }
   });
 

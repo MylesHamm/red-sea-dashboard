@@ -1723,16 +1723,52 @@ button { font-family: inherit; cursor: pointer; }
 .xf-stale-tag {
   display: inline-block;
   margin: 0 6px;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 3px;
-  background: rgba(255,170,0,0.12);
-  border: 1px solid rgba(255,170,0,0.40);
+  background: rgba(255,170,0,0.15);
+  border: 1px solid rgba(255,170,0,0.50);
   color: #ffaa00;
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 1.2px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
 }
+.xf-stale-tag:hover {
+  background: rgba(255,170,0,0.30);
+  border-color: #ffaa00;
+  color: #fff;
+  box-shadow: 0 0 8px rgba(255,170,0,0.40);
+}
+.xf-stale-tag:focus { outline: 2px solid #ffaa00; outline-offset: 2px; }
+.xf-stale-tag:active { transform: translateY(1px); }
+.xf-diag-panel {
+  margin-top: 12px;
+  padding: 14px 16px;
+  background: rgba(255,170,0,0.04);
+  border: 1px solid rgba(255,170,0,0.30);
+  border-left: 3px solid #ffaa00;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.xf-diag-panel .xf-diag-key { color: #ffaa00; font-weight: 700; }
+.xf-diag-panel .xf-diag-err { color: #ff6b6b; font-weight: 700; }
+.xf-diag-panel .xf-diag-close {
+  float: right;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--text-mute);
+  padding: 0 6px;
+  line-height: 1;
+}
+.xf-diag-panel .xf-diag-close:hover { color: #fff; }
 .analysis-window-badge {
   display: inline-flex;
   align-items: center;
