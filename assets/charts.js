@@ -381,7 +381,9 @@ function renderEventTypesChart(state) {
 
   // Update the §03 subtitle so the user SEES the data window. Without
   // this the donut looks "live" while actually showing a frozen
-  // March-2025 cross-section.
+  // March-2025 cross-section. The badge is now clickable and shows
+  // the actual ACLED fetch error from /api/diag so the user can
+  // self-diagnose (expired creds, IP block, timeout, etc.).
   const subtitleEl = document.querySelector('[data-event-mix-subtitle]');
   if (subtitleEl && windowNewest) {
     const m = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
@@ -390,9 +392,11 @@ function renderEventTypesChart(state) {
     const todayMs = Date.now();
     const ageDays = Math.max(0, Math.floor((todayMs - new Date(windowNewest + 'T00:00:00Z').getTime()) / 86400000));
     const stale = ageDays > 30;
-    subtitleEl.innerHTML = `ACLED categories · last 90 days through <b>${newestLabel}</b>` +
-      (stale ? ` <span class="xf-stale-tag">⚠ ${ageDays}d OLD · live ACLED API failing</span>` : '') +
-      ` · click a wedge to cross-filter.`;
+    let badge = '';
+    if (stale) {
+      badge = ` <span class="xf-stale-tag" data-acled-diag="1" tabindex="0" role="button" title="Click for ACLED diagnostic info">⚠ ${ageDays}d OLD · live ACLED API failing · WHY?</span>`;
+    }
+    subtitleEl.innerHTML = `ACLED categories · last 90 days through <b>${newestLabel}</b>${badge} · click a wedge to cross-filter.`;
   }
 
   const counts = new Map();

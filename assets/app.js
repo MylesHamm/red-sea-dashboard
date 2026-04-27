@@ -572,6 +572,67 @@ document.addEventListener('DOMContentLoaded', () => {
   // and rendered above by refreshSidebarIncidents + renderVesselList — no
   // Leaflet/AIS-WebSocket plumbing required here.
 
+  // ── ACLED diagnostic surfacing (click the "WHY?" badge) ──────────────────
+  // Hits /api/diag and shows the actual exception string from the most
+  // recent ACLED fetch attempt. Common causes:
+  //   • "401 Unauthorized" or "missing access_token" → ACLED creds invalid
+  //     or expired. Fix: rotate ACLED_USERNAME / ACLED_PASSWORD env vars
+  //     on Render.
+  //   • "ReadTimeout / ConnectionError" → ACLED API slow or unreachable
+  //     from Render's egress. Fix: try /api/refresh again later; if
+  //     persistent, check ACLED status page or contact ACLED support.
+  //   • "credentials_configured: false" → env vars not set on Render.
+  //   • "0 events for every query" → ACLED accepted the request but the
+  //     date range / actor filter is too narrow (unlikely with our
+  //     queries, but possible if ACLED schema changes).
+  document.addEventListener('click', async (ev) => {
+    const tag = ev.target.closest('[data-acled-diag]');
+    if (!tag) return;
+    if (!window.API) return;
+    try {
+      const d = await API.diag();
+      const a = (d && d.acled) || {};
+      const fmtAge = (s) => {
+        if (s == null) return '(no cache file)';
+        if (s < 60) return `${s}s`;
+        if (s < 3600) return `${Math.round(s/60)}m`;
+        if (s < 86400) return `${Math.round(s/3600)}h`;
+        return `${Math.round(s/86400)}d`;
+      };
+      const lines = [
+        `ACLED FETCH DIAGNOSTIC`,
+        `─────────────────────────`,
+        `credentials_configured: ${a.credentials_configured}`,
+        `last_fetch_source:      ${a.last_fetch_source || '(none)'}`,
+        `last_fetch_utc:         ${a.last_fetch_utc || '(never)'}`,
+        `cache_file_age:         ${fmtAge(a.cache_file_age_s)}`,
+        `query_date_range:       ${a.query_date_range || '(unknown)'}`,
+        `token_present:          ${a.token_present}`,
+        `token_expires_utc:      ${a.token_expires_utc || '(no token)'}`,
+        `token_expires_in:       ${a.token_expires_in_s != null ? fmtAge(a.token_expires_in_s) : '(no token)'}`,
+        `events in memo:         ${a.count || 0}`,
+        `oldest event:           ${a.min || '(empty)'}`,
+        `newest event:           ${a.max || '(empty)'}`,
+        ``,
+        `last_fetch_error:`,
+        `  ${a.last_fetch_error || '(no error captured — last fetch may have succeeded but returned only old events)'}`,
+        ``,
+        `Common causes:`,
+        `  • "401" / "missing access_token" → rotate ACLED creds on Render`,
+        `  • "ReadTimeout" → ACLED slow; retry or check status page`,
+        `  • "credentials_configured: false" → env vars unset on Render`,
+        `  • API succeeds but newest event is months old → ACLED tier may`,
+        `    cap historical query depth, or our query_date_range needs to`,
+        `    be tightened to the last N days. Open an ACLED support ticket.`,
+        ``,
+        `Server time: ${d && d.server_time_utc}`,
+      ];
+      alert(lines.join('\n'));
+    } catch (e) {
+      alert('Failed to load /api/diag: ' + (e && e.message || e));
+    }
+  });
+
   // ── Force-refresh button (any [data-action="refresh-acled"]) ─────────────
   // Fires POST /api/refresh on the backend, which clears API-driven caches
   // and re-fetches ACLED + Iran + Brent + EIA + FRED + GDELT + HDX in

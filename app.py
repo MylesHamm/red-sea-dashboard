@@ -82,6 +82,23 @@ async def diagnostic():
             return None
         return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
 
+    # Token state: useful when last_fetch_error mentions auth.
+    token_present = bool(getattr(data_service, "_acled_token", None))
+    token_exp = getattr(data_service, "_acled_token_expires", 0)
+    token_exp_iso = _iso(token_exp) if token_exp else None
+    token_exp_in_s = max(0, int(token_exp - data_service.time.time())) if token_exp else None
+
+    # On-disk cache file freshness — distinguishes "memo serving stale data"
+    # from "no cache file at all".
+    import os as _os
+    cache_path = data_service.config.CACHE_DIR / "acled_events.json"
+    cache_file_age_s = None
+    if cache_path.exists():
+        try:
+            cache_file_age_s = int(data_service.time.time() - _os.path.getmtime(cache_path))
+        except Exception:
+            pass
+
     return {
         "server_time_utc": datetime.now(timezone.utc).isoformat(),
         "acled": {
@@ -89,6 +106,11 @@ async def diagnostic():
             "last_fetch_source": acled_meta["source"],
             "last_fetch_utc": _iso(acled_meta["ts"]),
             "last_fetch_error": acled_meta["error"],
+            "token_present": token_present,
+            "token_expires_utc": token_exp_iso,
+            "token_expires_in_s": token_exp_in_s,
+            "cache_file_age_s": cache_file_age_s,
+            "query_date_range": data_service._ACLED_DATE_RANGE,
             **_date_range(acled_events, "event_date"),
         },
         "iran_events": {

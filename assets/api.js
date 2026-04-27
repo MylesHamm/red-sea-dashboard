@@ -41,6 +41,11 @@ window.API = (function () {
     BASE,
     invalidate,
     health:           ()  => _fetch('/api/health'),
+    // Diagnostic snapshot — exposes ACLED + Iran-events `last_fetch_error`
+    // (the actual exception string from the backend) plus credential
+    // configuration flags. Used by the §03 warning badge so a stale
+    // ACLED cache surfaces its CAUSE rather than just "live API failing".
+    diag:             ()  => _fetch('/api/diag',                 { ttlMs: 30_000 }),
     // Per-source freshness: newest event date + origin (api/cache/fallback) for
     // every analytical source. Drives the top-right status pill and the
     // "data through <date>" captions on each chokepoint card.
