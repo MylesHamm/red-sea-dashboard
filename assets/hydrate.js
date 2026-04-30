@@ -630,11 +630,37 @@
   // Small Chart.js line chart on the US-Iran tab. Renders only if the
   // canvas + data are both present; safe no-op otherwise.
   let __gdeltChartInstance = null;
+  function _gdeltShowEmpty(canvas, msg) {
+    // Replace the canvas's parent inner overlay with an honest empty
+    // state rather than leaving a blank rectangle. The user explicitly
+    // reported the chart "not loading"; silent no-op was the wrong UX.
+    const parent = canvas.parentElement;
+    if (!parent) return;
+    let overlay = parent.querySelector('.gdelt-empty');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'gdelt-empty';
+      overlay.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;font-family:JetBrains Mono,monospace;font-size:11px;letter-spacing:1px;color:#8794a7;line-height:1.6;';
+      if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+      parent.appendChild(overlay);
+    }
+    overlay.innerHTML = msg;
+  }
   function renderGdeltChart(gdelt) {
     const canvas = document.getElementById('gdeltToneChart');
-    if (!canvas || !window.Chart || !gdelt) return;
+    if (!canvas || !window.Chart) return;
+    if (!gdelt) {
+      _gdeltShowEmpty(canvas, 'GDELT request failed.<br>Check <a href="/api/gdelt-tone" target="_blank" style="color:#3d99d4">/api/gdelt-tone</a> for details.');
+      return;
+    }
     const tone = Array.isArray(gdelt.tone) ? gdelt.tone : [];
-    if (!tone.length) return;
+    if (!tone.length) {
+      _gdeltShowEmpty(canvas, 'GDELT returned no tone series for the Iran-oil query window.<br>This usually means GDELT was slow on the last fetch — it self-recovers on the next page reload.');
+      return;
+    }
+    // Clear any previous empty-state overlay before drawing.
+    const overlay = canvas.parentElement && canvas.parentElement.querySelector('.gdelt-empty');
+    if (overlay) overlay.remove();
 
     // Sort ascending by date (GDELT returns newest first)
     const sorted = tone.slice().sort((a, b) => a.date.localeCompare(b.date));
@@ -1169,10 +1195,12 @@
       try { hydrateMarketContext(macro, inv, brent); } catch (e) { console.warn('market-context render failed', e); }
     });
 
-    // GDELT media tone — renders on US-Iran tab, non-blocking
+    // GDELT media tone — renders on US-Iran tab, non-blocking. On fetch
+    // failure we still call renderGdeltChart(null) so the empty-state
+    // overlay appears instead of leaving a blank rectangle.
     API.gdeltTone()
-      .then(g => { try { renderGdeltChart(g); } catch (e) { console.warn('gdelt render failed', e); } })
-      .catch(() => {});
+      .then(g => { try { renderGdeltChart(g); } catch (e) { console.warn('gdelt render failed', e); renderGdeltChart(null); } })
+      .catch((e) => { console.warn('gdelt fetch failed', e); try { renderGdeltChart(null); } catch (_) {} });
 
     if (errors.length) {
       console.warn('Hydrator: partial failure —', errors);
