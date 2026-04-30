@@ -110,6 +110,73 @@ CONFLICT_THEATER_LOCATIONS = {
 # Pre-sorted keys longest-first for greedy matching
 _LOCATION_KEYS_SORTED = sorted(CONFLICT_THEATER_LOCATIONS.keys(), key=len, reverse=True)
 
+# ─── Singleflight (concurrent-call coalescing) ───────────────────────────────
+#
+# When N concurrent requests trigger the same expensive fetch (ACLED bulk,
+# Iran events, GDELT, HDX), without a singleflight all N race past the
+# memo/cache check and start their own fetches. That produces:
+#   - GDELT 429 Too Many Requests
+#   - ACLED ReadTimeouts (their API throttles parallel queries)
+#   - the "served from JSON fallback while live fetch was still in
+#     progress" race in /api/iran-events
+#   - 5x peak memory (each parallel fetch holds its own ~70MB blob)
+#
+# Singleflight ensures only ONE worker actually runs the fetch for a given
+# key at a time; concurrent callers attach to the same in-flight result and
+# get the same value back when it lands. After completion the entry is
+# removed so the next call (post-cache-expiry) triggers a fresh fetch.
+#
+# Pattern is "leader/waiter": the first thread to register a key becomes the
+# leader and runs fn(); subsequent threads wait on the leader's Event and
+# receive the leader's result (or its exception).
+
+class _Singleflight:
+    """Coalesce concurrent calls keyed by a string. Thread-safe."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._calls: Dict[str, Dict[str, Any]] = {}
+
+    def run(self, key: str, fn, timeout: float = 300.0):
+        """Run fn() if no other thread is running it for `key`.
+
+        Concurrent callers wait for the leader's result (up to `timeout`
+        seconds) and receive the same value. If the leader raises, all
+        waiters re-raise the same exception.
+        """
+        with self._lock:
+            cell = self._calls.get(key)
+            is_leader = cell is None
+            if is_leader:
+                cell = {"event": threading.Event(), "value": None, "error": None}
+                self._calls[key] = cell
+
+        if is_leader:
+            try:
+                cell["value"] = fn()
+            except BaseException as e:
+                cell["error"] = e
+            finally:
+                # Pop BEFORE waking waiters so any waiter that races to
+                # acquire the lock for a *new* call gets a fresh cell.
+                with self._lock:
+                    self._calls.pop(key, None)
+                cell["event"].set()
+            if cell["error"] is not None:
+                raise cell["error"]
+            return cell["value"]
+        else:
+            ok = cell["event"].wait(timeout=timeout)
+            if not ok:
+                raise TimeoutError(f"singleflight wait timed out for key={key!r} after {timeout}s")
+            if cell["error"] is not None:
+                raise cell["error"]
+            return cell["value"]
+
+
+_sf = _Singleflight()
+
+
 # ─── Cache Helpers ───────────────────────────────────────────────────────────
 
 def _cache_path(key: str) -> Path:
@@ -326,11 +393,27 @@ def fetch_acled_events() -> List[dict]:
     materializes to 40-70MB of Python dicts per parse. Without the in-process
     cache, every /api/events request re-parses that blob (and on Render's
     512MB free tier two concurrent parses are enough to OOM the worker).
+
+    Concurrency: wrapped in singleflight so N concurrent callers share a
+    single fetch instead of all racing past the memo check and triggering
+    parallel ACLED queries (which produced the cascade of ReadTimeouts in
+    the production logs).
     """
+    # Fast path BEFORE singleflight so cache hits don't even acquire the
+    # singleflight lock. The actual fetch is what we want to coalesce.
+    if _acled_events_memo is not None and time.time() - _acled_events_memo_ts < 600:
+        return _acled_events_memo
+    return _sf.run("acled_events", _do_fetch_acled_events)
+
+
+def _do_fetch_acled_events() -> List[dict]:
+    """Inner implementation; only one thread runs this at a time per
+    singleflight semantics. The leader populates memo+cache; waiters
+    receive the leader's result without re-running the fetch."""
     global _acled_events_memo, _acled_events_memo_ts
     global _acled_fetch_error, _acled_fetch_source, _acled_fetch_ts
-    # Fast path: serve from in-process memo (re-check after acquiring the lock
-    # in case another thread populated it while we were waiting).
+    # Re-check the memo after the singleflight handoff in case the previous
+    # leader populated it while we were waiting.
     if _acled_events_memo is not None and time.time() - _acled_events_memo_ts < 600:
         return _acled_events_memo
 
@@ -1438,8 +1521,21 @@ def fetch_gdelt_tone(timespan: str = "90d") -> dict:
 
     Also fetches TimelineVolRaw (raw article volume) so the frontend can
     overlay attention intensity alongside tone.
+
+    Singleflight-wrapped: GDELT throttles aggressively (HTTP 429) when
+    multiple parallel callers hit it. Coalescing concurrent requests for
+    the same timespan lets one fetch service all waiters.
     """
     cached = _read_cache(f"gdelt_tone_{timespan}", 3600)  # 1-hour TTL — news-cycle data
+    if cached:
+        return cached
+    return _sf.run(f"gdelt_tone_{timespan}", lambda: _do_fetch_gdelt_tone(timespan))
+
+
+def _do_fetch_gdelt_tone(timespan: str) -> dict:
+    # Re-check cache after singleflight handoff (the leader may have
+    # populated it while we were waiting).
+    cached = _read_cache(f"gdelt_tone_{timespan}", 3600)
     if cached:
         return cached
 
@@ -1703,6 +1799,19 @@ def fetch_hdx_event_counts(force: bool = False) -> Dict[str, Any]:
         }
     """
     cache_key = "hdx_event_counts"
+    if not force:
+        cached = _read_cache(cache_key, 6 * 3600)
+        if cached:
+            return cached
+    # Singleflight the actual fetch (5 sequential XLSX downloads ~ 30-60s).
+    # Concurrent callers share one fetch instead of all hammering HDX.
+    sf_key = f"hdx_event_counts:{'force' if force else 'normal'}"
+    return _sf.run(sf_key, lambda: _do_fetch_hdx_event_counts(force, cache_key))
+
+
+def _do_fetch_hdx_event_counts(force: bool, cache_key: str) -> Dict[str, Any]:
+    # Re-check cache after singleflight handoff (a leader that finished
+    # while we waited may have populated the cache file).
     if not force:
         cached = _read_cache(cache_key, 6 * 3600)
         if cached:
@@ -2258,11 +2367,27 @@ def load_master_dataset() -> dict:
 # ─── Iran Events (Current Events Tab) ────────────────────────────────────
 
 def fetch_iran_events() -> List[dict]:
-    """Fetch Iran-related events from ACLED API with cache."""
-    global _iran_fetch_error
+    """Fetch Iran-related events from ACLED API with cache.
+
+    Singleflight-wrapped: concurrent callers share one in-flight fetch
+    instead of all racing past the cache check and making parallel ACLED
+    queries. Without this, /api/iran-events under load was simultaneously
+    fetching live (1173 events, slow) AND serving the 740-event JSON
+    fallback from another caller — which led to inconsistent UI state.
+    """
     cached = _read_cache("iran_events", 3600)  # 1-hour cache
     if cached:
         logger.info("Iran events: serving from cache")
+        return cached
+    return _sf.run("iran_events", _do_fetch_iran_events)
+
+
+def _do_fetch_iran_events() -> List[dict]:
+    global _iran_fetch_error
+    # Re-check the cache after the singleflight handoff so a leader that
+    # finished while we were waiting doesn't make us re-fetch.
+    cached = _read_cache("iran_events", 3600)
+    if cached:
         _iran_fetch_error = None
         return cached
 
