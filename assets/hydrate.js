@@ -629,7 +629,24 @@
   // ── GDELT tone chart (Iran media sentiment) ───────────────────────────────
   // Small Chart.js line chart on the US-Iran tab. Renders only if the
   // canvas + data are both present; safe no-op otherwise.
+  //
+  // Tab-visibility caveat: the canvas lives inside #tab-iran which is
+  // display:none on first paint. Chart.js measures the canvas's parent
+  // at construction time — a hidden parent = 0×0 surface and the chart
+  // stays invisible even after the tab is shown. Fix: cache the last
+  // payload and re-render on the 'tab-changed' event when the user
+  // navigates to the US-Iran tab.
   let __gdeltChartInstance = null;
+  let __gdeltLastPayload = null;
+  window.addEventListener('tab-changed', (ev) => {
+    if (!ev || !ev.detail || ev.detail.name !== 'iran') return;
+    if (!__gdeltLastPayload) return;
+    // Wait one frame so the new tab's display:block is committed and the
+    // canvas has real dimensions before Chart.js measures.
+    requestAnimationFrame(() => {
+      try { renderGdeltChart(__gdeltLastPayload); } catch (e) { console.warn('gdelt re-render failed', e); }
+    });
+  });
   function _gdeltShowEmpty(canvas, msg) {
     // Replace the canvas's parent inner overlay with an honest empty
     // state rather than leaving a blank rectangle. The user explicitly
@@ -653,6 +670,9 @@
       _gdeltShowEmpty(canvas, 'GDELT request failed.<br>Check <a href="/api/gdelt-tone" target="_blank" style="color:#3d99d4">/api/gdelt-tone</a> for details.');
       return;
     }
+    // Cache the payload so the tab-changed listener can re-render once the
+    // canvas's parent becomes visible (display:none → block).
+    __gdeltLastPayload = gdelt;
     const tone = Array.isArray(gdelt.tone) ? gdelt.tone : [];
     if (!tone.length) {
       _gdeltShowEmpty(canvas, 'GDELT returned no tone series for the Iran-oil query window.<br>This usually means GDELT was slow on the last fetch — it self-recovers on the next page reload.');

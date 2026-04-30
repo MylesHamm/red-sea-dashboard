@@ -13,6 +13,12 @@ document.addEventListener('DOMContentLoaded', () => {
       // persist
       try { localStorage.setItem('cp_tab', name); } catch(e){}
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Notify chart hydrators that a tab was activated. Charts whose
+      // canvas was display:none on first paint render to a 0×0 surface
+      // and stay invisible after the tab unhides — they need an explicit
+      // re-render or .resize() once their parent has real dimensions.
+      // (Symptom: §09b GDELT chart blank on the US-Iran tab until reload.)
+      window.dispatchEvent(new CustomEvent('tab-changed', { detail: { name } }));
     });
   });
   // restore tab
