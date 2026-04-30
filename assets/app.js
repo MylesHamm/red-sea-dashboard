@@ -578,6 +578,35 @@ document.addEventListener('DOMContentLoaded', () => {
   // and rendered above by refreshSidebarIncidents + renderVesselList — no
   // Leaflet/AIS-WebSocket plumbing required here.
 
+  // ── GDELT retry button (in the §09b empty-state overlay) ────────────────
+  // The chart sometimes lands on an empty client-side cached response when
+  // the backend's first GDELT call happens during cold start (GDELT slow).
+  // Backend now skips caching empty results, but the FRONTEND cache still
+  // holds the empty response for 30 min. This button bypasses that cache
+  // and re-fetches live so users don't have to wait or hard-refresh.
+  document.addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('[data-gdelt-retry]');
+    if (!btn) return;
+    if (!window.API) return;
+    const original = btn.textContent;
+    btn.textContent = '⟳ FETCHING…';
+    btn.style.pointerEvents = 'none';
+    try {
+      API.invalidate('/api/gdelt-tone');
+      const g = await API.gdeltTone();
+      if (typeof window.__renderGdelt === 'function') {
+        window.__renderGdelt(g);
+      } else {
+        // Fallback: just reload the page
+        location.reload();
+      }
+    } catch (e) {
+      btn.textContent = original;
+      btn.style.pointerEvents = '';
+      console.warn('gdelt retry failed', e);
+    }
+  });
+
   // ── ACLED diagnostic surfacing (click the "WHY?" badge) ──────────────────
   // Hits /api/diag and shows the actual exception string from the most
   // recent ACLED fetch attempt. Common causes:

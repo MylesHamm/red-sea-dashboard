@@ -1479,10 +1479,16 @@ def fetch_gdelt_tone(timespan: str = "90d") -> dict:
         except Exception as e:
             logger.warning(f"GDELT {mode} failed: {e}")
 
+    # Only cache when we actually got data. Caching an empty payload would
+    # block the live retry path for the full TTL window — exactly what
+    # caused the §09b chart to show "no tone series" on the HF Space's
+    # cold-start fetch (GDELT slow on first hit, empty response cached for
+    # an hour, frontend showed empty state until the user noticed).
     if result["tone"] or result["volume"]:
         _write_cache(f"gdelt_tone_{timespan}", result)
         return result
-    # Both branches empty — fall back to stale cache rather than blank chart
+    # Both branches empty — fall back to stale cache rather than blank chart.
+    # Don't write the empty result; next request will retry the live API.
     stale = _read_stale_cache(f"gdelt_tone_{timespan}")
     if stale:
         logger.info(f"GDELT: serving stale cache (tone={len(stale.get('tone') or [])})")

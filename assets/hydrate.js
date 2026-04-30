@@ -647,6 +647,9 @@
       try { renderGdeltChart(__gdeltLastPayload); } catch (e) { console.warn('gdelt re-render failed', e); }
     });
   });
+  // Exposed for the retry button in app.js — same closure, but app.js
+  // can't reach it directly because hydrate.js is its own IIFE scope.
+  window.__renderGdelt = (g) => renderGdeltChart(g);
   function _gdeltShowEmpty(canvas, msg) {
     // Replace the canvas's parent inner overlay with an honest empty
     // state rather than leaving a blank rectangle. The user explicitly
@@ -667,7 +670,7 @@
     const canvas = document.getElementById('gdeltToneChart');
     if (!canvas || !window.Chart) return;
     if (!gdelt) {
-      _gdeltShowEmpty(canvas, 'GDELT request failed.<br>Check <a href="/api/gdelt-tone" target="_blank" style="color:#3d99d4">/api/gdelt-tone</a> for details.');
+      _gdeltShowEmpty(canvas, 'GDELT request failed.<br>Check <a href="/api/gdelt-tone" target="_blank" style="color:#3d99d4">/api/gdelt-tone</a> for details. <br><br><span data-gdelt-retry style="display:inline-block;cursor:pointer;padding:5px 12px;border:1px solid rgba(0,212,255,0.5);background:rgba(0,212,255,0.08);color:#3d99d4;border-radius:3px;font-weight:700;letter-spacing:1.4px">⟳ RETRY</span>');
       return;
     }
     // Cache the payload so the tab-changed listener can re-render once the
@@ -675,7 +678,11 @@
     __gdeltLastPayload = gdelt;
     const tone = Array.isArray(gdelt.tone) ? gdelt.tone : [];
     if (!tone.length) {
-      _gdeltShowEmpty(canvas, 'GDELT returned no tone series for the Iran-oil query window.<br>This usually means GDELT was slow on the last fetch — it self-recovers on the next page reload.');
+      _gdeltShowEmpty(canvas,
+        'No GDELT tone series in this client-side cache window.<br>' +
+        'Most likely the first fetch happened during a backend cold-start and<br>' +
+        'GDELT was slow. Click below to bypass the cache and re-fetch live:' +
+        '<br><br><span data-gdelt-retry style="display:inline-block;cursor:pointer;padding:5px 12px;border:1px solid rgba(0,212,255,0.5);background:rgba(0,212,255,0.08);color:#3d99d4;border-radius:3px;font-weight:700;letter-spacing:1.4px">⟳ RETRY GDELT</span>');
       return;
     }
     // Clear any previous empty-state overlay before drawing.
