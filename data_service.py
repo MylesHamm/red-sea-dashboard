@@ -1526,16 +1526,23 @@ def fetch_gdelt_tone(timespan: str = "90d") -> dict:
     multiple parallel callers hit it. Coalescing concurrent requests for
     the same timespan lets one fetch service all waiters.
     """
-    cached = _read_cache(f"gdelt_tone_{timespan}", 3600)  # 1-hour TTL — news-cycle data
+    # Bumped from 1h → 4h: GDELT's tone API rate-limits per-IP fairly
+    # aggressively, and we were seeing 429s every cache expiry as soon
+    # as multiple visitors triggered fetches. The underlying tone series
+    # only updates a few times a day anyway — 4h is plenty fresh and
+    # cuts our hit rate ~4x.
+    GDELT_TTL_S = 4 * 3600
+    cached = _read_cache(f"gdelt_tone_{timespan}", GDELT_TTL_S)
     if cached:
         return cached
     return _sf.run(f"gdelt_tone_{timespan}", lambda: _do_fetch_gdelt_tone(timespan))
 
 
 def _do_fetch_gdelt_tone(timespan: str) -> dict:
+    GDELT_TTL_S = 4 * 3600
     # Re-check cache after singleflight handoff (the leader may have
     # populated it while we were waiting).
-    cached = _read_cache(f"gdelt_tone_{timespan}", 3600)
+    cached = _read_cache(f"gdelt_tone_{timespan}", GDELT_TTL_S)
     if cached:
         return cached
 
@@ -1543,52 +1550,73 @@ def _do_fetch_gdelt_tone(timespan: str) -> dict:
     base = "https://api.gdeltproject.org/api/v2/doc/doc"
     result = {"tone": [], "volume": []}
 
-    for mode, key in [("TimelineTone", "tone"), ("TimelineVolRaw", "volume")]:
-        try:
-            resp = requests.get(
-                base,
-                params={
-                    "mode": mode,
-                    "query": query,
-                    "format": "json",
-                    "timespan": timespan,
-                    "sort": "datedesc",
-                },
-                headers=_BROWSER_HEADERS,
-                timeout=30,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            timeline = data.get("timeline", [])
-            if timeline and timeline[0].get("data"):
-                # GDELT returns ISO dates like "20260415T000000Z"
-                records = []
-                for r in timeline[0]["data"]:
-                    raw_date = r.get("date", "")
-                    if len(raw_date) >= 8:
-                        date_str = f"{raw_date[0:4]}-{raw_date[4:6]}-{raw_date[6:8]}"
-                        val = r.get("value")
-                        if val is not None:
-                            records.append({"date": date_str, "value": round(float(val), 4)})
-                result[key] = records
-                logger.info(f"GDELT {mode}: fetched {len(records)} daily points")
-        except Exception as e:
-            logger.warning(f"GDELT {mode} failed: {e}")
+    # Sequential with a small spacing delay between modes. GDELT 429s us
+    # constantly when both TimelineTone and TimelineVolRaw fire back-to-
+    # back; a 1.5s pause between requests stays inside their per-IP rate
+    # limit window. Total fetch is still <5s — invisible to the user since
+    # this only runs on cache miss every 4 hours.
+    modes = [("TimelineTone", "tone"), ("TimelineVolRaw", "volume")]
+    for i, (mode, key) in enumerate(modes):
+        if i > 0:
+            time.sleep(1.5)
+        # Up to 2 attempts per mode, with backoff on 429 specifically.
+        # GDELT recovers within a few seconds; immediate retry doesn't help.
+        attempts = 0
+        while attempts < 2:
+            attempts += 1
+            try:
+                resp = requests.get(
+                    base,
+                    params={
+                        "mode": mode,
+                        "query": query,
+                        "format": "json",
+                        "timespan": timespan,
+                        "sort": "datedesc",
+                    },
+                    headers=_BROWSER_HEADERS,
+                    timeout=30,
+                )
+                if resp.status_code == 429 and attempts == 1:
+                    logger.warning(f"GDELT {mode}: 429, backing off 4s")
+                    time.sleep(4)
+                    continue
+                resp.raise_for_status()
+                data = resp.json()
+                timeline = data.get("timeline", [])
+                if timeline and timeline[0].get("data"):
+                    # GDELT returns ISO dates like "20260415T000000Z"
+                    records = []
+                    for r in timeline[0]["data"]:
+                        raw_date = r.get("date", "")
+                        if len(raw_date) >= 8:
+                            date_str = f"{raw_date[0:4]}-{raw_date[4:6]}-{raw_date[6:8]}"
+                            val = r.get("value")
+                            if val is not None:
+                                records.append({"date": date_str, "value": round(float(val), 4)})
+                    result[key] = records
+                    logger.info(f"GDELT {mode}: fetched {len(records)} daily points")
+                break
+            except Exception as e:
+                logger.warning(f"GDELT {mode} attempt {attempts}: {e}")
+                if attempts < 2:
+                    time.sleep(2)
 
-    # Only cache when we actually got data. Caching an empty payload would
-    # block the live retry path for the full TTL window — exactly what
-    # caused the §09b chart to show "no tone series" on the HF Space's
-    # cold-start fetch (GDELT slow on first hit, empty response cached for
-    # an hour, frontend showed empty state until the user noticed).
-    if result["tone"] or result["volume"]:
+    # Only cache the result if BOTH series populated. A half-cache (e.g.
+    # tone OK + volume 429) used to land in the cache and stick for the
+    # full TTL — meaning the frontend's volume overlay was empty for
+    # hours until the next miss. Better to fall back to stale and let
+    # the next request retry both modes.
+    if result["tone"] and result["volume"]:
         _write_cache(f"gdelt_tone_{timespan}", result)
         return result
-    # Both branches empty — fall back to stale cache rather than blank chart.
-    # Don't write the empty result; next request will retry the live API.
+    # Partial or empty result — try stale cache first.
     stale = _read_stale_cache(f"gdelt_tone_{timespan}")
-    if stale:
-        logger.info(f"GDELT: serving stale cache (tone={len(stale.get('tone') or [])})")
+    if stale and (stale.get("tone") or stale.get("volume")):
+        logger.info(f"GDELT: serving stale cache (tone={len(stale.get('tone') or [])}, volume={len(stale.get('volume') or [])})")
         return stale
+    # No stale, partial live — return what we got rather than nothing,
+    # but DON'T cache it so the next request re-tries.
     return result
 
 
@@ -1854,40 +1882,50 @@ def _do_fetch_hdx_event_counts(force: bool, cache_key: str) -> Dict[str, Any]:
         r = None
         content = None
         rows = []
-        # One inline retry for the body fetch — HDX intermittently returns
-        # truncated or HTML-wrapped responses through their CDN. A single
-        # retry after a small backoff usually clears it without doubling
-        # the request rate enough to trip rate limits.
+        # Up to 3 attempts with exponential backoff. HDX's CDN intermittently
+        # returns truncated bodies that pass the "PK" magic-byte check
+        # (it's still a ZIP) but fail openpyxl's central-directory
+        # validation with "Bad magic number for file header". Empirically
+        # Yemen specifically hits this — the file is largest of the five.
+        # Backoff gives the CDN time to settle vs. retrying immediately.
         last_err = None
-        for attempt in range(2):
+        last_meta = ""  # diagnostic info for logs
+        for attempt in range(3):
             try:
-                r = requests.get(meta["url"], headers=_BROWSER_HEADERS,
-                                 timeout=30, allow_redirects=True)
+                # Identity encoding sometimes avoids a CDN gzip-pipeline
+                # bug; it costs us a few hundred KB of bandwidth but the
+                # body integrity is what matters here.
+                fetch_headers = {**_BROWSER_HEADERS, "Accept-Encoding": "identity"}
+                r = requests.get(meta["url"], headers=fetch_headers,
+                                 timeout=45, allow_redirects=True, stream=False)
                 if not r.ok:
                     last_err = f"HTTP {r.status_code}"
-                    continue
-                # Validate the body is actually an XLSX (PK ZIP magic) before
-                # handing to openpyxl. HTML error pages from HDX/Cloudflare
-                # would otherwise produce "Bad magic number" in the parser.
-                content = r.content
-                if not content.startswith(b"PK"):
+                elif not r.content.startswith(b"PK"):
                     ctype = r.headers.get("Content-Type", "?")
-                    last_err = f"non-XLSX response (ct={ctype}, first 8 bytes={content[:8]!r})"
-                    if attempt == 0:
-                        logger.warning(f"HDX {label}: {last_err}, retrying once")
-                        continue
-                    break
-                rows = _parse_hdx_monthly_xlsx(content, label)
-                if not rows:
-                    last_err = "parser returned 0 rows"
-                    if attempt == 0:
-                        continue
-                last_err = None
-                break
+                    last_err = f"non-XLSX response (ct={ctype}, first 16 bytes={r.content[:16]!r})"
+                else:
+                    content = r.content
+                    declared = r.headers.get("Content-Length")
+                    last_meta = f"size={len(content)}B, content-length={declared}"
+                    rows = _parse_hdx_monthly_xlsx(content, label)
+                    if rows:
+                        last_err = None
+                        break
+                    last_err = f"parser returned 0 rows ({last_meta})"
+                if attempt < 2:
+                    delay = 1.5 * (attempt + 1)  # 1.5s, 3s
+                    logger.warning(
+                        f"HDX {label} attempt {attempt + 1}/3: {last_err}, "
+                        f"backing off {delay}s"
+                    )
+                    time.sleep(delay)
+                    continue
             except Exception as e:
                 last_err = f"{type(e).__name__}: {e}"
-                if attempt == 0:
-                    logger.warning(f"HDX {label}: {last_err}, retrying once")
+                if attempt < 2:
+                    delay = 1.5 * (attempt + 1)
+                    logger.warning(f"HDX {label} attempt {attempt + 1}/3: {last_err}, backing off {delay}s")
+                    time.sleep(delay)
                     continue
         try:
             if rows:
