@@ -1716,6 +1716,16 @@ def fetch_hdx_event_counts(force: bool = False) -> Dict[str, Any]:
     }
     newest = ""
 
+    # Read the previous snapshot so per-country failures can fall back to
+    # last-known-good data rather than silently dropping that country from
+    # the aggregate. Without this, a single corrupt Yemen XLSX (HDX returns
+    # an HTML error page → "Bad magic number for file header") makes the
+    # §01 chart's bars drop ~17% because Yemen's contribution disappears
+    # until the next refresh.
+    prev_snap = _read_stale_cache(cache_key) or {}
+    prev_by_country = prev_snap.get("by_country") or {}
+    prev_meta = prev_snap.get("by_country_meta") or {}
+
     # Sequential fetch — 5 countries × ~2MB XLSX each. Sequential keeps us
     # under HDX's rate limits AND under Render's 512MB memory ceiling
     # (parallel parsing peaks at ~5x the per-country footprint).
@@ -1724,32 +1734,75 @@ def fetch_hdx_event_counts(force: bool = False) -> Dict[str, Any]:
         meta = _hdx_resource_url(pkg)
         if not meta or not meta.get("url"):
             out["errors"][label] = "package_show returned no political_violence resource"
+            # Reuse last known good for this country so the aggregate stays whole
+            if label in prev_by_country:
+                out["by_country"][label] = prev_by_country[label]
+                out["by_country_meta"][label] = {**prev_meta.get(label, {}), "served_from": "stale_cache"}
+                cur = prev_by_country[label][-1]["month"] if prev_by_country[label] else ""
+                if cur and cur > newest:
+                    newest = cur
             continue
         r = None
         content = None
+        rows = []
+        # One inline retry for the body fetch — HDX intermittently returns
+        # truncated or HTML-wrapped responses through their CDN. A single
+        # retry after a small backoff usually clears it without doubling
+        # the request rate enough to trip rate limits.
+        last_err = None
+        for attempt in range(2):
+            try:
+                r = requests.get(meta["url"], headers=_BROWSER_HEADERS,
+                                 timeout=30, allow_redirects=True)
+                if not r.ok:
+                    last_err = f"HTTP {r.status_code}"
+                    continue
+                # Validate the body is actually an XLSX (PK ZIP magic) before
+                # handing to openpyxl. HTML error pages from HDX/Cloudflare
+                # would otherwise produce "Bad magic number" in the parser.
+                content = r.content
+                if not content.startswith(b"PK"):
+                    ctype = r.headers.get("Content-Type", "?")
+                    last_err = f"non-XLSX response (ct={ctype}, first 8 bytes={content[:8]!r})"
+                    if attempt == 0:
+                        logger.warning(f"HDX {label}: {last_err}, retrying once")
+                        continue
+                    break
+                rows = _parse_hdx_monthly_xlsx(content, label)
+                if not rows:
+                    last_err = "parser returned 0 rows"
+                    if attempt == 0:
+                        continue
+                last_err = None
+                break
+            except Exception as e:
+                last_err = f"{type(e).__name__}: {e}"
+                if attempt == 0:
+                    logger.warning(f"HDX {label}: {last_err}, retrying once")
+                    continue
         try:
-            r = requests.get(meta["url"], headers=_BROWSER_HEADERS,
-                             timeout=30, allow_redirects=True)
-            if not r.ok:
-                out["errors"][label] = f"HTTP {r.status_code}"
-                continue
-            content = r.content
-            rows = _parse_hdx_monthly_xlsx(content, label)
-            if not rows:
-                out["errors"][label] = "parser returned 0 rows"
-                continue
-            out["by_country"][label] = rows
-            out["by_country_meta"][label] = {
-                "resource_name": meta.get("name"),
-                "last_modified": meta.get("last_modified"),
-                "row_count": len(rows),
-            }
-            cur = rows[-1]["month"]
-            if cur > newest:
-                newest = cur
-        except Exception as e:
-            out["errors"][label] = f"{type(e).__name__}: {e}"
-            logger.warning(f"HDX {label} fetch failed: {e}")
+            if rows:
+                out["by_country"][label] = rows
+                out["by_country_meta"][label] = {
+                    "resource_name": meta.get("name"),
+                    "last_modified": meta.get("last_modified"),
+                    "row_count": len(rows),
+                }
+                cur = rows[-1]["month"]
+                if cur > newest:
+                    newest = cur
+            else:
+                # Fetch failed after retries → reuse last known good data
+                # for this country instead of dropping it from the aggregate.
+                out["errors"][label] = last_err or "unknown failure"
+                logger.warning(f"HDX {label} fetch failed: {last_err}")
+                if label in prev_by_country:
+                    out["by_country"][label] = prev_by_country[label]
+                    prior = prev_meta.get(label, {})
+                    out["by_country_meta"][label] = {**prior, "served_from": "stale_cache", "stale_reason": last_err}
+                    cur = prev_by_country[label][-1]["month"] if prev_by_country[label] else ""
+                    if cur and cur > newest:
+                        newest = cur
         finally:
             # Drop the response body and any intermediate bytes immediately
             # so the next country's parse doesn't compound memory use.

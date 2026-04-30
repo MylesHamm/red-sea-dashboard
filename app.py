@@ -554,10 +554,17 @@ async def preload_data():
         # "exceeded memory limit" notification email.
         def _mem_mb():
             try:
-                import resource
+                import resource, sys
                 rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-                # Linux returns KB, macOS returns bytes; both fit in MB.
-                return round(rss / (1024 if rss > 100_000_000 else 1), 1) if rss < 100_000_000 else round(rss / (1024 * 1024), 1)
+                # ru_maxrss units differ by platform:
+                #   Linux:  kilobytes
+                #   macOS:  bytes
+                # Detect by sys.platform rather than by magnitude (the
+                # magnitude heuristic gave 1.15 TB readings on Linux because
+                # 1.13 GB in KB looks like "bytes" by size).
+                if sys.platform == "darwin":
+                    return round(rss / (1024 * 1024), 1)
+                return round(rss / 1024, 1)
             except Exception:
                 return None
 
