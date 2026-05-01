@@ -1061,7 +1061,19 @@
     set('total',     k.total_events != null ? k.total_events : '—');
     set('avg3d',     k.avg_price_move_3d != null ? '$' + k.avg_price_move_3d.toFixed(2) : '—');
     set('peak3d',    k.peak_volatility_spike != null ? '$' + k.peak_volatility_spike.toFixed(2) : '—');
-    set('thisMonth', k.events_this_month != null ? k.events_this_month : '—');
+    set('thisMonth', k.events_in_latest_month != null ? k.events_in_latest_month
+                     : (k.events_this_month != null ? k.events_this_month : '—'));
+    // Re-label the KPI card with the actual month so users don't read
+    // "0 events this month" as broken — it's the most recent month
+    // *available* in the data, which trails wall-clock by ACLED's
+    // free-tier 12-month embargo.
+    if (k.latest_month) {
+      const [y, m] = k.latest_month.split('-').map(Number);
+      const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+      const lbl = (m && y) ? `${months[m-1]} ${y}` : k.latest_month;
+      set('latestMonthLabel', `EVENTS · ${lbl}`);
+      set('latestMonthFoot', 'Most recent month available (ACLED ~12-mo embargo)');
+    }
     // Find the specific event responsible for the peak move (largest single
     // 3-day price change in the event_table). Falls back to a generic label.
     const tbl = (resp && resp.event_table) || [];

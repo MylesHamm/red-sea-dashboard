@@ -667,6 +667,18 @@ def get_chokepoint_incidents(chokepoint_id: str, days: int = 90, limit: int = 20
         if not (in_box or actor_match):
             continue
 
+        # Filter: this endpoint feeds the "kill-zone incidents" sidebar.
+        # ACLED's "Protests" and "Riots" event types are civilian
+        # demonstrations / civil-unrest events — they are NOT maritime
+        # kill-zone incidents (no vessels are attacked, no ships sink in
+        # a peaceful protest). User reported they were dominating the
+        # sidebar list and crowding out the actual maritime events.
+        # Drop them here so every downstream view (sidebar, count, map
+        # overlay) sees a clean kill-zone-only stream.
+        etype = (e.get("event_type") or "").strip().lower()
+        if etype in ("protests", "riots"):
+            continue
+
         # Date filter
         d = e.get("event_date") or e.get("date") or ""
         try:
@@ -3283,10 +3295,23 @@ def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
     acled_dates = list({e.get("event_date", "")[:10] for e in iran_events if e.get("event_date")})
     all_changes_3d = []
     max_vol_spike = 0
-    current_month = datetime.now().strftime("%Y-%m")
-    acled_this_month = sum(1 for e in iran_events if (e.get("event_date") or "").startswith(current_month))
-    curated_this_month = sum(1 for e in curated if e["date"].startswith(current_month))
-    events_this_month = acled_this_month + curated_this_month
+
+    # "Events this month" — anchor to the dataset's own newest month, not
+    # wall-clock. ACLED's free-tier API embargoes row-level events for
+    # ~12 months, so an absolute "current month" filter is always 0 on a
+    # production-fresh container. Anchoring to the data lets the KPI
+    # actually show the most recent observable activity (and the month
+    # label disambiguates).
+    all_iran_months = sorted({(e.get("event_date") or "")[:7] for e in iran_events if e.get("event_date")})
+    all_curated_months = sorted({(e.get("date") or "")[:7] for e in curated if e.get("date")})
+    candidate_months = sorted(m for m in (all_iran_months + all_curated_months) if m)
+    latest_month = candidate_months[-1] if candidate_months else ""
+    if latest_month:
+        acled_latest_month   = sum(1 for e in iran_events if (e.get("event_date") or "").startswith(latest_month))
+        curated_latest_month = sum(1 for e in curated     if (e.get("date") or "").startswith(latest_month))
+        events_latest_month  = acled_latest_month + curated_latest_month
+    else:
+        events_latest_month = 0
 
     for d in acled_dates:
         pb = get_closing_price_before(d)
@@ -3301,7 +3326,11 @@ def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
         "total_events": len(iran_events),
         "avg_price_move_3d": round(sum(all_changes_3d) / len(all_changes_3d), 2) if all_changes_3d else 0,
         "peak_volatility_spike": round(max_vol_spike, 2),
-        "events_this_month": events_this_month,
+        # Backwards-compat key (frontend may still read it) + new fields
+        # the relabeled KPI card uses.
+        "events_this_month": events_latest_month,
+        "events_in_latest_month": events_latest_month,
+        "latest_month": latest_month,           # "YYYY-MM" of the data anchor
     }
 
     return {

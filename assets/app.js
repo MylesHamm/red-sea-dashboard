@@ -54,6 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
     flow: document.getElementById('gpFlow'),
     width: document.getElementById('gpWidth'),
     vessels: document.getElementById('gpVessels'),
+    vesselsAsof: document.getElementById('gpVesselsAsof'),
     incidents: document.getElementById('gpIncidents'),
     routes: document.getElementById('gpRoutes'),
     vesselList: document.getElementById('gpVesselList')
@@ -75,7 +76,21 @@ document.addEventListener('DOMContentLoaded', () => {
     gpEls.fill.style.background = `linear-gradient(90deg, ${threatColor}88, ${threatColor})`;
     gpEls.flow.textContent = cp.flowMbd != null ? cp.flowMbd : '—';
     gpEls.width.innerHTML = cp.widthMi != null ? `${cp.widthMi} <span>mi</span>` : '—';
-    gpEls.vessels.textContent = cp.vesselsInZone != null ? cp.vesselsInZone : '—';
+    gpEls.vessels.textContent = cp.vesselsInZone != null ? cp.vesselsInZone.toLocaleString() : '—';
+    if (gpEls.vesselsAsof) {
+      // Surface the data month so users understand "Monthly Transits" is
+      // the most recent COMPLETE month from PortWatch — not a live count.
+      // Without this label the static-looking number reads as broken.
+      const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+      let asof = '';
+      if (Array.isArray(cp.transitHistory) && cp.transitHistory.length) {
+        const sorted = cp.transitHistory.slice().sort((a, b) => a.month.localeCompare(b.month));
+        const latest = sorted[sorted.length - 1].month;
+        const [y, mm] = latest.split('-').map(Number);
+        if (y && mm) asof = `${months[mm-1]} ${y} · IMF PORTWATCH`;
+      }
+      gpEls.vesselsAsof.textContent = asof;
+    }
     gpEls.incidents.textContent = cp.incidents30d != null ? cp.incidents30d : '—';
 
     gpEls.routes.innerHTML = (cp.routes || []).map(r => `
@@ -104,7 +119,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sub.includes('shelling') || sub.includes('artillery') || sub.includes('missile'))  return { tag: 'MISSILE', cls: 'v-type-missile' };
     if (sub.includes('attack') && (typ.includes('battle') || typ.includes('violence')))    return { tag: 'NAVAL',   cls: 'v-type-naval' };
     if (sub.includes('abduction') || sub.includes('looting') || sub.includes('seizure'))   return { tag: 'HIJACK',  cls: 'v-type-hijack' };
-    if (typ.includes('protest') || typ.includes('riot'))                                    return { tag: 'PROTEST', cls: 'v-type-protest' };
+    // Note: 'Protests' / 'Riots' event_types are now filtered out of
+    // /api/chokepoint-incidents server-side (kill-zone view should not
+    // include peaceful demonstrations or civil unrest). Kept here as
+    // dead branches in case the upstream filter ever loosens — the tag
+    // would still render correctly.
     return { tag: 'EVENT', cls: 'v-type-other' };
   }
   function relativeDays(iso, anchorTs) {

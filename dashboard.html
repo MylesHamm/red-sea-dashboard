@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
 
-<link rel="stylesheet" href="assets/app.css?v=20260427f">
+<link rel="stylesheet" href="assets/app.css?v=20260427g">
 </head>
 <body>
 
@@ -290,13 +290,13 @@
             <div class="gp-stat-val" id="gpWidth">—</div>
             <div class="gp-stat-lbl">NARROWEST</div>
           </div>
-          <div class="gp-stat">
+          <div class="gp-stat" title="Monthly vessel transits from IMF PortWatch · most recent complete month. Updates monthly as PortWatch publishes new totals.">
             <div class="gp-stat-val" id="gpVessels">—</div>
-            <div class="gp-stat-lbl">VESSELS IN ZONE</div>
+            <div class="gp-stat-lbl">MONTHLY TRANSITS<br><span class="gp-stat-sub" id="gpVesselsAsof"></span></div>
           </div>
           <div class="gp-stat">
             <div class="gp-stat-val" id="gpIncidents">—</div>
-            <div class="gp-stat-lbl">INCIDENTS · 30D</div>
+            <div class="gp-stat-lbl">INCIDENTS · 30D<br><span class="gp-stat-sub">excl. protests</span></div>
           </div>
         </div>
 
@@ -693,9 +693,9 @@
         <div class="kpi-foot" data-iran-kpi="peak3dDate">—</div>
       </div>
       <div class="kpi-primary">
-        <div class="kpi-label">EVENTS THIS MONTH</div>
+        <div class="kpi-label" data-iran-kpi="latestMonthLabel">EVENTS · LATEST MONTH</div>
         <div class="kpi-value" data-iran-kpi="thisMonth">—</div>
-        <div class="kpi-foot">Current pace</div>
+        <div class="kpi-foot" data-iran-kpi="latestMonthFoot">Most recent observable month (ACLED has a ~12-mo embargo)</div>
       </div>
     </section>
 
@@ -828,12 +828,12 @@
 </div>
 
 <!-- Scripts -->
-<script src="assets/api.js?v=20260427f"></script>
-<script src="assets/data.js?v=20260427f"></script>
-<script src="assets/hydrate.js?v=20260427f"></script>
-<script src="assets/globe.js?v=20260427f"></script>
-<script src="assets/tacmap.js?v=20260427f"></script>
-<script src="assets/charts.js?v=20260427f"></script>
-<script src="assets/app.js?v=20260427f"></script>
+<script src="assets/api.js?v=20260427g"></script>
+<script src="assets/data.js?v=20260427g"></script>
+<script src="assets/hydrate.js?v=20260427g"></script>
+<script src="assets/globe.js?v=20260427g"></script>
+<script src="assets/tacmap.js?v=20260427g"></script>
+<script src="assets/charts.js?v=20260427g"></script>
+<script src="assets/app.js?v=20260427g"></script>
 </body>
 </html>
