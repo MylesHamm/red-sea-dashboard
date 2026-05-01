@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
 
-<link rel="stylesheet" href="assets/app.css?v=20260427g">
+<link rel="stylesheet" href="assets/app.css?v=20260427h">
 </head>
 <body>
 
@@ -123,14 +123,14 @@
       </div>
 
       <!-- Primary KPIs -->
-      <div class="kpi-primary kpi-primary-alert">
-        <div class="kpi-label">INCIDENTS · 30D</div>
+      <div class="kpi-primary kpi-primary-alert" title="Hormuz + Bab el-Mandeb maritime-relevant events (excludes protests/riots) within 30 days of the dataset's most recent ACLED event. Anchored to the data, not wall-clock, because ACLED's free-tier API embargoes events for ~12 months.">
+        <div class="kpi-label">INCIDENTS · 30D <span style="opacity:0.55;font-weight:400">(ACLED window)</span></div>
         <div class="kpi-value" data-kpi="incidents30">—</div>
         <div class="kpi-trend">
           <svg viewBox="0 0 60 20" width="60" height="20"><polyline points="0,16 8,14 16,15 24,10 32,12 40,8 48,6 60,4" fill="none" stroke="#ff5252" stroke-width="1.3"/></svg>
           <span class="up-alert" data-kpi="incidents30Delta">—</span>
         </div>
-        <div class="kpi-foot" data-kpi-foot="incidents30">ACLED · maritime-flagged events</div>
+        <div class="kpi-foot" data-kpi-foot="incidents30">Hormuz + Bab · excl. protests · 30d ending <span data-kpi-foot-asof="incidents30">—</span></div>
       </div>
 
       <div class="kpi-primary kpi-primary-warn">
@@ -152,12 +152,12 @@
         <div class="kpi-sec-label">DXY</div>
         <div class="kpi-sec-value" data-kpi="dxy">—</div>
       </div>
-      <div class="kpi-sec">
-        <div class="kpi-sec-label">SUEZ THROUGHPUT</div>
+      <div class="kpi-sec" title="Suez Canal monthly transits, last 3 months avg vs. pre-Houthi-crisis (pre Nov 2023) baseline. Negative = traffic still depressed; positive = recovered above baseline.">
+        <div class="kpi-sec-label">SUEZ vs PRE-CRISIS</div>
         <div class="kpi-sec-value" data-kpi="suez">—</div>
       </div>
-      <div class="kpi-sec">
-        <div class="kpi-sec-label">PEAK DAILY VOL</div>
+      <div class="kpi-sec" title="Peak daily Brent volatility observed in the thesis sample (Oct 2023 – Sep 2025), annualized. This is the worst single-day move in the regression dataset; it does not update from live prices.">
+        <div class="kpi-sec-label">PEAK VOL · THESIS</div>
         <div class="kpi-sec-value" data-kpi="peakVol">—</div>
       </div>
 
@@ -407,9 +407,9 @@
         <div class="cp-flow"><span data-stat="flow">—</span><span>mbd</span></div>
         <div class="cp-body">21-mile-wide passage controlled by IRGC Navy. ~21% of global seaborne petroleum (EIA reference, slow-moving). Transit volume vs. pre-war baseline: <b><span data-cp-decline="hormuz">—</span></b>.</div>
         <div class="cp-meta">
-          <span><b data-stat="vessels">—</b> VESSELS</span>
-          <span><b data-stat="premium">—</b> PREMIUM</span>
-          <span><b data-stat="incidents">—</b> INCIDENTS/30D</span>
+          <span><b data-stat="vessels">—</b> MONTHLY TRANSITS</span>
+          <span><b data-stat="declinePct">—</b> VS PRE-WAR</span>
+          <span><b data-stat="incidents">—</b> INCIDENTS · 30D (THESIS WINDOW)</span>
         </div>
         <div class="cp-live">
           <span class="cp-live-tag">LIVE · <span data-cp-events-month="hormuz">—</span></span>
@@ -428,9 +428,9 @@
         <div class="cp-flow"><span data-stat="flow">—</span><span>mbd</span></div>
         <div class="cp-body">Iranian proxy operations zone. Houthis have attacked 100+ commercial vessels since Nov 2023. Coordinated second-front pressure on shipping.</div>
         <div class="cp-meta">
-          <span><b data-stat="vessels">—</b> VESSELS</span>
-          <span><b data-stat="premium">—</b> PREMIUM</span>
-          <span><b data-stat="incidents">—</b> INCIDENTS/30D</span>
+          <span><b data-stat="vessels">—</b> MONTHLY TRANSITS</span>
+          <span><b data-stat="declinePct">—</b> VS PRE-WAR</span>
+          <span><b data-stat="incidents">—</b> INCIDENTS · 30D (THESIS WINDOW)</span>
         </div>
         <div class="cp-live">
           <span class="cp-live-tag">LIVE · <span data-cp-events-month="bab">—</span></span>
@@ -449,9 +449,9 @@
         <div class="cp-flow">+3,500<span>nm</span></div>
         <div class="cp-body">The only safe route. Adds 10–14 sailing days, +$200–400/TEU (Drewry reference). Tanker reroute share inferred from the live Bab transit decline shown above.</div>
         <div class="cp-meta">
-          <span><b data-stat="incidents">—</b> INCIDENTS</span>
-          <span><b data-stat="diverted">—</b> DIVERTED</span>
-          <span><b>+$400</b>/TEU</span>
+          <span><b data-stat="incidents">0</b> INCIDENTS · 30D</span>
+          <span><b data-stat="diverted">—</b> EST. REROUTED (FROM HORMUZ)</span>
+          <span><b>+$200–400</b>/TEU (DREWRY)</span>
         </div>
       </div>
     </section>
@@ -828,12 +828,12 @@
 </div>
 
 <!-- Scripts -->
-<script src="assets/api.js?v=20260427g"></script>
-<script src="assets/data.js?v=20260427g"></script>
-<script src="assets/hydrate.js?v=20260427g"></script>
-<script src="assets/globe.js?v=20260427g"></script>
-<script src="assets/tacmap.js?v=20260427g"></script>
-<script src="assets/charts.js?v=20260427g"></script>
-<script src="assets/app.js?v=20260427g"></script>
+<script src="assets/api.js?v=20260427h"></script>
+<script src="assets/data.js?v=20260427h"></script>
+<script src="assets/hydrate.js?v=20260427h"></script>
+<script src="assets/globe.js?v=20260427h"></script>
+<script src="assets/tacmap.js?v=20260427h"></script>
+<script src="assets/charts.js?v=20260427h"></script>
+<script src="assets/app.js?v=20260427h"></script>
 </body>
 </html>

@@ -227,6 +227,12 @@
     const cutoff = anchor - days * 86400000;
     let n = 0;
     for (const e of events) {
+      // Mirror the backend chokepoint_incidents filter: exclude
+      // ACLED Protests / Riots from the kill-zone count. The hero
+      // INCIDENTS · 30D card is supposed to count maritime-relevant
+      // events, not peaceful demonstrations.
+      const etype = (e.event_type || '').toLowerCase();
+      if (etype === 'protests' || etype === 'riots') continue;
       const lat = +e.latitude, lon = +e.longitude;
       if (!lat || !lon) continue;
       const d = e.event_date || e.date;
@@ -546,13 +552,26 @@
       if (foot) foot.textContent = `Hormuz ${window.CHOKEPOINTS.hormuz.flowMbd.toFixed(1)} + Bab el-Mandeb ${window.CHOKEPOINTS.bab.flowMbd.toFixed(1)}`;
     }
 
-    // Incidents KPI row (count of maritime events in last 30d). Guard against
-    // null sums when CHOKEPOINTS aren't yet hydrated (NaN would render as text).
+    // Incidents KPI row — count of maritime events (excl. protests) within
+    // 30 days of the dataset's newest event. Anchored to data not wall-clock.
     const incidentEl = document.querySelector('[data-kpi="incidents30"]');
     if (incidentEl) {
       const h = (window.CHOKEPOINTS.hormuz && window.CHOKEPOINTS.hormuz.incidents30d) || 0;
       const b = (window.CHOKEPOINTS.bab    && window.CHOKEPOINTS.bab.incidents30d)    || 0;
       incidentEl.textContent = String(h + b);
+    }
+    // Asof label — shows what 30-day window the count actually covers.
+    // Without this, "INCIDENTS · 30D" reads as "last 30 days from today"
+    // when in reality it's "last 30 days of available ACLED data" which
+    // can be ~12 months behind today due to the free-tier embargo.
+    const asofEl = document.querySelector('[data-kpi-foot-asof="incidents30"]');
+    if (asofEl && Array.isArray(window.CP && window.CP.state && window.CP.state.events)) {
+      const ts = window.__dataNowTs(window.CP.state.events);
+      if (ts) {
+        const d = new Date(ts);
+        const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+        asofEl.textContent = `${String(d.getUTCDate()).padStart(2,'0')} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+      }
     }
   }
 
@@ -895,9 +914,12 @@
     }
   }
 
-  // ── Chokepoint cards (overview tab) — hydrate vessels/premium/incidents/flow
-  // Premium isn't a backend metric we track; derive a proxy from threatPct
-  // (war-risk premium is correlated with chokepoint stress).
+  // ── Chokepoint cards (overview tab) — hydrate every stat from REAL data
+  // Each value is sourced from a backend computation, not a UI scaling
+  // hack. The previous "premium" proxy (threatPct/100*3.5%) was a made-up
+  // multiplier with no relationship to actual oil/insurance premia and
+  // has been removed in favor of the live transit-decline metric, which
+  // is computed from real PortWatch transit data.
   function hydrateChokepointCards() {
     const cards = document.querySelectorAll('[data-cp-card]');
     cards.forEach(card => {
@@ -912,14 +934,32 @@
       if (cp.threat) set('risk', PILL_LABEL[cp.threat] || cp.threat.toUpperCase());
       // Flow (mbd) — only set if card has a flow stat hook (Hormuz/Bab; Cape uses nm)
       if (cp.flowMbd != null) set('flow', cp.flowMbd.toFixed(1));
-      // Vessels
-      if (cp.vesselsInZone != null) set('vessels', cp.vesselsInZone);
-      // Premium proxy: scale threatPct → 0–3.5% range
-      if (cp.threatPct != null) set('premium', (cp.threatPct / 100 * 3.5).toFixed(1) + '%');
-      // Incidents/30d
+      // Monthly transits — from PortWatch, comma-formatted
+      if (cp.vesselsInZone != null) set('vessels', cp.vesselsInZone.toLocaleString());
+      // Transit decline % vs. pre-Feb-2026 baseline (real, computed from
+      // PortWatch). Replaces the fake "PREMIUM" stat. Sign-aware so a
+      // recovery shows green +N%, a collapse shows red -N%.
+      if (cp.pctDecline != null) {
+        // pctDecline is positive when transits ARE down vs baseline.
+        // Display as "−42%" (drop) or "+5%" (recovery above baseline).
+        const v = -cp.pctDecline;  // flip sign so positive = improving
+        const sign = v > 0 ? '+' : '';
+        set('declinePct', `${sign}${v.toFixed(0)}%`);
+      } else {
+        set('declinePct', '—');
+      }
+      // Incidents/30d — from ACLED (thesis-window data; protests excluded
+      // server-side). Number is real but anchored to the dataset's newest
+      // event, not wall-clock — that's what the "(THESIS WINDOW)" sub-
+      // label on the card communicates.
       if (cp.incidents30d != null) set('incidents', cp.incidents30d);
-      // Cape: vessels diverted
-      if (key === 'cape' && cp.vesselsInZone != null) set('diverted', cp.vesselsInZone);
+      // Cape: vessels diverted estimate. cp.vesselsInZone for cape was
+      // already computed in hydrateCape() as a proportional estimate
+      // from the Hormuz transit decline — labeled "EST. REROUTED" in
+      // the markup so the user knows it's an estimate.
+      if (key === 'cape' && cp.vesselsInZone != null) {
+        set('diverted', cp.vesselsInZone.toLocaleString());
+      }
     });
   }
 
