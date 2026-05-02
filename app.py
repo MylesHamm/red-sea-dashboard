@@ -537,6 +537,22 @@ async def preload_data():
                     print(f"  [preload] {name}: FAILED ({e})")
         gc.collect()
 
+        # Phase 1.5: HDX live ACLED mirror — moved here so the master
+        # timeseries extender (Phase 2) sees populated HDX data and can
+        # backfill weekly_attacks/daily_attacks for live rows. Without
+        # this ordering, master ran first with empty HDX cache, set
+        # all live-row weekly_attacks=0, memoized that bad result for
+        # 90s, and the §05 scatter showed every live point at x=0.
+        try:
+            print(f"  [preload] HDX live ACLED mirror: warming...")
+            t0 = time.time()
+            snap = data_service.fetch_hdx_event_counts()
+            countries = list((snap or {}).get("by_country", {}).keys())
+            print(f"  [preload] HDX: OK — {len(countries)} countries, newest={snap.get('newest_month')}, took {time.time()-t0:.1f}s")
+        except Exception as e:
+            print(f"  [preload] HDX: FAILED ({e}) — pill will fall back to bundled ACLED date")
+        gc.collect()
+
         # Phase 2: master + transit counts. These are all small (<1MB each).
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             futures = {
@@ -581,22 +597,9 @@ async def preload_data():
             except Exception:
                 return None
 
-        # Phase 3: HDX live ACLED mirror — runs BEFORE the heavy ACLED bulk
-        # so even if ACLED OOM-restarts the worker, the freshness pill and
-        # the §01 chart's post-thesis bars come up on the next boot.
-        # Streaming openpyxl reader keeps peak memory at ~5MB total for
-        # all 5 country workbooks (was ~150MB with pandas read_excel).
-        try:
-            print(f"  [preload] HDX live ACLED mirror: warming... (mem={_mem_mb()}MB)")
-            t0 = time.time()
-            snap = data_service.fetch_hdx_event_counts()
-            countries = list((snap or {}).get("by_country", {}).keys())
-            print(f"  [preload] HDX: OK — {len(countries)} countries, newest={snap.get('newest_month')}, took {time.time()-t0:.1f}s, mem={_mem_mb()}MB")
-        except Exception as e:
-            print(f"  [preload] HDX: FAILED ({e}) — pill will fall back to bundled ACLED date")
-        gc.collect()
-
-        # Phase 4: ACLED bulk fetch (heaviest single source, ~70MB Python).
+        # Phase 3: ACLED bulk fetch (heaviest single source, ~70MB Python).
+        # HDX already warmed in Phase 1.5 above so master timeseries had
+        # data to backfill from.
         # Last in the preload chain so a memory blowup here at most loses
         # the row-level events sidebar — Brent / DXY / OVX / HDX / transits
         # are all already cached and the dashboard is functional without

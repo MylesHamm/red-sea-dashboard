@@ -329,7 +329,9 @@ function renderVolatilityChart(state) {
 
   const labels = rows.map(r => r.date);
   // daily_volatility is a decimal std (e.g. 0.023). Convert to % annualized roughly × √252.
-  const data = rows.map(r => r.daily_volatility != null ? +(r.daily_volatility * Math.sqrt(252) * 100).toFixed(2) : 0);
+  // daily_volatility is daily % points (max ~7.3 in the thesis sample).
+  // Annualize by × √252. NO extra × 100 — see comment in renderScatter.
+  const data = rows.map(r => r.daily_volatility != null ? +(r.daily_volatility * Math.sqrt(252)).toFixed(2) : 0);
 
   new Chart(canvas, {
     type: 'bar',
@@ -762,10 +764,14 @@ function renderScatter(state) {
   const THESIS_END = '2025-10-01';
   const thesisPts = [];
   const livePts = [];
+  // master.timeseries.daily_volatility is stored as DAILY % POINTS
+  // (e.g. 7.266 means 7.27% intraday move), already pre-multiplied by
+  // 100. To annualize: multiply by √252. Do NOT multiply by 100 again
+  // — that's what was producing the 12,000% / 4,500% absurd y-axes.
   for (const r of ts) {
     if (r.weekly_attacks == null || r.daily_volatility == null) continue;
     const x = +r.weekly_attacks;
-    const y = +r.daily_volatility * Math.sqrt(252) * 100;
+    const y = +r.daily_volatility * Math.sqrt(252);
     if (!isFinite(x) || !isFinite(y)) continue;
     const pt = { x, y };
     if (r.date && r.date <= THESIS_END) thesisPts.push(pt);

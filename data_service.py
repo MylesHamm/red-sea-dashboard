@@ -2074,6 +2074,11 @@ def _extend_master_timeseries_with_live(result: dict) -> None:
     rolling = list(seed)
 
     def _vol_after_appending(price):
+        # Returns daily realized volatility in PERCENTAGE POINTS to match
+        # the thesis CSV's Daily_Volatility scale (e.g. value 2.5 means
+        # 2.5% daily move). The frontend chart annualizes by × √252.
+        # Previous version multiplied by √252 here (returning annualized
+        # decimal), which the chart then × 100'd, yielding 12,000% bars.
         rolling.append(price)
         if len(rolling) < 6:
             return None
@@ -2086,7 +2091,8 @@ def _extend_master_timeseries_with_live(result: dict) -> None:
             return None
         mean = sum(rets) / len(rets)
         var = sum((x - mean) ** 2 for x in rets) / (len(rets) - 1)
-        return round((var ** 0.5) * (252 ** 0.5), 4)
+        # std of log returns × 100 → daily % points (matches CSV format)
+        return round((var ** 0.5) * 100, 4)
 
     # ── Live event counts from HDX (monthly aggregates) ────────────────
     # The thesis CSV stops publishing weekly_attacks/fatalities_count past
