@@ -259,13 +259,26 @@ async def get_iran_events():
 @app.get("/api/iran-impact")
 async def get_iran_impact():
     """Oil price impact analysis around Iran events.
-    Serves cached/fallback data immediately."""
+    Serves cached/fallback data immediately.
+
+    Filters out civilian protests / riots before computing impact KPIs —
+    these don't move oil markets and were dragging the avg/peak price-
+    move calculations toward zero (most protests = no measurable price
+    move, biasing the average downward). Same oil-relevance filter
+    applied throughout the dashboard.
+    """
     # Try cache first, then JSON fallback
     iran_events = data_service._read_cache("iran_events", 3600)
     if not iran_events:
         iran_events = data_service._load_iran_json_fallback()
     if not iran_events:
         iran_events = await _run_sync(data_service.fetch_iran_events)
+    # Apply oil-relevance filter
+    if iran_events:
+        iran_events = [
+            e for e in iran_events
+            if (e.get("event_type") or "").strip().lower() not in ("protests", "riots")
+        ]
 
     # Brent: use cache first, then fetch
     brent_prices = data_service._read_cache("brent_prices", 3600)

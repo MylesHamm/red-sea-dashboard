@@ -16,6 +16,33 @@ const C_CYAN = '#00d4ff', C_RED = '#ff3d5e', C_AMBER = '#ffab00',
 // ── Helpers ────────────────────────────────────────────────────────────────
 function chartEl(id) { return document.getElementById(id); }
 
+// ── Oil-relevance filter (ACLED event types) ───────────────────────────────
+// The dashboard's analytical purpose is OIL PRICE IMPACT. ACLED publishes
+// every conflict event regardless of oil-market relevance. Civilian
+// protests and riots — even in Yemen / Iran — don't move oil markets and
+// shouldn't appear in any chart titled "Attacks vs ...", "Event Type
+// Mix", "Brent vs US-Iran Events", etc.
+//
+// Excluded ACLED event_types:
+//   • Protests           — peaceful demonstrations (no supply impact)
+//   • Riots              — civilian civil unrest (no supply impact)
+//
+// Kept (oil-relevant or geopolitically material):
+//   • Battles                       — military engagements
+//   • Explosions/Remote violence    — strikes, missile, drones, mining
+//   • Violence against civilians    — proxy for conflict intensity
+//   • Strategic developments        — political moves (sanctions, agreements)
+//
+// This list is the SAME filter applied server-side in
+// data_service.get_chokepoint_incidents and frontend countRecentIncidents,
+// so every chart that calls oilRelevant() gets a consistent universe.
+const _OIL_IRRELEVANT_TYPES = new Set(['protests', 'riots']);
+function oilRelevant(events) {
+  if (!Array.isArray(events)) return [];
+  return events.filter(e => !_OIL_IRRELEVANT_TYPES.has((e && e.event_type || '').toLowerCase()));
+}
+window.oilRelevant = oilRelevant;
+
 // ── Temporal cutoff helpers (driven by app.js scrubber → window.CP.timeline)
 //    All timeseries-driven render functions filter rows by this so scrubbing
 //    truncates the chart to <= the scrubbed date.
@@ -176,8 +203,13 @@ function renderPriceVsAttacks(state) {
   // just showing a "FILTER: X" banner over the full-dataset bars.
   let attacks;
   if (xfType && Array.isArray(state.events) && state.events.length) {
+    // §01 is "Price vs. Conflict Intensity" — oil-relevance filter the
+    // cross-filtered count too. Without this, selecting "Protests" in
+    // §03 (which after the filter has nothing to select anyway) would
+    // count irrelevant events as bars on §01.
+    const xfEvents = oilRelevant(state.events);
     const counts = new Map();
-    for (const e of state.events) {
+    for (const e of xfEvents) {
       const t = (e.event_type || e.sub_event_type || 'Other').toString();
       if (t !== xfType) continue;
       const d = e.event_date;
@@ -333,7 +365,14 @@ function renderEventTypesChart(state) {
   window.CP = window.CP || {};
   window.CP.filters = window.CP.filters || {};
 
-  const allEvents = (state.events && state.events.length) ? state.events : (window.THESIS_EVENTS || []);
+  // Oil-relevance filter: §03 is "Event Type Mix" — purpose is to show
+  // what KIND of oil-impacting activity dominates. Protests/riots aren't
+  // oil-impacting, so they're filtered out before the type-counting
+  // happens. Without this the donut was dominated by Yemeni civilian
+  // protests, drowning out the actual maritime / military events that
+  // the chart claims to be about.
+  const rawEvents = (state.events && state.events.length) ? state.events : (window.THESIS_EVENTS || []);
+  const allEvents = oilRelevant(rawEvents);
   if (!allEvents.length) {
     destroyChartOn(canvas);
     window.addEventListener('events-ready',        () => renderEventTypesChart(window.CP.state), { once: true });
@@ -406,6 +445,7 @@ function renderEventTypesChart(state) {
     }
     subtitleEl.innerHTML =
       `Event-type breakdown from ACLED row-level data, last 90 days through <b>${newestLabel}</b>. ` +
+      `<b>Filter:</b> oil-relevant types only (battles, explosions/remote violence, violence against civilians, strategic developments). Civilian protests and riots are excluded — they don't move oil markets. ` +
       `Categories shown here have a ~12-month publication delay; <b>live monthly counts</b> for the current war period are on the §01 chart and the chokepoint cards (HDX mirror, no embargo).${badge} Click a wedge to cross-filter.`;
   }
 
@@ -510,7 +550,13 @@ function updateIncidentsKpi() {
   const deltaEl = document.querySelector('[data-kpi="incidents30Delta"]');
   const sel = window.CP && window.CP.filters && window.CP.filters.eventType;
   const tlTs = tlCutoffTs();
-  const events = (window.CP && window.CP.state && window.CP.state.events) || window.THESIS_EVENTS || [];
+  // Hero "INCIDENTS · 30D" counts oil-impacting events only — strip
+  // protests/riots from the dataset before counting. This matches the
+  // server-side chokepoint_incidents filter and the chokepoint card
+  // sub-label "(THESIS WINDOW · excl. protests)".
+  const events = oilRelevant(
+    (window.CP && window.CP.state && window.CP.state.events) || window.THESIS_EVENTS || []
+  );
 
   // Compute current 30-day count and prior 30-day count for the delta display.
   // Even when scrubber is at "now" we want the delta vs the prior 30 days, so
@@ -694,22 +740,115 @@ function renderScatter(state) {
   const ts = applyTimelineRows((state.master && state.master.timeseries) || []);
   if (!ts.length) return showChartEmpty(canvas, 'scatter unavailable');
 
-  const pts = ts
-    .filter(r => r.weekly_attacks != null && r.daily_volatility != null)
-    .map(r => ({ x: +r.weekly_attacks, y: +r.daily_volatility * Math.sqrt(252) * 100 }));
-  if (!pts.length) return showChartEmpty(canvas, 'scatter unavailable');
+  // Two regimes mixed in the same x/y space:
+  //   • THESIS WINDOW (Oct 2023 – Sep 2025): WeeklyAttackFreq is a curated
+  //     count of HOUTHI MARITIME strikes. x usually 0–47.
+  //   • LIVE EXTENSION (Oct 2025 – today):  weekly_attacks is HDX Yemen + Iran
+  //     political-violence events (no protests). x usually 50–250.
+  // Same chart, different units. The previous render plotted them as a
+  // single uniform cloud which collapsed the thesis points into a vertical
+  // bar near x=0 and made the chart look broken. Solution: color by regime
+  // so the user sees the regime shift, plus an OLS trendline per regime so
+  // the actual relationship is legible.
+  const THESIS_END = '2025-10-01';
+  const thesisPts = [];
+  const livePts = [];
+  for (const r of ts) {
+    if (r.weekly_attacks == null || r.daily_volatility == null) continue;
+    const x = +r.weekly_attacks;
+    const y = +r.daily_volatility * Math.sqrt(252) * 100;
+    if (!isFinite(x) || !isFinite(y)) continue;
+    const pt = { x, y };
+    if (r.date && r.date <= THESIS_END) thesisPts.push(pt);
+    else                                  livePts.push(pt);
+  }
+  if (!thesisPts.length && !livePts.length) return showChartEmpty(canvas, 'scatter unavailable');
+
+  // Simple OLS fit per regime: slope = cov(x,y)/var(x). Returns the
+  // [{x: minX, y: yhat}, {x: maxX, y: yhat}] segment for plotting.
+  function olsSegment(pts) {
+    if (pts.length < 3) return null;
+    const n = pts.length;
+    let sx = 0, sy = 0, sxy = 0, sxx = 0;
+    for (const p of pts) { sx += p.x; sy += p.y; sxy += p.x * p.y; sxx += p.x * p.x; }
+    const mx = sx / n, my = sy / n;
+    const denom = sxx - n * mx * mx;
+    if (denom <= 0) return null;
+    const slope = (sxy - n * mx * my) / denom;
+    const intercept = my - slope * mx;
+    const xs = pts.map(p => p.x);
+    const xMin = Math.min(...xs), xMax = Math.max(...xs);
+    return {
+      seg: [{ x: xMin, y: intercept + slope * xMin }, { x: xMax, y: intercept + slope * xMax }],
+      slope,
+      r2: (() => {
+        let ssTot = 0, ssRes = 0;
+        for (const p of pts) {
+          ssTot += (p.y - my) ** 2;
+          const yhat = intercept + slope * p.x;
+          ssRes += (p.y - yhat) ** 2;
+        }
+        return ssTot > 0 ? 1 - ssRes / ssTot : null;
+      })(),
+    };
+  }
+  const thesisFit = olsSegment(thesisPts);
+  const liveFit   = olsSegment(livePts);
+
+  const datasets = [];
+  if (thesisPts.length) {
+    datasets.push({
+      label: `Thesis · Houthi maritime (n=${thesisPts.length})`,
+      type: 'scatter', data: thesisPts,
+      backgroundColor: 'rgba(255,82,82,0.55)', borderColor: '#ff5252',
+      pointRadius: 3, pointHoverRadius: 5,
+    });
+  }
+  if (livePts.length) {
+    datasets.push({
+      label: `Live · HDX Yemen + Iran (n=${livePts.length})`,
+      type: 'scatter', data: livePts,
+      backgroundColor: 'rgba(255,170,0,0.55)', borderColor: '#ffaa00',
+      pointRadius: 3, pointHoverRadius: 5,
+    });
+  }
+  if (thesisFit) {
+    datasets.push({
+      label: `OLS · thesis (β=${thesisFit.slope.toFixed(2)}, R²=${(thesisFit.r2 || 0).toFixed(2)})`,
+      type: 'line', data: thesisFit.seg, borderColor: '#ff5252', borderWidth: 1.5,
+      borderDash: [4, 4], pointRadius: 0, fill: false, tension: 0,
+    });
+  }
+  if (liveFit) {
+    datasets.push({
+      label: `OLS · live (β=${liveFit.slope.toFixed(2)}, R²=${(liveFit.r2 || 0).toFixed(2)})`,
+      type: 'line', data: liveFit.seg, borderColor: '#ffaa00', borderWidth: 1.5,
+      borderDash: [4, 4], pointRadius: 0, fill: false, tension: 0,
+    });
+  }
 
   new Chart(canvas, {
-    type: 'scatter',
-    data: { datasets: [{ data: pts, backgroundColor: 'rgba(0,212,255,0.55)', pointRadius: 3.5, borderColor: C_CYAN }] },
+    data: { datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { labels: { color: '#dfe7f0', boxWidth: 12, font: { size: 10 } } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              if (ctx.dataset.type !== 'scatter') return ctx.dataset.label;
+              return `${ctx.parsed.x.toFixed(0)} attacks → ${ctx.parsed.y.toFixed(1)}% ann. vol`;
+            },
+          },
+        },
+      },
       scales: {
-        x: { title: { display: true, text: 'WEEKLY ATTACKS', color: '#556475' }, ticks: { color: '#8f9db0' }, grid: { color: 'rgba(0,212,255,0.05)' } },
-        y: { title: { display: true, text: 'ANNUALIZED VOL %', color: '#556475' }, ticks: { color: '#8f9db0', callback: v => v + '%' }, grid: { color: 'rgba(0,212,255,0.05)' } }
-      }
-    }
+        x: { type: 'linear', title: { display: true, text: 'WEEKLY EVENTS (varies by regime — see legend)', color: '#556475', font: { size: 10 } },
+             ticks: { color: '#8f9db0' }, grid: { color: 'rgba(0,212,255,0.05)' } },
+        y: { title: { display: true, text: 'ANNUALIZED BRENT VOLATILITY (%)', color: '#556475', font: { size: 10 } },
+             ticks: { color: '#8f9db0', callback: v => v + '%' }, grid: { color: 'rgba(0,212,255,0.05)' } },
+      },
+    },
   });
 }
 
