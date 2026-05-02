@@ -584,27 +584,24 @@ button { font-family: inherit; cursor: pointer; }
   height: 320px;
 }
 /* Side-by-side scatter pair (§05). Each panel renders one regime with
-   its own axis scale, much more readable than overlaying two regimes
-   with very different x-ranges on a shared axis. */
-.chart-surface.scatter-pair {
+   its own axis scale. Chart.js's responsive sizing requires the
+   canvas's IMMEDIATE parent to be position:relative with an explicit
+   pixel height — putting the canvas as a flex child of a grid item
+   never gets stable dimensions, which is why the previous attempt
+   rendered as 0×0 boxes. The .scatter-panel-canvas wrapper provides
+   that explicit relative+sized container. */
+.scatter-pair {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-  height: 360px;
+  margin-top: 4px;
 }
 .scatter-panel {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
   background: rgba(0,212,255,0.02);
   border: 1px solid rgba(0,212,255,0.10);
   border-radius: 6px;
-  padding: 8px 10px;
-}
-.scatter-panel canvas {
-  flex: 1;
-  min-height: 0;
+  padding: 10px 12px 12px;
+  min-width: 0;
 }
 .scatter-panel-title {
   font-family: var(--mono);
@@ -612,15 +609,22 @@ button { font-family: inherit; cursor: pointer; }
   font-weight: 700;
   letter-spacing: 1.4px;
   color: var(--text-mute);
-  margin-bottom: 6px;
   text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.scatter-panel-canvas {
+  position: relative;
+  width: 100%;
+  height: 300px;       /* explicit; Chart.js measures from this */
+}
+.scatter-panel-canvas canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
 }
 @media (max-width: 760px) {
-  .chart-surface.scatter-pair {
-    grid-template-columns: 1fr;
-    height: auto;
-  }
-  .scatter-panel { height: 280px; }
+  .scatter-pair { grid-template-columns: 1fr; }
 }
 
 .narrative-row.two-col {
