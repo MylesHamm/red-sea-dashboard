@@ -583,6 +583,45 @@ button { font-family: inherit; cursor: pointer; }
   width: 100%;
   height: 320px;
 }
+/* Side-by-side scatter pair (§05). Each panel renders one regime with
+   its own axis scale, much more readable than overlaying two regimes
+   with very different x-ranges on a shared axis. */
+.chart-surface.scatter-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  height: 360px;
+}
+.scatter-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: rgba(0,212,255,0.02);
+  border: 1px solid rgba(0,212,255,0.10);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.scatter-panel canvas {
+  flex: 1;
+  min-height: 0;
+}
+.scatter-panel-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  color: var(--text-mute);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+@media (max-width: 760px) {
+  .chart-surface.scatter-pair {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .scatter-panel { height: 280px; }
+}
 
 .narrative-row.two-col {
   display: grid;

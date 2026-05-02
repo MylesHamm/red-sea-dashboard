@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
 
-<link rel="stylesheet" href="assets/app.css?v=20260502a">
+<link rel="stylesheet" href="assets/app.css?v=20260502b">
 </head>
 <body>
 
@@ -607,13 +607,22 @@
         <div class="nb-header">
           <div class="nb-index">§ 05</div>
           <div>
-            <h2 class="nb-title">Attacks vs Volatility</h2>
+            <h2 class="nb-title">Attacks vs Volatility · Side-by-Side by Regime</h2>
             <p class="nb-subtitle">
-              Each point is one week of trading: <b>x = events that week</b>, <b>y = annualized Brent volatility</b> (daily-return std × √252). <b>Red</b> = thesis-window Houthi maritime strikes (Oct 2023 – Sep 2025, n≈100). <b>Gold</b> = live HDX Yemen+Iran political-violence events from Oct 2025 onward. The two regimes use different units (curated maritime vs. HDX broad violence), so they live on the same axes but tell different stories — the dashed lines are independent OLS fits within each regime; β is the slope (volatility points added per extra weekly event), R² is the fit quality. A flatter line means attacks don't drive vol; a steeper line means they do.
+              Each point is one week: <b>x = events that week</b>, <b>y = annualized Brent volatility</b> (daily-return std × √252). The two regimes use different units (curated maritime vs. broad political violence), so they're plotted as <b>two separate panels with their own axis scales</b> — much more readable than overlaying them on a shared axis, where the thesis cluster (x ≤ 47) collapses against the war cluster (x up to 250). <b>β</b> is the OLS slope (volatility points added per extra weekly event); <b>R²</b> is fit quality. Flatter line = attacks don't drive vol; steeper = they do.
             </p>
           </div>
         </div>
-        <div class="chart-surface"><canvas id="scatterChart"></canvas></div>
+        <div class="chart-surface scatter-pair">
+          <div class="scatter-panel">
+            <div class="scatter-panel-title">Thesis · Houthi Maritime · Oct 2023 – Sep 2025</div>
+            <canvas id="scatterChartThesis"></canvas>
+          </div>
+          <div class="scatter-panel">
+            <div class="scatter-panel-title">Live · HDX Yemen + Iran · Oct 2025 – present</div>
+            <canvas id="scatterChartLive"></canvas>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -830,12 +839,12 @@
 </div>
 
 <!-- Scripts -->
-<script src="assets/api.js?v=20260502a"></script>
-<script src="assets/data.js?v=20260502a"></script>
-<script src="assets/hydrate.js?v=20260502a"></script>
-<script src="assets/globe.js?v=20260502a"></script>
-<script src="assets/tacmap.js?v=20260502a"></script>
-<script src="assets/charts.js?v=20260502a"></script>
-<script src="assets/app.js?v=20260502a"></script>
+<script src="assets/api.js?v=20260502b"></script>
+<script src="assets/data.js?v=20260502b"></script>
+<script src="assets/hydrate.js?v=20260502b"></script>
+<script src="assets/globe.js?v=20260502b"></script>
+<script src="assets/tacmap.js?v=20260502b"></script>
+<script src="assets/charts.js?v=20260502b"></script>
+<script src="assets/app.js?v=20260502b"></script>
 </body>
 </html>

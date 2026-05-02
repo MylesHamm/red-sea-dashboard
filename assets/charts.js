@@ -732,24 +732,33 @@ function renderPriceWindow(state) {
 // Scatter: Weekly attacks vs volatility
 // ═══════════════════════════════════════════════════════════════════════════
 function renderScatter(state) {
-  const canvas = chartEl('scatterChart');
-  if (!canvas) return;
-  destroyChartOn(canvas);
-  showXfBanner(canvas, xfActiveType());
-
-  const ts = applyTimelineRows((state.master && state.master.timeseries) || []);
-  if (!ts.length) return showChartEmpty(canvas, 'scatter unavailable');
-
-  // Two regimes mixed in the same x/y space:
+  // Two regimes with very different unit scales:
   //   • THESIS WINDOW (Oct 2023 – Sep 2025): WeeklyAttackFreq is a curated
   //     count of HOUTHI MARITIME strikes. x usually 0–47.
   //   • LIVE EXTENSION (Oct 2025 – today):  weekly_attacks is HDX Yemen + Iran
   //     political-violence events (no protests). x usually 50–250.
-  // Same chart, different units. The previous render plotted them as a
-  // single uniform cloud which collapsed the thesis points into a vertical
-  // bar near x=0 and made the chart look broken. Solution: color by regime
-  // so the user sees the regime shift, plus an OLS trendline per regime so
-  // the actual relationship is legible.
+  //
+  // Plotting them on a shared x-axis collapses the thesis cluster into the
+  // left ~20% of the chart and the live cluster into the right ~80% with
+  // empty middle space — unreadable.
+  //
+  // Solution: side-by-side small multiples. Each regime gets its own
+  // canvas with its own axis scale. The user immediately sees the within-
+  // regime relationship (slope of OLS fit) and the regime shift between
+  // panels without any scale-distortion artifacts.
+  const thesisCanvas = chartEl('scatterChartThesis');
+  const liveCanvas   = chartEl('scatterChartLive');
+  if (!thesisCanvas && !liveCanvas) return;
+  if (thesisCanvas) destroyChartOn(thesisCanvas);
+  if (liveCanvas)   destroyChartOn(liveCanvas);
+
+  const ts = applyTimelineRows((state.master && state.master.timeseries) || []);
+  if (!ts.length) {
+    if (thesisCanvas) showChartEmpty(thesisCanvas, 'scatter unavailable');
+    if (liveCanvas)   showChartEmpty(liveCanvas,   'scatter unavailable');
+    return;
+  }
+
   const THESIS_END = '2025-10-01';
   const thesisPts = [];
   const livePts = [];
@@ -762,10 +771,10 @@ function renderScatter(state) {
     if (r.date && r.date <= THESIS_END) thesisPts.push(pt);
     else                                  livePts.push(pt);
   }
-  if (!thesisPts.length && !livePts.length) return showChartEmpty(canvas, 'scatter unavailable');
 
-  // Simple OLS fit per regime: slope = cov(x,y)/var(x). Returns the
-  // [{x: minX, y: yhat}, {x: maxX, y: yhat}] segment for plotting.
+  // OLS fit helper. Returns slope, intercept, R², and the line segment
+  // covering the actual x-range of the data so the dashed trendline
+  // doesn't extrapolate into empty space.
   function olsSegment(pts) {
     if (pts.length < 3) return null;
     const n = pts.length;
@@ -778,78 +787,74 @@ function renderScatter(state) {
     const intercept = my - slope * mx;
     const xs = pts.map(p => p.x);
     const xMin = Math.min(...xs), xMax = Math.max(...xs);
+    let ssTot = 0, ssRes = 0;
+    for (const p of pts) {
+      ssTot += (p.y - my) ** 2;
+      const yhat = intercept + slope * p.x;
+      ssRes += (p.y - yhat) ** 2;
+    }
     return {
       seg: [{ x: xMin, y: intercept + slope * xMin }, { x: xMax, y: intercept + slope * xMax }],
       slope,
-      r2: (() => {
-        let ssTot = 0, ssRes = 0;
-        for (const p of pts) {
-          ssTot += (p.y - my) ** 2;
-          const yhat = intercept + slope * p.x;
-          ssRes += (p.y - yhat) ** 2;
-        }
-        return ssTot > 0 ? 1 - ssRes / ssTot : null;
-      })(),
+      r2: ssTot > 0 ? 1 - ssRes / ssTot : null,
+      n,
     };
   }
-  const thesisFit = olsSegment(thesisPts);
-  const liveFit   = olsSegment(livePts);
 
-  const datasets = [];
-  if (thesisPts.length) {
-    datasets.push({
-      label: `Thesis · Houthi maritime (n=${thesisPts.length})`,
-      type: 'scatter', data: thesisPts,
-      backgroundColor: 'rgba(255,82,82,0.55)', borderColor: '#ff5252',
-      pointRadius: 3, pointHoverRadius: 5,
-    });
-  }
-  if (livePts.length) {
-    datasets.push({
-      label: `Live · HDX Yemen + Iran (n=${livePts.length})`,
-      type: 'scatter', data: livePts,
-      backgroundColor: 'rgba(255,170,0,0.55)', borderColor: '#ffaa00',
-      pointRadius: 3, pointHoverRadius: 5,
-    });
-  }
-  if (thesisFit) {
-    datasets.push({
-      label: `OLS · thesis (β=${thesisFit.slope.toFixed(2)}, R²=${(thesisFit.r2 || 0).toFixed(2)})`,
-      type: 'line', data: thesisFit.seg, borderColor: '#ff5252', borderWidth: 1.5,
-      borderDash: [4, 4], pointRadius: 0, fill: false, tension: 0,
-    });
-  }
-  if (liveFit) {
-    datasets.push({
-      label: `OLS · live (β=${liveFit.slope.toFixed(2)}, R²=${(liveFit.r2 || 0).toFixed(2)})`,
-      type: 'line', data: liveFit.seg, borderColor: '#ffaa00', borderWidth: 1.5,
-      borderDash: [4, 4], pointRadius: 0, fill: false, tension: 0,
-    });
-  }
-
-  new Chart(canvas, {
-    data: { datasets },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { labels: { color: '#dfe7f0', boxWidth: 12, font: { size: 10 } } },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => {
-              if (ctx.dataset.type !== 'scatter') return ctx.dataset.label;
-              return `${ctx.parsed.x.toFixed(0)} attacks → ${ctx.parsed.y.toFixed(1)}% ann. vol`;
+  function renderPanel(canvas, pts, color, regimeLabel) {
+    if (!canvas) return;
+    if (!pts.length) {
+      showChartEmpty(canvas, regimeLabel + ' · no data in window');
+      return;
+    }
+    const fit = olsSegment(pts);
+    const datasets = [
+      {
+        label: `${regimeLabel} (n=${pts.length})`,
+        type: 'scatter', data: pts,
+        backgroundColor: color + '88',
+        borderColor: color,
+        pointRadius: 3.5, pointHoverRadius: 6,
+      },
+    ];
+    if (fit) {
+      datasets.push({
+        label: `OLS · β=${fit.slope.toFixed(3)} · R²=${(fit.r2 || 0).toFixed(2)}`,
+        type: 'line', data: fit.seg,
+        borderColor: color, borderWidth: 1.5, borderDash: [5, 4],
+        pointRadius: 0, fill: false, tension: 0,
+      });
+    }
+    new Chart(canvas, {
+      data: { datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#dfe7f0', boxWidth: 10, font: { size: 9 }, padding: 6 } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                if (ctx.dataset.type !== 'scatter') return ctx.dataset.label;
+                return `${ctx.parsed.x.toFixed(0)} events → ${ctx.parsed.y.toFixed(1)}% ann. vol`;
+              },
             },
           },
         },
+        scales: {
+          x: { type: 'linear',
+               title: { display: true, text: 'WEEKLY EVENTS', color: '#556475', font: { size: 9 } },
+               ticks: { color: '#8f9db0', font: { size: 9 } },
+               grid: { color: 'rgba(0,212,255,0.05)' } },
+          y: { title: { display: true, text: 'ANNUALIZED VOL (%)', color: '#556475', font: { size: 9 } },
+               ticks: { color: '#8f9db0', font: { size: 9 }, callback: v => v + '%' },
+               grid: { color: 'rgba(0,212,255,0.05)' } },
+        },
       },
-      scales: {
-        x: { type: 'linear', title: { display: true, text: 'WEEKLY EVENTS (varies by regime — see legend)', color: '#556475', font: { size: 10 } },
-             ticks: { color: '#8f9db0' }, grid: { color: 'rgba(0,212,255,0.05)' } },
-        y: { title: { display: true, text: 'ANNUALIZED BRENT VOLATILITY (%)', color: '#556475', font: { size: 10 } },
-             ticks: { color: '#8f9db0', callback: v => v + '%' }, grid: { color: 'rgba(0,212,255,0.05)' } },
-      },
-    },
-  });
+    });
+  }
+
+  renderPanel(thesisCanvas, thesisPts, '#ff5252', 'Thesis · Houthi');
+  renderPanel(liveCanvas,   livePts,   '#ffaa00', 'Live · HDX Yemen+Iran');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
