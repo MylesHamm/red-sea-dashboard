@@ -729,49 +729,75 @@
     const labels = sorted.map(r => r.date);
     const values = sorted.map(r => +r.value);
 
-    // Build a 7-day simple moving average to smooth the day-to-day noise
-    const sma = values.map((_, i) => {
-      const window = values.slice(Math.max(0, i - 6), i + 1);
-      return window.reduce((s, v) => s + v, 0) / window.length;
+    // Pull Brent daily closes for the SAME date window so the chart can
+    // visually validate the subtitle's claim ("swings precede price
+    // spikes"). Replaces the previous 7-day-avg-of-tone series, which
+    // was double-smoothing the same data instead of giving the user a
+    // second signal to compare against.
+    const brent = (window.CP && window.CP.state && Array.isArray(window.CP.state.brent))
+      ? window.CP.state.brent : [];
+    const brentByDate = new Map();
+    for (const r of brent) brentByDate.set(r.date, +r.price);
+    // Align Brent to the tone date axis. Markets close weekends/holidays
+    // so Brent is sparse on those days; carry the prior trading-day's
+    // close forward so the line is continuous and visually parseable.
+    let lastClose = null;
+    const brentSeries = labels.map(d => {
+      if (brentByDate.has(d)) {
+        lastClose = brentByDate.get(d);
+        return lastClose;
+      }
+      return lastClose;  // forward-fill for non-trading days
     });
+    const brentHasData = brentSeries.some(v => v != null);
 
     if (__gdeltChartInstance) {
       try { __gdeltChartInstance.destroy(); } catch (_) {}
     }
+    const datasets = [
+      {
+        label: 'Daily tone',
+        data: values,
+        borderColor: 'rgba(61, 153, 212, 0.55)',
+        backgroundColor: 'rgba(61, 153, 212, 0.10)',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.2,
+        yAxisID: 'yTone',
+      },
+    ];
+    if (brentHasData) {
+      datasets.push({
+        label: 'Brent close ($/bbl)',
+        data: brentSeries,
+        borderColor: '#ffaa00',
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+        tension: 0.2,
+        spanGaps: true,
+        yAxisID: 'yBrent',
+      });
+    }
     __gdeltChartInstance = new Chart(canvas.getContext('2d'), {
       type: 'line',
-      data: {
-        labels,
-        datasets: [
-          {
-            label: 'Daily tone',
-            data: values,
-            borderColor: 'rgba(61, 153, 212, 0.45)',
-            backgroundColor: 'rgba(61, 153, 212, 0.08)',
-            borderWidth: 1,
-            pointRadius: 0,
-            fill: true,
-            tension: 0.2,
-          },
-          {
-            label: '7-day avg',
-            data: sma,
-            borderColor: '#ff5252',
-            borderWidth: 2,
-            pointRadius: 0,
-            fill: false,
-            tension: 0.25,
-          },
-        ],
-      },
+      data: { labels, datasets },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: { labels: { color: '#c8d0dc', font: { family: 'JetBrains Mono', size: 10 } } },
           tooltip: {
             callbacks: {
-              label: (ctx) => `${ctx.dataset.label}: ${(+ctx.parsed.y).toFixed(2)}`,
+              label: (ctx) => {
+                const v = +ctx.parsed.y;
+                if (ctx.dataset.label && ctx.dataset.label.startsWith('Brent')) {
+                  return `${ctx.dataset.label}: $${v.toFixed(2)}`;
+                }
+                return `${ctx.dataset.label}: ${v.toFixed(2)}`;
+              },
             },
           },
         },
@@ -780,10 +806,20 @@
             ticks: { color: '#7e8699', font: { family: 'JetBrains Mono', size: 9 }, maxTicksLimit: 8 },
             grid: { color: 'rgba(255,255,255,0.04)' },
           },
-          y: {
-            ticks: { color: '#7e8699', font: { family: 'JetBrains Mono', size: 9 } },
+          yTone: {
+            type: 'linear',
+            position: 'left',
+            ticks: { color: 'rgba(61, 153, 212, 0.85)', font: { family: 'JetBrains Mono', size: 9 } },
             grid: { color: 'rgba(255,255,255,0.05)' },
-            title: { display: true, text: 'Average tone', color: '#9099aa', font: { size: 10 } },
+            title: { display: true, text: 'GDELT TONE', color: 'rgba(61, 153, 212, 0.85)', font: { size: 10, weight: 'bold' } },
+          },
+          yBrent: {
+            type: 'linear',
+            position: 'right',
+            display: brentHasData,
+            ticks: { color: '#ffaa00', font: { family: 'JetBrains Mono', size: 9 }, callback: v => '$' + v },
+            grid: { display: false },
+            title: { display: true, text: 'BRENT $/bbl', color: '#ffaa00', font: { size: 10, weight: 'bold' } },
           },
         },
       },
