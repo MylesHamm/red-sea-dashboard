@@ -1031,17 +1031,30 @@ function renderIranTimeline(state) {
       if (y == null) y = row.price;
     }
     const match = xfMatchesIranType(xf, e.type);
+    // Visual distinction between curated (solid filled circle) and live
+    // news (hollow ring with the type's color as the stroke). Live
+    // markers are smaller so the curated war-period events still
+    // dominate the eye but post-cutoff continuation is clearly visible.
+    const isLive = e.source === 'live-news';
+    const color = eventColor(e.type);
     return {
-      label: e.label,
+      label: e.label + (isLive ? ' · LIVE' : ''),
       type: 'scatter',
       data: [{ x, y }],
-      backgroundColor: match ? eventColor(e.type) : (eventColor(e.type) + '30'),
-      borderColor: match ? '#fff' : 'rgba(255,255,255,0.2)',
-      borderWidth: 1.5,
-      pointRadius:      match ? 7  : 4,
-      pointHoverRadius: match ? 10 : 5,
+      backgroundColor: isLive
+        ? 'rgba(0,0,0,0)'                                                // hollow for live
+        : (match ? color : color + '30'),                                // solid for curated
+      borderColor: isLive
+        ? (match ? color : color + '60')                                 // colored ring
+        : (match ? '#fff' : 'rgba(255,255,255,0.2)'),
+      borderWidth: isLive ? 2 : 1.5,
+      pointRadius:      isLive ? (match ? 5 : 3) : (match ? 7 : 4),
+      pointHoverRadius: isLive ? (match ? 8 : 4) : (match ? 10 : 5),
       pointStyle: 'circle',
-      order: 0
+      order: 0,
+      // Carry source through so the tooltip can show "LIVE NEWS" vs "CURATED"
+      _evSource: e.source,
+      _evUrl: e.url || null,
     };
   }).filter(Boolean);
 
@@ -1069,9 +1082,14 @@ function renderIranTimeline(state) {
               if (it && it.dataset && it.dataset.type === 'scatter') return it.dataset.label;
               return it ? it.label : '';
             },
-            label: ctx => ctx.dataset.type === 'scatter'
-              ? `${ctx.parsed.x} — $${ctx.parsed.y}`
-              : `Brent  $${ctx.parsed.y}`
+            label: ctx => {
+              if (ctx.dataset.type === 'scatter') {
+                const src = ctx.dataset._evSource === 'live-news'
+                  ? '· LIVE NEWS' : '· CURATED';
+                return `${ctx.parsed.x} — $${ctx.parsed.y} ${src}`;
+              }
+              return `Brent  $${ctx.parsed.y}`;
+            }
           }
         }
       },

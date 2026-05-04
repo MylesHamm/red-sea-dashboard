@@ -927,16 +927,69 @@
   // ── Iran curated events timeline (for chart + event markers) ──────────────
   function hydrateIranEvents(iranResp) {
     const curated = (iranResp && Array.isArray(iranResp.curated)) ? iranResp.curated : [];
-    // Normalize to shape used by charts.js
-    // Note: the backend's curated events don't carry brent_price — the chart
-    // looks up the nearest Brent trading-day price at render time. So we only
-    // require a valid date here, not a pre-joined price.
-    window.IRAN_EVENTS = curated.map(e => ({
+    const news    = (iranResp && Array.isArray(iranResp.news))    ? iranResp.news    : [];
+
+    // Normalize curated entries first — these are the hand-built war-period
+    // timeline (highest editorial quality, but the list ends at whatever
+    // date the dev last edited).
+    const curatedEvents = curated.map(e => ({
       date:  e.date,
       type:  (e.type || e.category || 'diplomatic').toLowerCase(),
       label: e.label || e.title || e.name || '',
       price: e.brent_price != null ? +e.brent_price : null,
-    })).filter(e => e.date).sort((a, b) => a.date.localeCompare(b.date));
+      source: 'curated',
+    })).filter(e => e.date);
+
+    // Find the curated cutoff so we know where to splice live news in.
+    let curatedCutoff = '';
+    for (const e of curatedEvents) if (e.date > curatedCutoff) curatedCutoff = e.date;
+
+    // Live-news markers fill the post-curated gap. Without this, the §09
+    // chart's price line continues live but event dots stop dead at the
+    // curated list's last date — making the chart look "broken" even
+    // though it's accurate. We promote only news items that look like
+    // discrete events (military / diplomatic / sanctions / nuclear / proxy)
+    // and that are dated AFTER the curated cutoff so we don't double-mark
+    // events that already have a curated entry.
+    //
+    // Headline filter: lower-case keyword match on a small whitelist of
+    // war-relevant verbs ("strike", "attack", "missile", "tanker",
+    // "ceasefire", etc.) to avoid every politics article ending up on
+    // the chart. Cap to 30 newest so we don't crater the chart's
+    // legibility with dot soup.
+    const LIVE_KEYWORDS = [
+      'strike', 'strikes', 'struck', 'attack', 'attacks', 'attacked',
+      'missile', 'missiles', 'drone', 'drones', 'shot down', 'shoots down',
+      'tanker', 'tankers', 'hormuz', 'oil', 'crude', 'shipping',
+      'killed', 'casualties', 'troops', 'naval', 'navy', 'irgc',
+      'sanction', 'sanctions', 'sanctioned',
+      'nuclear', 'enrichment', 'iaea', 'uranium',
+      'ceasefire', 'truce', 'talks', 'negotiat', 'deal',
+      'seize', 'seized', 'sink', 'sinks', 'sunk', 'mine', 'mined', 'mines',
+      'blockade', 'closes', 'closed', 'closure', 'reopens', 'reopened',
+    ];
+    function _looksLikeEvent(title) {
+      if (!title) return false;
+      const t = title.toLowerCase();
+      return LIVE_KEYWORDS.some(kw => t.includes(kw));
+    }
+
+    const liveEvents = news
+      .filter(n => n && n.date && (!curatedCutoff || n.date > curatedCutoff))
+      .filter(n => _looksLikeEvent(n.title))
+      .map(n => ({
+        date:   n.date,
+        type:   (n.type || n.category || 'military').toLowerCase(),
+        label:  n.title || '',
+        price:  null,
+        source: 'live-news',
+        url:    n.url || null,
+      }))
+      .sort((a, b) => b.date.localeCompare(a.date))   // newest first
+      .slice(0, 30);                                   // cap to 30 markers
+
+    window.IRAN_EVENTS = [...curatedEvents, ...liveEvents]
+      .sort((a, b) => a.date.localeCompare(b.date));
   }
 
   // ── Tactical-side stats (Geospatial tab) — count events by region.
