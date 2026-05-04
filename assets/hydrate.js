@@ -791,6 +791,38 @@
   }
 
   // ── News & event feed ─────────────────────────────────────────────────────
+  // Merge live Google News + curated war-period events into a single
+  // sorted feed. Either source can be empty (Google News rate-limits
+  // routinely, the backend's curated list is always present), so the
+  // panel never goes blank as long as ONE of them has data.
+  // De-dupes by title prefix so a curated event won't duplicate a live
+  // headline that covers the same incident.
+  function _mergeFeedItems(iranResp) {
+    const news    = (iranResp && Array.isArray(iranResp.news))    ? iranResp.news    : [];
+    const curated = (iranResp && Array.isArray(iranResp.curated)) ? iranResp.curated : [];
+    const seen = new Set();
+    const out = [];
+    // Live news first (most recent real-world reporting); curated backfills.
+    for (const arr of [news, curated]) {
+      for (const item of arr) {
+        const key = (item && item.title || '').toLowerCase().slice(0, 60);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push(item);
+      }
+    }
+    // Sort descending by date so the freshest item is always first,
+    // regardless of which source it came from.
+    out.sort((a, b) => {
+      const da = (a.published_at || a.date || '').slice(0, 10);
+      const db = (b.published_at || b.date || '').slice(0, 10);
+      return db.localeCompare(da);
+    });
+    return out;
+  }
+  // Exposed for the delayed-retry path so it doesn't have to inline the merge.
+  window.__mergeFeedItems = _mergeFeedItems;
+
   function hydrateFeed(news) {
     const feed = $('feedList');
     if (!feed) return;
@@ -798,13 +830,16 @@
     // without needing a refetch.
     if (Array.isArray(news)) window.__feedRaw = news;
     const raw = Array.isArray(news) ? news : (window.__feedRaw || []);
-    // Apply temporal scrubber: drop items published after the scrubbed date.
+    // Apply temporal scrubber: drop items dated after the scrubbed date.
+    // Read date from either `published_at` (legacy news) or `date`
+    // (Google News + curated events both use this field).
     const tl = window.CP && window.CP.timeline;
     const cutoffMs = (tl && !tl.atNow) ? tl.ts : null;
     const tlFiltered = cutoffMs
       ? raw.filter(n => {
-          if (!n.published_at) return true;
-          const t = Date.parse(n.published_at);
+          const ds = n.published_at || n.date;
+          if (!ds) return true;
+          const t = Date.parse(ds);
           return isNaN(t) || t <= cutoffMs;
         })
       : raw;
@@ -848,15 +883,30 @@
       return;
     }
     feed.innerHTML = items.map(n => {
-      const d = n.published_at ? new Date(n.published_at) : null;
-      const time = d && !isNaN(d) ? `${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}Z` : '—';
+      // Time/date display: prefer published_at (with HH:MM if available),
+      // fall back to date field (DD MMM). Both news and curated events
+      // have at least a date; only news has wall-clock time.
+      const ds = n.published_at || n.date || '';
+      const d = ds ? new Date(ds) : null;
+      let when = '—';
+      if (d && !isNaN(d)) {
+        if (n.published_at) {
+          when = `${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}Z`;
+        } else {
+          const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+          when = `${String(d.getUTCDate()).padStart(2,'0')} ${months[d.getUTCMonth()]}`;
+        }
+      }
       const type = (n.category || n.type || 'diplomatic').toLowerCase();
+      // Source: live news has Google News source; curated events show
+      // "CURATED" so the user knows it's a hand-picked timeline entry.
+      const src = n.source || (n.auto === false || n.severity != null ? 'CURATED' : '');
       return `
         <div class="feed-item">
-          <span class="feed-time">${time}</span>
+          <span class="feed-time">${when}</span>
           <span class="feed-type ft-${type}">${type.toUpperCase()}</span>
           <span class="feed-title">${(n.title || '').replace(/</g, '&lt;')}</span>
-          <span class="feed-source">${(n.source || '').replace(/</g, '&lt;')}</span>
+          <span class="feed-source">${String(src).replace(/</g, '&lt;')}</span>
         </div>`;
     }).join('');
     window.FEED = items;
@@ -1301,7 +1351,7 @@
     hydrateChokepointDecline();
     hydrateHeroBody();
     hydrateScenarios(brent);
-    hydrateFeed((iranResp && iranResp.news) || []);
+    hydrateFeed(_mergeFeedItems(iranResp));
 
     // Hypothesis + GARCH (Analysis tab) — non-blocking; the cards show "—"
     // until this lands. Critical to fetch live: previous static markup carried
@@ -1311,9 +1361,12 @@
       .catch(() => {});
 
     // Iran-events first-fetch may have failed silently (Render free tier
-    // cold-start, transient network). Schedule a single background retry so
-    // the news feed and Iran timeline can populate without a manual refresh.
-    if (!iranResp || !Array.isArray(iranResp.news) || !iranResp.news.length) {
+    // cold-start, transient network). Schedule a single background retry
+    // so the news feed and Iran timeline can populate without a manual
+    // refresh. Retries when the merged feed is empty (covers both the
+    // "news fetch failed" and "curated unavailable" cases).
+    const _initialFeed = _mergeFeedItems(iranResp);
+    if (!_initialFeed.length) {
       setTimeout(() => {
         API.invalidate('/api/iran-events');
         API.iranEvents()
@@ -1321,8 +1374,7 @@
             if (!r) return;
             S.iran = r;
             hydrateIranEvents(r);
-            hydrateFeed((r && r.news) || []);
-            // Re-render Iran timeline with new curated events
+            hydrateFeed(_mergeFeedItems(r));
             try { renderIranTimeline && renderIranTimeline(window.CP.state); } catch (_) {}
           })
           .catch(() => {});
