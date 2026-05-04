@@ -75,6 +75,11 @@
   function hydrateFreshness(snap) {
     if (!snap || typeof snap !== 'object') return;
     window.FRESHNESS = snap;
+    // Hero eyebrow gets a live-source breakdown derived from the same
+    // snapshot so users see "🟢 MARKETS LIVE THROUGH 02 MAY 2026" instead
+    // of the old static "UPDATED HOURLY" text (which was both vague and
+    // sometimes wrong since some feeds update every 4h, others every 5min).
+    try { hydrateHeroEyebrow(snap); } catch (e) { console.warn('hero eyebrow render failed', e); }
 
     // Aggregate pill (top-right)
     const lvl = (snap.status && snap.status.level) || 'frozen';
@@ -173,6 +178,17 @@
       banner.textContent = errors
         ? `LIVE ACLED · HDX MIRROR · ${ctry} OF ${ctry + errors} COUNTRIES · THROUGH ${mon}`
         : `LIVE ACLED · HDX MIRROR · ${ctry} COUNTRIES · THROUGH ${mon}`;
+    }
+
+    // Bab body sentence — replaces the previously-static "100+ vessels
+    // since Nov 2023" claim with the live HDX Yemen monthly event count.
+    // Re-runs whenever LIVE_EVENT_COUNTS updates so the body sentence
+    // stays current.
+    const babLive = document.querySelector('[data-bab-live-events]');
+    const yemenRows = (snap.by_country && snap.by_country.yemen) || [];
+    if (babLive && yemenRows.length) {
+      const last = yemenRows[yemenRows.length - 1];
+      babLive.textContent = (last.events || 0).toLocaleString();
     }
   }
 
@@ -1070,6 +1086,59 @@
       const sign = d >= 0 ? '−' : '+';        // Decline is positive ⇒ display as "−42%"
       el.textContent = `${sign}${Math.abs(d).toFixed(0)}% vs. pre-Feb 2026`;
     });
+    // Bab body sentence — live HDX Yemen events count for the most recent
+    // available month. Replaces the static "100+ vessels since Nov 2023"
+    // claim that aged badly because the war has expanded since then.
+    const babLive = document.querySelector('[data-bab-live-events]');
+    if (babLive) {
+      const live = window.LIVE_EVENT_COUNTS;
+      const yemenRows = (live && live.by_country && live.by_country.yemen) || [];
+      if (yemenRows.length) {
+        const last = yemenRows[yemenRows.length - 1];
+        babLive.textContent = (last.events || 0).toLocaleString();
+      }
+    }
+  }
+
+  // ── Hero eyebrow — replace "UPDATED HOURLY" with an honest breakdown
+  // of which feeds are live and how recent each is. Pulled from the
+  // freshness snapshot so it stays accurate as data ages.
+  function hydrateHeroEyebrow(snap) {
+    const el = document.querySelector('[data-hero-eyebrow-live]');
+    if (!el || !snap) return;
+    const lvl = (snap.status && snap.status.level) || 'frozen';
+    const brentDate = snap.brent && snap.brent.newest_date;
+    const fmt = (d) => {
+      if (!d) return '';
+      const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+      const [y, m, dd] = d.split('-').map(Number);
+      return `${String(dd||1).padStart(2,'0')} ${months[(m||1)-1]} ${y}`;
+    };
+    const dot = lvl === 'live' ? '🟢' : lvl === 'stale' ? '🟡' : '🟠';
+    const tail = brentDate ? `MARKETS LIVE THROUGH ${fmt(brentDate)}` : 'LIVE FEEDS';
+    el.textContent = `${dot} ${tail}`;
+  }
+
+  // ── Hero body sentence — adapts the lead paragraph to the live threat
+  // data so the dashboard's headline narrative tracks reality. Three
+  // tiers based on Hormuz threat: NOMINAL/SAFE → "easing"; HIGH/ELEVATED
+  // → "pressure"; CRITICAL → "near-closure". Falls back to the original
+  // text if the threat data hasn't arrived yet.
+  function hydrateHeroBody() {
+    const el = document.querySelector('[data-hero-body]');
+    if (!el) return;
+    const h = window.CHOKEPOINTS && window.CHOKEPOINTS.hormuz;
+    const b = window.CHOKEPOINTS && window.CHOKEPOINTS.bab;
+    if (!h || !h.threat || !b) return;
+    const lines = {
+      critical: `<b>Hormuz transits have collapsed</b> (${h.pctDecline != null ? '−' + Math.abs(h.pctDecline).toFixed(0) + '% vs. pre-war' : 'severe decline'}) as the US–Iran war combines with continued Houthi pressure on Bab el-Mandeb. This is the most severe dual-chokepoint crisis since the 1980s Tanker War; the dashboard quantifies the market response.`,
+      high:     `<b>Hormuz under sustained pressure</b> (${h.pctDecline != null ? '−' + Math.abs(h.pctDecline).toFixed(0) + '% vs. pre-war transits' : 'transits declining'}) while Houthi maritime operations continue to threaten Bab el-Mandeb. This dashboard tracks the dual-chokepoint risk premium in real time.`,
+      elevated: `<b>Hormuz traffic degraded but flowing</b>; Houthi maritime operations continue to apply pressure on Bab el-Mandeb. The dashboard tracks how oil markets are pricing the dual-chokepoint risk.`,
+      safe:     `<b>Conditions easing across both chokepoints.</b> The dashboard continues to monitor traffic, incidents, and market signals for any re-escalation.`,
+      pending:  null,
+    };
+    const txt = lines[h.threat];
+    if (txt) el.innerHTML = txt;
   }
 
   // ── Scenario cards — recompute target ranges against live Brent ──
@@ -1230,6 +1299,7 @@
     hydrateChokepointCards();
     hydrateHeroFlowClaim();
     hydrateChokepointDecline();
+    hydrateHeroBody();
     hydrateScenarios(brent);
     hydrateFeed((iranResp && iranResp.news) || []);
 
