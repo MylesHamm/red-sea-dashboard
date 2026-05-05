@@ -357,6 +357,45 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) { /* non-fatal */ }
   }
 
+  // Apply the FMP intraday Brent quote to the hero KPI when dashboard-state
+  // reports it. Falls back silently to whatever hydrate.js wrote (EIA daily
+  // settle) if FMP is unavailable. Adds an "INTRADAY · FMP" badge so users
+  // know the price is minute-fresh, not yesterday's settle.
+  function _applyHeroBrentFromState(ds) {
+    const b = ds && ds.kpis && ds.kpis.brent;
+    if (!b || b.price == null) return;
+    const heroPriceEl = document.getElementById('heroPrice');
+    if (heroPriceEl) heroPriceEl.textContent = Number(b.price).toFixed(2);
+    // Threat-strip Brent
+    const threatBrent = document.getElementById('threatBrent');
+    if (threatBrent) threatBrent.textContent = '$' + Number(b.price).toFixed(2);
+    // Hero change line
+    const heroChange = document.getElementById('heroChange');
+    if (heroChange && b.change_24h != null) {
+      const c = +b.change_24h;
+      const p = b.change_24h_pct != null ? +b.change_24h_pct : null;
+      const arrow = c > 0 ? '▲' : c < 0 ? '▼' : '•';
+      const sign  = c > 0 ? '+' : '';
+      heroChange.innerHTML = `<span class="change-arrow">${arrow}</span> ${sign}$${c.toFixed(2)}` +
+        (p != null ? ` (${sign}${p.toFixed(2)}%)` : '') + ' · 24h';
+      heroChange.classList.toggle('up',   c > 0);
+      heroChange.classList.toggle('down', c < 0);
+    }
+    // Source/freshness badge — small text under the change line
+    const heroFoot = document.querySelector('.kpi-hero-foot');
+    if (heroFoot && b.source) {
+      let badge = heroFoot.querySelector('[data-brent-source-badge]');
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.setAttribute('data-brent-source-badge', '');
+        badge.style.cssText = 'opacity:0.55;font-size:9px;letter-spacing:1.5px;display:inline-block;margin-left:8px;color:' + (b.is_intraday ? '#3dd49b' : '#7e8699');
+        heroFoot.appendChild(badge);
+      }
+      badge.textContent = b.is_intraday ? 'INTRADAY · FMP' : 'EIA DAILY';
+      badge.style.color = b.is_intraday ? '#3dd49b' : '#7e8699';
+    }
+  }
+
   // Poll /api/dashboard-state and stash on window.__dashState. The poller
   // populates the hero KPI deck the moment the server responds, which is
   // typically faster than the master + iran-events round-trip the client
@@ -368,6 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (ds && ds.kpis) {
         window.__dashState = ds;
         refreshHeroIncidentsKpi();
+        _applyHeroBrentFromState(ds);
       }
     } catch (e) { /* non-fatal — fallback path will run */ }
   }

@@ -28,6 +28,13 @@ THESIS_EVENTS_PATH = DATA_DIR / "thesis_events.csv"
 EIA_API_KEY = os.environ.get("EIA_API_KEY", "")
 FRED_API_KEY = os.environ.get("FRED_API_KEY", "")
 
+# Financial Modeling Prep — intraday commodity quotes (Brent / WTI),
+# energy equity prices, real-time forex. Free tier handles ~250 calls/day,
+# more than enough for the dashboard's 60s polling cycle. Used to upgrade
+# the hero Brent KPI from EIA daily-settlement to real intraday and to
+# add an energy-equity context panel.
+FMP_API_KEY = os.environ.get("FMP_API_KEY", "")
+
 # ACLED OAuth Credentials
 ACLED_USERNAME = os.environ.get("ACLED_USERNAME", "")
 ACLED_PASSWORD = os.environ.get("ACLED_PASSWORD", "")

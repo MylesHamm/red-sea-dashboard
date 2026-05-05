@@ -131,16 +131,34 @@ async def get_dashboard_state():
         if cur is None or base in (None, 0): return None
         return round((cur - base) / base * 100, 2)
 
+    # Prefer FMP intraday for the live price; fall back to EIA daily settle.
+    # FMP gives minute-fresh BZUSD vs EIA's once-a-day prior-session close —
+    # closes the "no intraday data" gap that limited client-grade use.
+    fmp_q = data_service.fetch_fmp_brent_quote() if config.FMP_API_KEY else {}
+    fmp_price       = fmp_q.get("price")
+    fmp_change      = fmp_q.get("change")
+    fmp_change_pct  = fmp_q.get("change_pct")
+    has_intraday    = fmp_price is not None
+    eia_price       = (latest or {}).get("brent_price")
+    eia_prior       = (prior  or {}).get("brent_price")
+
     brent_kpi = {
-        "price":         (latest or {}).get("brent_price"),
-        "change_24h":    round((latest or {}).get("brent_price", 0) - (prior or {}).get("brent_price", 0), 2) if latest and prior else None,
-        "change_24h_pct": _pct((latest or {}).get("brent_price"), (prior or {}).get("brent_price")) if latest and prior else None,
-        "range_30d":     [
+        # Live price: FMP intraday if available, else EIA daily settle.
+        "price":          fmp_price if has_intraday else eia_price,
+        "change_24h":     round(fmp_change, 2) if fmp_change is not None
+                          else (round(eia_price - eia_prior, 2) if eia_price is not None and eia_prior else None),
+        "change_24h_pct": round(fmp_change_pct, 2) if fmp_change_pct is not None
+                          else _pct(eia_price, eia_prior),
+        "day_low":        fmp_q.get("day_low") if has_intraday else None,
+        "day_high":       fmp_q.get("day_high") if has_intraday else None,
+        "range_30d":      [
             min((r.get("brent_price") for r in last30 if r.get("brent_price") is not None), default=None),
             max((r.get("brent_price") for r in last30 if r.get("brent_price") is not None), default=None),
         ],
-        "war_premium_pct": _pct((latest or {}).get("brent_price"), (war_anchor or {}).get("brent_price")) if latest and war_anchor else None,
-        "as_of":         (latest or {}).get("date"),
+        "war_premium_pct": _pct(fmp_price if has_intraday else eia_price, (war_anchor or {}).get("brent_price")) if war_anchor else None,
+        "as_of":          fmp_q.get("timestamp") if has_intraday else (latest or {}).get("date"),
+        "source":         "FMP intraday (BZUSD)" if has_intraday else "EIA daily settle",
+        "is_intraday":    has_intraday,
     }
 
     # ── OVX / DXY (latest from master timeseries) ───────────────────
@@ -196,6 +214,17 @@ async def get_dashboard_state():
             "wall_clock_cutoff": cp_data.get("wall_clock_cutoff"),
         }
 
+    # ── Energy equity tape (XOM / CVX / OXY) — oil-impact context ───
+    # Major-integrated oil stocks move with crude price expectations and
+    # add a market-pricing signal alongside the futures tape. Free-tier
+    # FMP handles three quotes per refresh well within the daily budget.
+    energy_equities = []
+    if config.FMP_API_KEY:
+        for sym in ("XOM", "CVX", "OXY"):
+            q = data_service.fetch_fmp_equity_quote(sym)
+            if q.get("price") is not None:
+                energy_equities.append(q)
+
     # ── Wall-clock date string for UI captions ──────────────────────
     today_iso = _dt.now(_tz.utc).date().isoformat()
 
@@ -217,6 +246,7 @@ async def get_dashboard_state():
             },
         },
         "chokepoints": chokepoints,
+        "energy_equities": energy_equities,
         "anchors": {
             "war_onset":    config.WAR_ONSET_DATE,
             "hamas_attack": config.HAMAS_ATTACK_DATE,
@@ -820,6 +850,14 @@ async def preload_data():
             ("hormuz_tx",   12 * 3600, data_service.fetch_hormuz_transits),
             ("bab_tx",      12 * 3600, data_service.fetch_bab_el_mandeb_transits),
             ("suez_tx",     12 * 3600, data_service.fetch_suez_transits),
+            # FMP intraday — keep the hero KPI minute-fresh during market
+            # hours. Quote refreshes match the FMP cache TTL (10 min);
+            # hourly bars + equity quotes refresh every hour.
+            ("fmp_brent",       10 * 60, data_service.fetch_fmp_brent_quote),
+            ("fmp_brent_1h",    60 * 60, data_service.fetch_fmp_brent_intraday),
+            ("fmp_xom",         60 * 60, lambda: data_service.fetch_fmp_equity_quote("XOM")),
+            ("fmp_cvx",         60 * 60, lambda: data_service.fetch_fmp_equity_quote("CVX")),
+            ("fmp_oxy",         60 * 60, lambda: data_service.fetch_fmp_equity_quote("OXY")),
         ]
         last = {name: time.time() for name, _, _ in intervals}
         while True:

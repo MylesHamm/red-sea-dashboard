@@ -1454,6 +1454,107 @@ def fetch_spr_data() -> List[dict]:
     return []
 
 
+# ─── Financial Modeling Prep (FMP) — intraday Brent + energy equities ──────
+#
+# Closes the "no intraday data" gap that EIA's daily-settlement Brent feed
+# left open. FMP's `stable/quote?symbol=BZUSD` returns Brent crude with
+# minute-fresh price + intraday change %; `historical-chart/1hour` gives
+# hourly bars for the last few weeks (used to drive the hero sparkline
+# instead of the daily-bar fallback).
+#
+# Free-tier budget: ~250 calls/day. Refresh strategy:
+#   - quote: every 10 min (~100 calls/day if dashboard runs 16h)
+#   - hourly bars: every 60 min (~24 calls/day)
+# Plenty of headroom for adding energy-equity quotes (XOM, CVX, OXY) too.
+
+_FMP_BASE = "https://financialmodelingprep.com/stable"
+
+
+def _fmp_get(path: str, params: dict, cache_key: str, ttl: int) -> Optional[Any]:
+    """GET an FMP `stable/*` endpoint with key injected, JSON-decoded.
+
+    Caches on success; on failure falls back to the existing cache (any
+    age) so a transient FMP outage doesn't blank the chart. Returns None
+    only if there's no fresh fetch AND no stale cache.
+    """
+    if not config.FMP_API_KEY:
+        return None
+    cached = _read_cache(cache_key, ttl)
+    if cached is not None:
+        return cached
+    qp = dict(params or {})
+    qp["apikey"] = config.FMP_API_KEY
+    qstr = "&".join(f"{k}={v}" for k, v in qp.items())
+    url = f"{_FMP_BASE}/{path}?{qstr}"
+    try:
+        resp = requests.get(url, headers=_BROWSER_HEADERS, timeout=10)
+        if resp.status_code != 200:
+            logger.warning(f"FMP {path}: HTTP {resp.status_code} body={resp.text[:160]!r}")
+            return _read_stale_cache(cache_key)
+        data = resp.json()
+        _write_cache(cache_key, data)
+        return data
+    except Exception as e:
+        logger.warning(f"FMP {path}: {e}")
+        return _read_stale_cache(cache_key)
+
+
+def fetch_fmp_brent_quote() -> dict:
+    """Real-time Brent (BZUSD) quote: price, intraday change, day low/high.
+
+    Cache TTL 10 min. Returns {} if FMP unreachable + no stale cache.
+    """
+    arr = _fmp_get("quote", {"symbol": "BZUSD"}, "fmp_brent_quote", 600) or []
+    if isinstance(arr, list) and arr:
+        q = arr[0] or {}
+        return {
+            "symbol":     q.get("symbol"),
+            "name":       q.get("name"),
+            "price":      q.get("price"),
+            "change":     q.get("change"),
+            "change_pct": q.get("changePercentage"),
+            "day_low":    q.get("dayLow"),
+            "day_high":   q.get("dayHigh"),
+            "volume":     q.get("volume"),
+            "timestamp":  q.get("timestamp"),
+        }
+    return {}
+
+
+def fetch_fmp_brent_intraday(interval: str = "1hour") -> List[dict]:
+    """Hourly OHLC bars for Brent. Used to drive the hero sparkline at
+    sub-daily granularity. Cache TTL 1 hour."""
+    arr = _fmp_get(f"historical-chart/{interval}", {"symbol": "BZUSD"},
+                   f"fmp_brent_{interval}", 3600) or []
+    if not isinstance(arr, list):
+        return []
+    out = []
+    for r in arr:
+        d = r.get("date")
+        c = r.get("close")
+        if d and c is not None:
+            out.append({"datetime": d, "close": float(c)})
+    # FMP returns newest-first; reverse so consumers see chronological order.
+    out.reverse()
+    return out
+
+
+def fetch_fmp_equity_quote(symbol: str) -> dict:
+    """Generic real-time equity quote (XOM, CVX, OXY, etc.) for the
+    energy-majors context strip. Cache TTL 10 min per symbol."""
+    arr = _fmp_get("quote", {"symbol": symbol}, f"fmp_eq_{symbol.lower()}", 600) or []
+    if isinstance(arr, list) and arr:
+        q = arr[0] or {}
+        return {
+            "symbol":     q.get("symbol"),
+            "name":       q.get("name"),
+            "price":      q.get("price"),
+            "change":     q.get("change"),
+            "change_pct": q.get("changePercentage"),
+        }
+    return {}
+
+
 # ─── yfinance (DXY, OVX) ────────────────────────────────────────────────────
 
 def fetch_yfinance_series(ticker: str, cache_key: str) -> List[dict]:
