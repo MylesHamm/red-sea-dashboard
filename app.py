@@ -18,7 +18,12 @@ from starlette.middleware.gzip import GZipMiddleware
 
 import config
 import data_service
-import ais_service
+# ais_service.py was the original live-AIS WebSocket worker that powered
+# the "VESSELS IN KILL ZONE" sidebar. That sidebar was replaced with
+# /api/chokepoint-incidents (real ACLED + curated events) in early 2026
+# because AISStream's free tier rate-limits a single concurrent socket
+# per key, which couldn't sustain three chokepoint feeds at once. The
+# module was removed during the dead-code strip.
 
 
 def _run_sync(fn, *args):
@@ -57,6 +62,41 @@ app.mount("/assets", StaticFiles(directory=config.BASE_DIR / "assets"), name="as
 async def health_check():
     """Fast health check for Render — does not trigger data loading."""
     return {"status": "ok"}
+
+
+@app.get("/api/constants")
+async def get_constants():
+    """Single source of truth for domain constants used by the frontend.
+
+    Replaces the per-file hardcoded numbers (RADIUS_KM, GLOBAL_LIQUIDS_MBD,
+    chokepoint reference flows, war-onset date, etc.) that used to be
+    scattered across hydrate.js, charts.js, app.js, data.js. The frontend
+    bootstraps from this once, exposes via window.CONSTANTS, then every
+    component reads the value from there. Changing a number in config.py
+    propagates to every consumer on the next page load.
+    """
+    return {
+        "anchors": {
+            "hamas_attack":  config.HAMAS_ATTACK_DATE,
+            "houthi_phase":  config.HOUTHI_PHASE_START,
+            "war_onset":     config.WAR_ONSET_DATE,
+        },
+        "thesis_window": {
+            "start": config.THESIS_WINDOW_START,
+            "end":   config.THESIS_WINDOW_END,
+            "n":     config.THESIS_WINDOW_N,
+        },
+        "chokepoint_flow_mbd":   config.CHOKEPOINT_REF_FLOW_MBD,
+        "global_liquids_mbd":    config.GLOBAL_LIQUIDS_MBD,
+        "chokepoint_radius_km":  config.CHOKEPOINT_RADIUS_KM,
+        "incident_bounding_boxes": {
+            cp: {"top_left": list(box[0]), "bottom_right": list(box[1])}
+            for cp, box in config.INCIDENT_BOUNDING_BOXES.items()
+        },
+        "incident_actor_hints": {k: list(v) for k, v in config.INCIDENT_ACTOR_HINTS.items()},
+        "incident_keywords":    {k: list(v) for k, v in config.INCIDENT_KEYWORDS.items()},
+        "threat_tiers":         [{"name": n, "min_decline_pct": p} for n, p in config.THREAT_TIERS],
+    }
 
 
 @app.get("/api/diag")
@@ -625,21 +665,68 @@ async def preload_data():
     t = threading.Thread(target=_preload, daemon=True)
     t.start()
 
-    # Live AIS feed: DISABLED. AISStream.io free tier (one concurrent
-    # WebSocket per key) is incompatible with Render free-tier deploy
-    # cycles — the new worker's connection always loses to the old worker's
-    # not-yet-timed-out socket, producing a permanent HTTP 429 retry loop.
-    # The `ais_service` module is preserved so reactivation is one line if
-    # we ever migrate to a paid AIS provider with HTTP polling. The chokepoint
-    # maps now show live ACLED incidents from /api/chokepoint-incidents/{cp}.
-    # ais_service.start()
+    # Live AIS feed was removed (see ais_service.py removal note above).
+    # The chokepoint maps show live ACLED incidents from
+    # /api/chokepoint-incidents/{cp} instead.
 
 
 # ─── Frontend Entry Point ────────────────────────────────────────────────────
 
+
+def _asset_cache_buster() -> str:
+    """Compute a cache-buster string from the latest asset mtime.
+
+    Replaces the manual `?v=YYYYMMDDx` bump that had to be edited on every
+    asset change. The buster updates automatically the moment any asset
+    file is saved, so a redeploy guarantees clients fetch the new bundle.
+    Cached for the process lifetime — the value is stable across requests
+    until the server restarts (which happens on every deploy).
+    """
+    import hashlib
+    asset_dir = config.BASE_DIR / "assets"
+    mtimes = []
+    for p in sorted(asset_dir.glob("*.js")):
+        try:
+            mtimes.append(p.stat().st_mtime)
+        except OSError:
+            pass
+    for p in sorted(asset_dir.glob("*.css")):
+        try:
+            mtimes.append(p.stat().st_mtime)
+        except OSError:
+            pass
+    try:
+        mtimes.append((config.BASE_DIR / "dashboard.html").stat().st_mtime)
+    except OSError:
+        pass
+    if not mtimes:
+        return "0"
+    digest = hashlib.md5(",".join(f"{t:.0f}" for t in mtimes).encode()).hexdigest()[:10]
+    return digest
+
+
+_ASSET_CACHE_BUSTER = _asset_cache_buster()
+
+
 @app.get("/")
 def serve_dashboard():
-    response = FileResponse(config.BASE_DIR / "dashboard.html")
+    """Serve dashboard.html with the manual `?v=YYYYMMDD<x>` query strings
+    rewritten to an mtime-hash buster computed at startup. Edit any asset,
+    redeploy, and clients fetch the new bundle automatically — no more
+    hand-bumping eight `<script src=...?v=...>` lines on every change.
+    """
+    html_path = config.BASE_DIR / "dashboard.html"
+    try:
+        html = html_path.read_text(encoding="utf-8")
+        # Replace any existing ?v=... with the live buster. Pattern matches
+        # both v=YYYYMMDD and v=YYYYMMDDx forms.
+        import re
+        html = re.sub(r"\?v=[A-Za-z0-9]+", f"?v={_ASSET_CACHE_BUSTER}", html)
+        from fastapi.responses import HTMLResponse as _HTMLResponse
+        response = _HTMLResponse(content=html)
+    except OSError:
+        # Fallback: serve raw file if read fails
+        response = FileResponse(html_path)
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return response
 

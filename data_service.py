@@ -547,22 +547,11 @@ def get_acled_fetch_meta() -> dict:
 # Yemen targeting a tanker in Bab" even though the launch coordinate is well
 # outside the 14km kill ring.
 #
-# (lat_top_left, lon_top_left), (lat_bottom_right, lon_bottom_right)
-INCIDENT_BOUNDING_BOXES = {
-    "hormuz": ((30.5, 50.0), (22.5, 60.5)),  # Persian Gulf + Gulf of Oman + Iran coast + UAE/Oman
-    "bab":    ((20.0, 39.0), (10.0, 49.0)),  # South Red Sea + Yemen + Gulf of Aden + Djibouti/Eritrea
-    "suez":   ((33.0, 30.0), (27.0, 36.0)),  # Suez Canal + Sinai
-}
-
-# Actor keywords that we accept *anywhere on the globe* for each chokepoint
-# (so a Houthi attack coded in inland Yemen still shows up for Bab even if
-# coordinates would otherwise put it outside the bounding box). These match
-# both `actor1` and `actor2` substring-insensitive.
-INCIDENT_ACTOR_HINTS = {
-    "hormuz": ("irgc", "iranian navy", "military forces of iran", "islamic revolutionary guard"),
-    "bab":    ("houthi", "ansar allah"),
-    "suez":   (),
-}
+# Re-exported from config for back-compat with existing call sites in this
+# module. Edit the source-of-truth in config.py — these aliases will pick
+# the change up automatically.
+INCIDENT_BOUNDING_BOXES = config.INCIDENT_BOUNDING_BOXES
+INCIDENT_ACTOR_HINTS    = config.INCIDENT_ACTOR_HINTS
 
 
 def _incident_in_box(lat: float, lon: float, box) -> bool:
@@ -577,46 +566,9 @@ def _incident_actor_match(event: dict, hints: tuple) -> bool:
     return any(h in blob for h in hints)
 
 
-# Keyword sets for tagging curated war-timeline + news events to a chokepoint
-# when their coordinates don't fall inside the bounding box. Word-boundary
-# matched against `title + " " + description` lower-cased.
-#
-# Cross-theater spillover is intentional: an Iran escalation raises Bab risk
-# (Houthis are Iran proxies) and pushes Suez transits to the Cape route
-# (collapsing Suez throughput). A user looking at the Bab card during a Hormuz
-# crisis still wants to see the Hormuz news because it materially moves Bab's
-# oil-disruption probability — the same event can legitimately appear on
-# multiple chokepoint cards since each chokepoint has a real risk channel
-# from it.
-INCIDENT_KEYWORDS = {
-    "hormuz": (
-        # Direct
-        "hormuz", "persian gulf", "strait of hormuz", "irgc", "kharg", "qeshm",
-        "bushehr", "bandar abbas", "fujairah", "gulf of oman", "iranian navy",
-        "khamenei", "tehran", "iran", "uae", "abu dhabi", "saudi", "kuwait",
-        # Iran-war proxies that spill into Hormuz transit decisions
-        "us strikes iran", "us-iran", "us iran",
-    ),
-    "bab": (
-        # Direct (Bab el-Mandeb / southern Red Sea / Yemen)
-        "bab el-mandeb", "bab al-mandab", "red sea", "houthi", "houthis",
-        "ansar allah", "yemen", "salalah", "djibouti", "gulf of aden",
-        # Iran-war spillover — Houthis are Iran proxies; an Iran escalation
-        # directly raises Bab risk. Without this the card reads 0 during
-        # active Hormuz crises even though Bab insurance premia are spiking.
-        "iran", "irgc", "khamenei", "hormuz", "us-iran", "us iran",
-    ),
-    "suez": (
-        # Direct
-        "suez", "sinai", "egyptian canal",
-        # Bab spillover — when Houthis attack, ships divert Bab→Cape (bypass
-        # Suez), so Houthi escalation IS Suez-relevant. Iran-war keywords
-        # included for the same reason: anything that shuts Hormuz reroutes
-        # global flows away from Suez.
-        "houthi", "houthis", "ansar allah", "red sea", "yemen",
-        "iran", "irgc", "khamenei", "hormuz",
-    ),
-}
+# Re-exported from config — see config.INCIDENT_KEYWORDS for the full
+# keyword sets and the cross-theater spillover rationale.
+INCIDENT_KEYWORDS = config.INCIDENT_KEYWORDS
 
 # Map curated `type` strings → ACLED event_type buckets so the downstream
 # protests/riots filter still works correctly (curated events are never
@@ -2520,8 +2472,9 @@ def _extend_master_timeseries_with_live(result: dict) -> None:
 
     # War onset for the IranIsrael_Escalation flag — set to 1 from this
     # date forward in live-extension rows so charts that gate on the war
-    # phase don't report "war = false" during the war.
-    WAR_ONSET = "2026-02-28"
+    # phase don't report "war = false" during the war. Sourced from config
+    # so changing it in one place propagates everywhere.
+    WAR_ONSET = config.WAR_ONSET_DATE
 
     appended = 0
     weekly_buf: List[float] = []  # rolling 7-day attack window

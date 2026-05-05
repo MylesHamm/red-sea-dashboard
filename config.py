@@ -32,11 +32,6 @@ FRED_API_KEY = os.environ.get("FRED_API_KEY", "")
 ACLED_USERNAME = os.environ.get("ACLED_USERNAME", "")
 ACLED_PASSWORD = os.environ.get("ACLED_PASSWORD", "")
 
-# AISStream.io — live AIS vessel positions (WebSocket). Free signup at
-# https://aisstream.io. Used by ais_service.py to populate the "VESSELS IN
-# KILL ZONE" panel on the Geospatial tab with real MMSIs.
-AISSTREAM_API_KEY = os.environ.get("AISSTREAM_API_KEY", "")
-
 # --- API Endpoints ---
 ACLED_TOKEN_URL = "https://acleddata.com/oauth/token"
 ACLED_DATA_URL = "https://acleddata.com/api/acled/read"
@@ -52,3 +47,98 @@ CACHE_TTL_FRED = 86400 * 7    # 7 days (monthly data)
 HOST = "0.0.0.0"
 PORT = int(os.environ.get("PORT", 8000))
 AUTO_REFRESH_MINUTES = 30
+
+
+# ─── Domain Constants ──────────────────────────────────────────────────────
+#
+# Single source of truth for values that show up on the dashboard. The frontend
+# reads these via /api/constants (assets/constants.js) so updating one number
+# here propagates everywhere — no more hunting for hardcoded mbd values or
+# anchor dates scattered across hydrate.js / charts.js / data_service.py.
+
+# Conflict timeline anchors
+HAMAS_ATTACK_DATE  = "2023-10-07"   # timeline scrubber START
+HOUTHI_PHASE_START = "2023-12-01"   # Bab el-Mandeb maritime campaign begins
+WAR_ONSET_DATE     = "2026-02-28"   # US-Iran war begins (Operation Epic Fury)
+
+# Thesis observation window — locked for the GARCH/OLS regression.
+# Charts in §05/§06/§08 are filtered to this range; tooltips disclose it.
+THESIS_WINDOW_START = "2023-10-02"
+THESIS_WINDOW_END   = "2025-09-30"
+THESIS_WINDOW_N     = 505
+
+# EIA reference flows through the threatened chokepoints (mbd, slow-moving
+# macro values from EIA's annual chokepoint analysis). Used by the OIL FLOW
+# AT RISK KPI and the per-chokepoint card flow stat. Not live AIS — these
+# represent the structural amount at risk under a closure.
+CHOKEPOINT_REF_FLOW_MBD = {
+    "hormuz": 21.0,
+    "bab":     8.2,
+    "suez":    5.5,
+}
+
+# EIA STEO 2026 forecast for world liquids consumption (mbd). Denominator
+# for "% of global supply at risk" calculation.
+GLOBAL_LIQUIDS_MBD = 102.0
+
+# Per-chokepoint radius (km) for "events near this chokepoint" counts.
+# Hormuz is widest because the operationally relevant zone covers Persian
+# Gulf + Gulf of Oman — a 300km radius would only catch events directly
+# in the strait.
+CHOKEPOINT_RADIUS_KM = {
+    "hormuz": 650,
+    "bab":    400,
+    "suez":   300,
+}
+
+# Bounding boxes for "incident in this chokepoint zone" filter — larger
+# than the AIS kill rings because ACLED geocodes events to launch/impact
+# sites which can be inland. Format: (top_left, bottom_right).
+INCIDENT_BOUNDING_BOXES = {
+    "hormuz": ((30.5, 50.0), (22.5, 60.5)),  # Persian Gulf + Gulf of Oman + Iran/UAE/Oman coast
+    "bab":    ((20.0, 39.0), (10.0, 49.0)),  # South Red Sea + Yemen + Gulf of Aden
+    "suez":   ((33.0, 30.0), (27.0, 36.0)),  # Suez Canal + Sinai
+}
+
+# Actor-substring matches that we accept anywhere on the globe for each
+# chokepoint (so a Houthi attack coded inland in Yemen still surfaces for
+# Bab even if its coordinates fall outside the bbox). Substring-insensitive,
+# matched against ACLED actor1+actor2.
+INCIDENT_ACTOR_HINTS = {
+    "hormuz": ("irgc", "iranian navy", "military forces of iran", "islamic revolutionary guard"),
+    "bab":    ("houthi", "ansar allah"),
+    "suez":   (),
+}
+
+# Keyword sets for tagging curated war-timeline + news events to a chokepoint
+# when their lat/lon doesn't fall inside the bbox. Word-boundary matched,
+# case-insensitive. Cross-theater spillover is intentional: an Iran escalation
+# raises Bab risk (Houthis are Iran proxies) and pushes Suez transits to the
+# Cape route.
+INCIDENT_KEYWORDS = {
+    "hormuz": (
+        "hormuz", "persian gulf", "strait of hormuz", "irgc", "kharg", "qeshm",
+        "bushehr", "bandar abbas", "fujairah", "gulf of oman", "iranian navy",
+        "khamenei", "tehran", "iran", "uae", "abu dhabi", "saudi", "kuwait",
+        "us strikes iran", "us-iran", "us iran",
+    ),
+    "bab": (
+        "bab el-mandeb", "bab al-mandab", "red sea", "houthi", "houthis",
+        "ansar allah", "yemen", "salalah", "djibouti", "gulf of aden",
+        "iran", "irgc", "khamenei", "hormuz", "us-iran", "us iran",
+    ),
+    "suez": (
+        "suez", "sinai", "egyptian canal",
+        "houthi", "houthis", "ansar allah", "red sea", "yemen",
+        "iran", "irgc", "khamenei", "hormuz",
+    ),
+}
+
+# Threat classification thresholds (transit decline % vs pre-war baseline).
+# Ordered most-severe first; first match wins.
+THREAT_TIERS = [
+    ("critical", 50.0),   # ≥50% decline
+    ("high",     25.0),   # ≥25%
+    ("elevated", 10.0),   # ≥10%
+    ("safe",     0.0),    # everything else
+]

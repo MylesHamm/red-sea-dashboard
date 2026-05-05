@@ -41,6 +41,11 @@ window.API = (function () {
     BASE,
     invalidate,
     health:           ()  => _fetch('/api/health'),
+    // Single source of truth for domain constants — RADIUS_KM, reference
+    // flows, war-onset date, bounding boxes, etc. Bootstrapped once at
+    // page load into window.CONSTANTS so every component reads the same
+    // values. Long TTL because these only change when config.py is edited.
+    constants:        ()  => _fetch('/api/constants',            { ttlMs: 3600_000 }),
     // Diagnostic snapshot — exposes ACLED + Iran-events `last_fetch_error`
     // (the actual exception string from the backend) plus credential
     // configuration flags. Used by the §03 warning badge so a stale

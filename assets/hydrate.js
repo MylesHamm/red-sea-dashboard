@@ -271,12 +271,14 @@
   // Expose for charts.js so its scrubber-aware KPI uses the same anchor.
   window.__dataNowTs = dataNowTs;
 
-  // Hormuz is a 21-mile chokepoint but the operationally relevant "in-zone"
-  // region is the Persian Gulf + Gulf of Oman — a radius of 300km only
-  // catches events directly in the strait, so per-chokepoint widths are
-  // used to pick up Gulf-area activity (UAE/Oman coast, southern Iran
-  // shipping lanes when present in the dataset).
-  const RADIUS_KM = { hormuz: 650, bab: 400, suez: 300 };
+  // Per-chokepoint radius for the kill-zone count. Sourced from
+  // window.CONSTANTS (set from /api/constants on bootstrap) so config.py
+  // is the single source of truth. Local fallback included to keep the
+  // page functional if the constants endpoint hasn't resolved yet.
+  function RADIUS_KM_for(cp) {
+    const c = (window.CONSTANTS && window.CONSTANTS.chokepoint_radius_km) || {};
+    return c[cp] || ({ hormuz: 650, bab: 400, suez: 300 }[cp] || 300);
+  }
 
   // ACLED's primary "events" payload is Yemen + regional coverage, which
   // EXCLUDES Iran. Hormuz-adjacent incidents (IRGC seizures, Iranian coastal
@@ -331,7 +333,7 @@
     cp.flowMbd       = flowMbd;
     cp.vesselsInZone = vessels;
     const evForCount = eventsForChokepoint(key, events, iranEvents);
-    cp.incidents30d  = countRecentIncidents(evForCount, cp, RADIUS_KM[key] || 300, 30);
+    cp.incidents30d  = countRecentIncidents(evForCount, cp, RADIUS_KM_for(key), 30);
     cp.pctDecline    = decline == null ? null : +decline.toFixed(1);
     cp.transitHistory = transitData || [];
   }
@@ -436,7 +438,7 @@
 
     // "Feb 28 → now: N days of market whiplash" — recompute daily so the
     // headline doesn't drift the moment the dashboard is left open overnight.
-    const warOnset = new Date('2026-02-28T00:00:00Z');
+    const warOnset = new Date(((window.CONSTANTS && window.CONSTANTS.anchors && window.CONSTANTS.anchors.war_onset) || '2026-02-28') + 'T00:00:00Z');
     const daysSinceWar = Math.max(0, Math.floor((Date.now() - warOnset.getTime()) / 86400000));
     document.querySelectorAll('[data-days-since-war]').forEach(el => {
       el.textContent = `Feb 28 → now: ${daysSinceWar} days of market whiplash.`;
@@ -447,7 +449,8 @@
     const foot = document.querySelector('.kpi-hero-foot');
     if (Array.isArray(brent) && brent.length) {
       const last30 = brent.slice(-30).map(r => r.price).filter(v => v != null);
-      const warStart = brent.find(r => r.date >= '2026-02-28');
+      const _warDate = (window.CONSTANTS && window.CONSTANTS.anchors && window.CONSTANTS.anchors.war_onset) || '2026-02-28';
+      const warStart = brent.find(r => r.date >= _warDate);
       warPct = (warStart && latest != null) ? ((latest - warStart.price) / warStart.price * 100) : null;
       if (foot && last30.length) {
         const lo = Math.min(...last30), hi = Math.max(...last30);
@@ -1280,8 +1283,11 @@
     const b = window.CHOKEPOINTS && window.CHOKEPOINTS.bab;
     if (!h || !b || h.flowMbd == null || b.flowMbd == null) return;
     const total = h.flowMbd + b.flowMbd;
-    const GLOBAL_LIQUIDS_MBD = 102; // EIA STEO 2026 forecast for world liquids consumption
-    const pct = (total / GLOBAL_LIQUIDS_MBD) * 100;
+    // EIA STEO 2026 forecast for world liquids consumption (mbd). Sourced
+    // from /api/constants → window.CONSTANTS so updating the macro number
+    // happens in one place (config.py).
+    const denom = (window.CONSTANTS && window.CONSTANTS.global_liquids_mbd) || 102.0;
+    const pct = (total / denom) * 100;
     document.querySelectorAll('[data-hero-flow]').forEach(el => {
       el.textContent = total.toFixed(1);
     });
@@ -1421,6 +1427,25 @@
   window.CP.hydrated = new Promise(r => { resolveHydrated = r; });
   window.CP.state = {};
 
+  // Bootstrap domain constants (RADIUS_KM, reference flows, war-onset date,
+  // bounding boxes, etc.) from /api/constants. Runs first so every other
+  // hydrate function can read window.CONSTANTS instead of hardcoding.
+  // Falls back to in-file defaults if the endpoint is unreachable so the
+  // page still renders during a backend outage.
+  const _CONSTANTS_DEFAULTS = {
+    anchors:               { hamas_attack: '2023-10-07', houthi_phase: '2023-12-01', war_onset: '2026-02-28' },
+    chokepoint_flow_mbd:   { hormuz: 21.0, bab: 8.2, suez: 5.5 },
+    global_liquids_mbd:    102.0,
+    chokepoint_radius_km:  { hormuz: 650, bab: 400, suez: 300 },
+    threat_tiers:          [{name:'critical',min_decline_pct:50},{name:'high',min_decline_pct:25},{name:'elevated',min_decline_pct:10},{name:'safe',min_decline_pct:0}],
+  };
+  window.CONSTANTS = window.CONSTANTS || _CONSTANTS_DEFAULTS;
+  if (typeof API !== 'undefined' && API.constants) {
+    API.constants()
+      .then(c => { if (c) window.CONSTANTS = Object.assign({}, _CONSTANTS_DEFAULTS, c); })
+      .catch(() => { /* defaults already in place */ });
+  }
+
   // Fetch master with one retry — Render free tier sometimes drops the
   // connection mid-stream and a quick retry usually succeeds against the
   // now-warm in-memory cache.
@@ -1501,9 +1526,13 @@
     // For Hormuz we also pass the Iran ACLED subset so the incident count
     // reflects IRGC / Iranian-coast activity that the regional feed omits.
     const iranEv = (iranResp && Array.isArray(iranResp.data)) ? iranResp.data : [];
-    hydrateChokepoint('hormuz', hormuz, S.events, 21.0, iranEv);
-    hydrateChokepoint('bab',    bab,    S.events,  8.2);
-    hydrateChokepoint('suez',   suez,   S.events,  5.5);
+    // EIA chokepoint reference flows (mbd) — sourced from window.CONSTANTS
+    // (set by /api/constants on bootstrap). Falls back to the historic
+    // EIA values if the constants endpoint hasn't resolved yet.
+    const _flow = (window.CONSTANTS && window.CONSTANTS.chokepoint_flow_mbd) || {};
+    hydrateChokepoint('hormuz', hormuz, S.events, _flow.hormuz != null ? _flow.hormuz : 21.0, iranEv);
+    hydrateChokepoint('bab',    bab,    S.events, _flow.bab    != null ? _flow.bab    :  8.2);
+    hydrateChokepoint('suez',   suez,   S.events, _flow.suez   != null ? _flow.suez   :  5.5);
     hydrateCape(hormuz);
 
     // ── Iran timeline events ──
@@ -1623,7 +1652,7 @@
             cp.incidents30d = n;
           } else {
             const evForCount = eventsForChokepoint(k, events, iranEv2);
-            cp.incidents30d = countRecentIncidents(evForCount, cp, RADIUS_KM[k] || 300, 30);
+            cp.incidents30d = countRecentIncidents(evForCount, cp, RADIUS_KM_for(k), 30);
           }
         });
         // Hero "INCIDENTS · 30D" KPI is owned by app.js's refreshHeroIncidentsKpi
