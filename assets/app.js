@@ -329,8 +329,13 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) { /* non-fatal */ }
   }
   // Recompute when iran data finishes loading (it lands later than the
-  // initial chokepoint-incidents fetch on cold start).
+  // initial chokepoint-incidents fetch on cold start). Also expose on
+  // window so hydrate.js's /api/events callback can delegate here instead
+  // of writing its own (stale) number — there should be exactly one
+  // hero-KPI setter to avoid the flicker the user saw ("59 → 0").
+  window.__refreshHeroIncidentsKpi = refreshHeroIncidentsKpi;
   window.addEventListener('data-hydrated', refreshHeroIncidentsKpi);
+  window.addEventListener('events-ready',  refreshHeroIncidentsKpi);
   refreshSidebarIncidents();
   setInterval(refreshSidebarIncidents, 300_000);
 

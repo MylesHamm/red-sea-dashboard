@@ -1626,13 +1626,17 @@
             cp.incidents30d = countRecentIncidents(evForCount, cp, RADIUS_KM[k] || 300, 30);
           }
         });
-        // Refresh aggregate incidents KPI
-        const incidentEl = document.querySelector('[data-kpi="incidents30"]');
-        if (incidentEl) {
-          incidentEl.textContent = String(
-            (window.CHOKEPOINTS.hormuz.incidents30d || 0) +
-            (window.CHOKEPOINTS.bab.incidents30d || 0)
-          );
+        // Hero "INCIDENTS · 30D" KPI is owned by app.js's refreshHeroIncidentsKpi
+        // — it sources from the deduped curated + iran-news union (the same pool
+        // that feeds §11 and §09). Earlier this block wrote the naive
+        // Hormuz+Bab sum here, which (a) double-counted overlapping events
+        // after the keyword scope was broadened and (b) created a flicker:
+        // refreshHeroIncidentsKpi would land "59" via data-hydrated, then
+        // /api/events resolved a moment later and this line overwrote it
+        // with "32". Delegate to the canonical setter instead so there's
+        // exactly one source of truth.
+        if (typeof window.__refreshHeroIncidentsKpi === 'function') {
+          try { window.__refreshHeroIncidentsKpi(); } catch (_) {}
         }
         // Refresh per-card metrics + threat pills + tac-side stats now that real counts exist
         hydrateChokepointCards();

@@ -586,18 +586,23 @@ function updateIncidentsKpi() {
     else if (dt >= priorStart && dt < priorEnd) prior++;
   }
 
-  // Default case (no filter, scrubber at "now"): defer to merged-pool
-  // chokepoint sums. Raw ACLED is empty under the embargo, but
-  // window.CHOKEPOINTS[*].incidents30d is the wall-clock-windowed
-  // merged-pool count maintained by refreshSidebarIncidents.
+  // Default case (no filter, scrubber at "now"): hand off to the canonical
+  // hero-KPI setter in app.js, which sources from the deduped curated +
+  // iran-news union. Earlier this overwrote the KPI with a Hormuz+Bab sum
+  // (~32, double-counting Iran-war news that matched both keyword sets) —
+  // user reported the count flashing 59 → 0/32 because three different code
+  // paths were racing to write it. Now there's exactly one writer for the
+  // unfiltered case; this function only writes when a filter narrows the
+  // set or the scrubber is off "now".
   if (!sel && !tlTs) {
-    const cps = window.CHOKEPOINTS || {};
-    n = ((cps.hormuz && cps.hormuz.incidents30d) || 0)
-      + ((cps.bab    && cps.bab.incidents30d)    || 0);
+    if (typeof window.__refreshHeroIncidentsKpi === 'function') {
+      try { window.__refreshHeroIncidentsKpi(); } catch (_) {}
+    }
+    return;
   }
   incidentEl.textContent = String(n);
 
-  // Delta: signed change vs prior 30D
+  // Delta: signed change vs prior 30D (only relevant when filtered).
   if (deltaEl) {
     const d = n - prior;
     const sign = d > 0 ? '+' : d < 0 ? '−' : '±';
