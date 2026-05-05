@@ -13,15 +13,13 @@
 <script src="https://d3js.org/topojson.v3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
-<!-- Twitter/X timeline widget — used by §12 HormuzLetter feed. Loaded
-     async; the explicit twttr.widgets.load() call below forces the
-     scanner to run after our DOM is built, fixing the case where the
-     <a class="twitter-timeline"> markup is added AFTER widgets.js has
-     already auto-scanned. Fails-open: if X is blocked by an ad blocker
-     or the user's network, the inline link stays visible. -->
-<script>window.twttr=(function(d,s,id){var t,js,fjs=d.getElementsByTagName(s)[0];if(d.getElementById(id))return;js=d.createElement(s);js.id=id;js.src="https://platform.twitter.com/widgets.js";fjs.parentNode.insertBefore(js,fjs);return window.twttr||(t={_e:[],ready:function(f){t._e.push(f);}});}(document,"script","twitter-wjs"));</script>
+<!-- Note: the previous Twitter widgets.js loader was removed (it was
+     blocked by virtually every ad blocker). §12's HormuzLetter feed
+     now loads server-side via /api/hormuz-letter and renders natively
+     — see hydrateHormuzLetter() in assets/hydrate.js. -->
 
-<link rel="stylesheet" href="assets/app.css?v=20260505b">
+
+<link rel="stylesheet" href="assets/app.css?v=20260505c">
 </head>
 <body>
 
@@ -817,37 +815,25 @@
         </div>
       </div>
 
-      <!-- §12 HormuzLetter live X feed.
-           Twitter's widgets.js attempts to inject an iframe of the live
-           timeline. In practice the widget is blocked or fails-to-load
-           in many environments (ad blockers, corporate networks,
-           HF Space iframe-of-iframe contexts). When that happens we
-           always show a clean "open profile" card so the user has a
-           one-click path to x.com. The wrapper toggles classes:
-             default state    = both widget anchor + fallback present
-             .hl-loaded       = widget injected an iframe → hide fallback
-             .hl-failed       = 15s timeout → hide widget anchor, show
-                                "view on x.com" prompt
-       -->
+      <!-- §12 HormuzLetter live posts — backend-scraped, ad-blocker proof.
+           The previous Twitter widget embed was blocked by every common
+           ad blocker since platform.twitter.com is classified as a
+           tracking script. We now fetch HormuzLetter's recent posts
+           server-side via Twitter's public syndication endpoint and
+           render them ourselves — the user's browser never requests
+           anything from twitter.com / x.com / platform.twitter.com so
+           ad blockers have nothing to block. -->
       <div class="narrative-block">
         <div class="nb-header">
           <div class="nb-index">§ 12</div>
           <div>
             <h2 class="nb-title">@HormuzLetter · Live X Feed</h2>
-            <p class="nb-subtitle">Maritime incidents, tanker tracking, and IRGC/US Navy operations from <a href="https://x.com/HormuzLetter" target="_blank" rel="noopener" style="color:var(--cyan);">@HormuzLetter</a> on X. Live embed below — if blocked, use the button to view on x.com directly.</p>
+            <p class="nb-subtitle">Maritime incidents, tanker tracking, and IRGC/US Navy operations from <a href="https://x.com/HormuzLetter" target="_blank" rel="noopener" style="color:var(--cyan);">@HormuzLetter</a>. Posts are fetched server-side every 10 min — no third-party scripts, ad-blocker safe.</p>
           </div>
-          <div class="nb-badges"><span class="badge badge-blue">X · 3RD-PARTY</span></div>
+          <div class="nb-badges"><span class="badge badge-blue">X · BACKEND</span></div>
         </div>
-        <div class="hormuz-letter-wrap">
-          <a class="twitter-timeline"
-             data-theme="dark"
-             data-chrome="noheader nofooter noborders transparent"
-             data-tweet-limit="20"
-             data-height="540"
-             data-dnt="true"
-             href="https://twitter.com/HormuzLetter?ref_src=twsrc%5Etfw">
-            Loading tweets from @HormuzLetter…
-          </a>
+        <div class="hormuz-letter-list" id="hormuzLetterList">
+          <div class="hl-empty">Loading posts from @HormuzLetter…</div>
         </div>
         <a class="hormuz-letter-cta" href="https://x.com/HormuzLetter" target="_blank" rel="noopener">
           → Open @HormuzLetter on x.com
@@ -889,12 +875,12 @@
 </div>
 
 <!-- Scripts -->
-<script src="assets/api.js?v=20260505b"></script>
-<script src="assets/data.js?v=20260505b"></script>
-<script src="assets/hydrate.js?v=20260505b"></script>
-<script src="assets/globe.js?v=20260505b"></script>
-<script src="assets/tacmap.js?v=20260505b"></script>
-<script src="assets/charts.js?v=20260505b"></script>
-<script src="assets/app.js?v=20260505b"></script>
+<script src="assets/api.js?v=20260505c"></script>
+<script src="assets/data.js?v=20260505c"></script>
+<script src="assets/hydrate.js?v=20260505c"></script>
+<script src="assets/globe.js?v=20260505c"></script>
+<script src="assets/tacmap.js?v=20260505c"></script>
+<script src="assets/charts.js?v=20260505c"></script>
+<script src="assets/app.js?v=20260505c"></script>
 </body>
 </html>

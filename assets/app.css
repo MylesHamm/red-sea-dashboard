@@ -2059,10 +2059,14 @@ button { font-family: inherit; cursor: pointer; }
 /* §11/§12 cards are content-dense — the default 24px outer padding +
    18px header bottom + 14px header padding = ~56px chrome, which
    visually overwhelms the small feed items. Tighten so the container
-   feels like a panel of items, not a card-of-a-card. */
+   feels like a panel of items, not a card-of-a-card. Both panels are
+   flex columns so the scrollable content region (feed list / X embed
+   wrapper) expands to fill the remaining height after the header. */
 .feed-pair > .narrative-block {
   margin-bottom: 0;
   padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
 }
 .feed-pair > .narrative-block .nb-header {
   margin-bottom: 12px;
@@ -2071,20 +2075,72 @@ button { font-family: inherit; cursor: pointer; }
 }
 .feed-pair > .narrative-block .nb-title { font-size: 13px; }
 .feed-pair > .narrative-block .nb-subtitle { font-size: 11.5px; line-height: 1.45; }
+/* §11's feed list grows to fill the panel; the only scrolling happens
+   when there are MORE items than fit. Was capped at 440px before so it
+   left ~100px of empty space at the bottom of a 540px panel. */
+.feed-pair > .narrative-block .feed-list {
+  flex: 1 1 auto;
+  max-height: none;
+  min-height: 0;
+}
 @media (max-width: 920px) {
   .feed-pair { grid-template-columns: 1fr; }
 }
 
-/* HormuzLetter X-embed wrapper — frames the iframe Twitter's widget script
-   injects so it matches the dashboard's other panels. */
-.hormuz-letter-wrap {
-  position: relative;
-  min-height: 540px;
-  max-height: 540px;
-  overflow: hidden;
-  border-radius: 6px;
-  background: rgba(0,212,255,0.02);
+/* HormuzLetter native post list — replaces the Twitter widget. Posts
+   fetched server-side via /api/hormuz-letter. Ad-blocker proof because
+   the user's browser only talks to our backend, never twitter.com. */
+.hormuz-letter-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+}
+.hormuz-letter-list .hl-post {
+  display: block;
+  padding: 10px 12px;
+  background: rgba(0,212,255,0.03);
   border: 1px solid rgba(0,212,255,0.10);
+  border-left: 2px solid var(--cyan);
+  border-radius: 4px;
+  text-decoration: none;
+  color: var(--text);
+  transition: all 0.15s;
+  cursor: pointer;
+}
+.hormuz-letter-list .hl-post:hover {
+  background: rgba(0,212,255,0.08);
+  border-left-color: #fff;
+}
+.hormuz-letter-list .hl-post-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 1.2px;
+  color: var(--text-mute);
+  text-transform: uppercase;
+}
+.hormuz-letter-list .hl-post-handle { color: var(--cyan); }
+.hormuz-letter-list .hl-post-text {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.hormuz-letter-list .hl-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-mute);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1px;
 }
 /* Always-visible CTA at the bottom of §12 — guarantees the user can reach
    the X profile even if widgets.js is blocked, in addition to whatever

@@ -2691,6 +2691,122 @@ def get_curated_iran_events() -> List[dict]:
     ]
 
 
+def fetch_hormuz_letter_tweets(max_items: int = 20) -> List[dict]:
+    """Fetch recent posts from @HormuzLetter on X via syndication.twitter.com.
+
+    Why this exists: the Twitter widget embed (platform.twitter.com/widgets.js)
+    is blocked by virtually every modern ad blocker (uBlock Origin, Brave
+    Shields, Privacy Badger) since it's classified as a tracking script.
+    Users with ad blockers see an empty §12 panel.
+
+    Workaround: Twitter's syndication endpoint serves the same timeline as
+    JSON without requiring JS or an authenticated API key. We fetch it
+    server-side (ad blockers can't block our backend), parse the tweets,
+    and expose them through /api/hormuz-letter so the frontend renders
+    them like any other feed item — no third-party scripts loaded in the
+    user's browser.
+
+    Caveat: this endpoint is undocumented and Twitter could break it any
+    time. If it returns garbage we fall through to stale-cache; if no
+    cache exists we return [] and the UI shows an empty-state message
+    pointing to x.com/HormuzLetter directly.
+
+    Cache TTL is 10 minutes — short enough that the feed feels live,
+    long enough not to hammer Twitter's syndication endpoint.
+    """
+    cache_key = "hormuz_letter_tweets"
+    cached = _read_cache(cache_key, 600)
+    if cached:
+        return cached[:max_items]
+
+    # Twitter's syndication endpoint accepts unauthenticated requests for
+    # public profiles. Returns a JSON blob with the rendered timeline.
+    url = "https://cdn.syndication.twimg.com/timeline/profile"
+    params = {
+        "screen_name": "HormuzLetter",
+        "dnt": "true",       # Do Not Track — minimizes telemetry on our end
+        "with_replies": "false",
+        "lang": "en",
+    }
+    try:
+        resp = requests.get(url, params=params, headers=_BROWSER_HEADERS, timeout=15)
+        if not resp.ok:
+            logger.warning(f"HormuzLetter fetch: HTTP {resp.status_code}")
+            return _read_stale_cache(cache_key) or []
+        data = resp.json()
+    except Exception as e:
+        logger.warning(f"HormuzLetter fetch failed: {e}")
+        return _read_stale_cache(cache_key) or []
+
+    # syndication response shape: {"body": "<html>", "head": "<meta>", ...}
+    # OR {"props": {"pageProps": {"tweets": [...]}}, ...} depending on path.
+    # The /timeline/profile path returns the rendered HTML in `body` plus
+    # a structured `tweets` map under `props.pageProps`. Try the structured
+    # path first; fall back to a HTML-regex extraction if Twitter changes
+    # the shape.
+    tweets_out: List[dict] = []
+    try:
+        page_props = (data.get("props") or {}).get("pageProps") or {}
+        timeline = page_props.get("timeline") or {}
+        entries = timeline.get("entries") or []
+        for ent in entries:
+            content = (ent.get("content") or {}).get("itemContent") or {}
+            tweet_results = (content.get("tweet_results") or {}).get("result") or {}
+            legacy = tweet_results.get("legacy") or {}
+            text = legacy.get("full_text") or legacy.get("text") or ""
+            created = legacy.get("created_at") or ""
+            tweet_id = legacy.get("id_str") or ""
+            if not text or not tweet_id:
+                continue
+            # Twitter dates: "Wed Apr 30 18:42:11 +0000 2026"
+            iso_date = ""
+            try:
+                from email.utils import parsedate_to_datetime
+                dt = parsedate_to_datetime(created)
+                iso_date = dt.strftime("%Y-%m-%d")
+            except Exception:
+                pass
+            tweets_out.append({
+                "id":   tweet_id,
+                "date": iso_date,
+                "text": text,
+                "url":  f"https://x.com/HormuzLetter/status/{tweet_id}",
+            })
+    except Exception as e:
+        logger.warning(f"HormuzLetter parse (structured): {e}")
+
+    if not tweets_out:
+        # Fall back to regex extraction from rendered HTML if the JSON
+        # structure changed. The HTML body has tweet permalinks like
+        # /HormuzLetter/status/<id> — pull them out and the surrounding
+        # text content.
+        body = data.get("body") or ""
+        tweet_id_re = re.compile(r'/HormuzLetter/status/(\d+)')
+        seen_ids = set()
+        for m in tweet_id_re.finditer(body):
+            tid = m.group(1)
+            if tid in seen_ids:
+                continue
+            seen_ids.add(tid)
+            tweets_out.append({
+                "id":   tid,
+                "date": "",
+                "text": "",   # body extraction is fragile; we surface the link only
+                "url":  f"https://x.com/HormuzLetter/status/{tid}",
+            })
+            if len(tweets_out) >= max_items:
+                break
+
+    if tweets_out:
+        _write_cache(cache_key, tweets_out)
+    else:
+        # Live fetch returned nothing parseable — try stale before giving up.
+        stale = _read_stale_cache(cache_key)
+        if stale:
+            return stale[:max_items]
+    return tweets_out[:max_items]
+
+
 def fetch_iran_news() -> List[dict]:
     """Fetch live Iran/oil war news headlines from Google News RSS. No API key needed.
 

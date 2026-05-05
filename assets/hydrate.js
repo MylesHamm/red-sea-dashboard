@@ -891,6 +891,51 @@
   // Exposed for the delayed-retry path so it doesn't have to inline the merge.
   window.__mergeFeedItems = _mergeFeedItems;
 
+  // ── §12 HormuzLetter native list ──────────────────────────────────────────
+  // Replaces the previous Twitter widget embed (blocked by every ad
+  // blocker). Posts come from /api/hormuz-letter which scrapes the
+  // syndication endpoint server-side. Renders as a list of clickable
+  // cards that link to the original tweet on x.com.
+  function _escHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+      { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]
+    ));
+  }
+  function hydrateHormuzLetter(resp) {
+    const list = document.getElementById('hormuzLetterList');
+    if (!list) return;
+    const tweets = (resp && Array.isArray(resp.tweets)) ? resp.tweets : [];
+    if (!tweets.length) {
+      list.innerHTML = '<div class="hl-empty">' +
+        '<b style="color:var(--cyan)">@HormuzLetter</b><br>' +
+        'Maritime incidents, tanker tracking, and IRGC/US Navy operations from the Strait of Hormuz.<br><br>' +
+        'X has rate-limited / blocked unauthenticated scraping, so live posts cannot be embedded server-side without their paid API ($100/mo).<br><br>' +
+        '<i style="opacity:0.7">Click the button below to read the live feed on x.com →</i>' +
+        '</div>';
+      return;
+    }
+    list.innerHTML = tweets.map(t => {
+      const date = (t.date || '').slice(0, 10);
+      // Date formatter: "DD MMM" — matches §11 feed style
+      let dateLbl = '—';
+      if (date) {
+        const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+        const [y, m, d] = date.split('-').map(Number);
+        if (y && m && d) dateLbl = `${String(d).padStart(2,'0')} ${months[m-1]}`;
+      }
+      const text = t.text ? _escHtml(t.text) : '<i style="opacity:0.55">(text not parsed — click to view on x.com)</i>';
+      const url = t.url || `https://x.com/HormuzLetter`;
+      return `<a class="hl-post" href="${_escHtml(url)}" target="_blank" rel="noopener">
+        <div class="hl-post-meta">
+          <span class="hl-post-handle">@HormuzLetter</span>
+          <span>${dateLbl}</span>
+        </div>
+        <div class="hl-post-text">${text}</div>
+      </a>`;
+    }).join('');
+  }
+  window.__hydrateHormuzLetter = hydrateHormuzLetter;
+
   function hydrateFeed(news) {
     const feed = $('feedList');
     if (!feed) return;
@@ -1523,6 +1568,11 @@
     API.gdeltTone()
       .then(g => { try { renderGdeltChart(g); } catch (e) { console.warn('gdelt render failed', e); renderGdeltChart(null); } })
       .catch((e) => { console.warn('gdelt fetch failed', e); try { renderGdeltChart(null); } catch (_) {} });
+
+    // §12 @HormuzLetter native list — backend-scraped, ad-blocker safe.
+    API.hormuzLetter()
+      .then(r => { try { hydrateHormuzLetter(r); } catch (e) { console.warn('hormuz-letter render failed', e); } })
+      .catch(() => { try { hydrateHormuzLetter({tweets: []}); } catch (_) {} });
 
     if (errors.length) {
       console.warn('Hydrator: partial failure —', errors);
