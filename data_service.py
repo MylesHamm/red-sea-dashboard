@@ -686,6 +686,51 @@ def _curated_events_for_chokepoint(chokepoint_id: str) -> List[dict]:
             "source":        "news_scraper" if ev.get("source_type") == "news_auto" else "curated_war_timeline",
             "notes":         desc,
         })
+
+    # ── Also fold in the broader iran_news pool ─────────────────────────
+    # `get_merged_curated_events()` only includes the top-2-per-date news
+    # entries that get promoted to the curated list. The remaining ~45
+    # oil-relevant news articles (already keyword-scored at scrape time)
+    # were excluded from chokepoint counts even though they ARE the live
+    # signal. Fold them in here so a chokepoint card under an active war
+    # reflects the full news flow, not just the curated subset.
+    seen_keys = set()
+    for r in out:
+        seen_keys.add(f"{(r.get('event_date') or '')[:10]}::{(r.get('actor1') or '').strip().lower()[:50]}")
+    try:
+        news_cache = _read_cache("iran_news", 86_400) or []
+    except Exception:
+        news_cache = []
+    for n in news_cache:
+        date  = (n.get("date") or "")[:10]
+        title = n.get("title") or ""
+        if not date or not title:
+            continue
+        text_blob = (title + " " + (n.get("description") or "")).lower()
+        if not _kw_match(text_blob, keywords):
+            continue
+        key = f"{date}::{title.strip().lower()[:50]}"
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        type_ = (n.get("type") or "military").lower()
+        eid   = f"NEWS-{chokepoint_id}-{date}-{title[:24].strip()}"
+        out.append({
+            "event_id_cnty":  eid,
+            "event_date":     date,
+            "event_type":     _CURATED_TYPE_TO_ACLED.get(type_, "Strategic developments"),
+            "sub_event_type": _curated_sub_event_for(title),
+            "actor1":         title[:80],
+            "actor2":         "",
+            "location":       n.get("location") or "",
+            "country":        "",
+            "latitude":       str(cp_center_lat),
+            "longitude":      str(cp_center_lon),
+            "fatalities":     int(n.get("fatalities") or 0),
+            "source":         "news_scraper",
+            "notes":          n.get("description") or "",
+        })
+
     return out
 
 
