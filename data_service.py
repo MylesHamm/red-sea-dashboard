@@ -1322,21 +1322,137 @@ def _fred_fallback(series_id: str, cache_key: str, label: str) -> List[dict]:
     return []
 
 
-def fetch_dxy() -> List[dict]:
-    """DXY (US Dollar Index).
+def _dxy_cache_looks_like_dtwexbgs(cached: List[dict]) -> bool:
+    """Detect a poisoned `dxy.json` left by the prior implementation.
 
-    FRED's DTWEXBGS (broad trade-weighted dollar) is the primary source.
-    yfinance's DX-Y.NYB is tried only as a secondary check — on any cloud IP
-    (Render, AWS, GCP) Yahoo blocks us with an empty/HTML body, so hitting
-    yfinance first wasted cycles and spammed the deploy log. The FRED series
-    is slightly different math but tracks DXY within 1-2% and is how every
-    thesis-grade macro dashboard sources this number anyway.
+    DTWEXBGS (Nominal Broad Dollar Index, base Jan 2006 = 100) currently
+    sits ~118-122. DXY (ICE/Bloomberg basket, base Mar 1973 = 100) currently
+    sits ~95-110. If the recent rolling average of the cache is above 115
+    we know it's DTWEXBGS values mislabeled as DXY — wipe & refetch.
     """
-    result = _fred_fallback("DTWEXBGS", "dxy", "DXY proxy")
-    if result:
-        return result
-    # Last-ditch yfinance attempt for local dev where Yahoo still works
-    return fetch_yfinance_series("DX-Y.NYB", "dxy")
+    if not cached:
+        return False
+    recent = [r.get("value") for r in cached[-30:] if isinstance(r, dict) and r.get("value") is not None]
+    if not recent:
+        return False
+    avg = sum(recent) / len(recent)
+    return avg > 115.0
+
+
+def _compute_dxy_rescale_factor(dtwexbgs_records: List[dict]) -> Optional[float]:
+    """Return median(DXY/DTWEXBGS) over the static CSV's overlap window.
+
+    Used to bring DTWEXBGS into DXY scale when DTWEXBGS is the only available
+    source. Two indices, two baskets, two base periods — but they correlate
+    ~0.95 over multi-month windows so a single-factor rescale is a defensible
+    proxy when the real ICE DXY feed is unreachable. Returns None if the
+    overlap window can't be computed (caller should treat as failure).
+    """
+    try:
+        if not config.MYLES_DATASET_PATH.exists() or not dtwexbgs_records:
+            return None
+        df = pd.read_csv(config.MYLES_DATASET_PATH, usecols=["Date", "DXY"])
+        df = df.dropna(subset=["DXY"]).copy()
+        if df.empty:
+            return None
+        df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
+        dt_map = {r["date"]: float(r["value"]) for r in dtwexbgs_records if r.get("value")}
+        ratios: List[float] = []
+        for _, row in df.tail(120).iterrows():  # last ~120 trading days of overlap
+            d = row["Date"]
+            dt_val = dt_map.get(d)
+            if dt_val and dt_val > 0:
+                ratios.append(float(row["DXY"]) / dt_val)
+        if len(ratios) < 5:
+            return None
+        ratios.sort()
+        return ratios[len(ratios) // 2]  # median
+    except Exception as e:
+        logger.warning(f"DXY rescale anchor compute failed: {e}")
+        return None
+
+
+def fetch_dxy() -> List[dict]:
+    """DXY (US Dollar Index — ICE/Bloomberg DX-Y.NYB).
+
+    Source order:
+      1. yfinance ^DX-Y.NYB (the real DXY: EUR/JPY/GBP/CAD/SEK/CHF basket,
+         ~95-110 range). Works on most hosts including HF Spaces; only a
+         narrow set of cloud IP ranges (notably Render) get blocked.
+      2. FRED DTWEXBGS rescaled to DXY level via static-CSV anchor.
+         DTWEXBGS is the Nominal Broad Dollar Index — DIFFERENT basket,
+         DIFFERENT base period, native scale ~118-122 — but ~0.95-correlated
+         with DXY over multi-month windows. We rescale by the median ratio
+         of (CSV DXY) / (DTWEXBGS) across the overlap so the chart stays
+         in DXY-native scale and the boundary between static and live data
+         is continuous.
+      3. Stale cache as last resort.
+
+    Bug history: an earlier version called `_fred_fallback("DTWEXBGS", "dxy")`
+    which wrote raw DTWEXBGS values (~120) into the dxy cache, producing a
+    visible step jump from ~98 → ~120 at the static-CSV → live-extension
+    seam. We now detect that poisoned cache and refetch.
+    """
+    # Cache integrity: refetch if the cache holds unrescaled DTWEXBGS values.
+    cached = _read_cache("dxy", config.CACHE_TTL_YFINANCE)
+    if cached and _dxy_cache_looks_like_dtwexbgs(cached):
+        logger.warning(
+            "fetch_dxy: cache holds DTWEXBGS-scale values (avg > 115) — "
+            "evicting poisoned cache from prior implementation"
+        )
+        try:
+            _cache_path("dxy").unlink(missing_ok=True)
+        except Exception:
+            pass
+        cached = None
+    if cached:
+        return cached
+
+    # 1) yfinance — the real DXY
+    yf_data = fetch_yfinance_series("DX-Y.NYB", "dxy")
+    if yf_data:
+        # Sanity check: yfinance occasionally returns a wrong-scale series
+        # if the ticker resolves to a different instrument.
+        if not _dxy_cache_looks_like_dtwexbgs(yf_data):
+            return yf_data
+        logger.warning("yfinance DX-Y.NYB returned suspiciously high values — falling through to FRED")
+
+    # 2) FRED DTWEXBGS rescaled to DXY level
+    try:
+        from fredapi import Fred
+        fred = Fred(api_key=config.FRED_API_KEY)
+        series = fred.get_series("DTWEXBGS", observation_start="2023-10-01")
+        raw = [
+            {"date": idx.strftime("%Y-%m-%d"), "value": float(val)}
+            for idx, val in series.items() if pd.notna(val)
+        ]
+        if raw:
+            factor = _compute_dxy_rescale_factor(raw)
+            if factor is None:
+                logger.warning(
+                    "fetch_dxy: rescale anchor unavailable; refusing to write "
+                    "raw DTWEXBGS to dxy cache (would mislabel scales)"
+                )
+            else:
+                rescaled = [
+                    {"date": r["date"], "value": round(r["value"] * factor, 4)}
+                    for r in raw
+                ]
+                _write_cache("dxy", rescaled)
+                logger.info(
+                    f"fetch_dxy: wrote {len(rescaled)} DTWEXBGS-rescaled rows "
+                    f"to dxy cache (factor={factor:.4f})"
+                )
+                return rescaled
+    except Exception as e:
+        logger.warning(f"fetch_dxy: FRED DTWEXBGS fallback failed: {e}")
+
+    # 3) Stale cache
+    stale = _read_stale_cache("dxy")
+    if stale and not _dxy_cache_looks_like_dtwexbgs(stale):
+        logger.info(f"fetch_dxy: serving stale cache ({len(stale)} rows)")
+        return stale
+    return []
 
 
 def fetch_ovx() -> List[dict]:
