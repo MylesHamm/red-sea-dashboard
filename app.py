@@ -374,12 +374,19 @@ async def get_chokepoint_incidents(chokepoint: str, days: int = 90, limit: int =
     carries lat/lon, date, fatalities, source, and notes — all real, all
     geocoded directly from ACLED.
     """
-    events = await _run_sync(lambda: data_service.get_chokepoint_incidents(chokepoint, days, limit))
+    result = await _run_sync(lambda: data_service.get_chokepoint_incidents(chokepoint, days, limit))
+    events = result.get("events", [])
     return {
         "chokepoint": chokepoint,
         "days": days,
         "count": len(events),
         "data": events,
+        # Disclosure for the frontend caption: when does the dataset's
+        # newest in-zone event sit? If wall-clock cutoff filtered everything
+        # out (count==0), the UI uses this to say "ACLED data through X · no
+        # events in last N days" instead of going silently empty.
+        "zone_newest_date": result.get("zone_newest_date"),
+        "wall_clock_cutoff": result.get("wall_clock_cutoff"),
     }
 
 

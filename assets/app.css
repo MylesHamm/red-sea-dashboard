@@ -1060,6 +1060,15 @@ button { font-family: inherit; cursor: pointer; }
 .r-high { background: var(--orange); box-shadow: 0 0 4px var(--orange); }
 .r-safe { background: var(--green); box-shadow: 0 0 4px var(--green); }
 
+.gp-vessels-caption {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--text-mute);
+  margin: -4px 0 8px;
+  padding: 2px 0;
+}
+.gp-vessels-caption:empty { display: none; }
 .gp-vessels {
   display: flex;
   flex-direction: column;

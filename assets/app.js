@@ -126,11 +126,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // would still render correctly.
     return { tag: 'EVENT', cls: 'v-type-other' };
   }
-  function relativeDays(iso, anchorTs) {
+  function relativeDays(iso, _ignoredAnchor) {
+    // Always anchored to wall-clock now. Earlier versions accepted an
+    // anchorTs that defaulted to dataset newest — that was misleading for
+    // ACLED whose free-tier 12-month embargo means "newest event" can be
+    // a year stale. The caller used to pass the dump's newest_ts here so
+    // a 13-month-old event would render as "today" — which is not honest.
+    // The arg is kept (ignored) so old call sites still typecheck.
     if (!iso) return '';
     const t = Date.parse(iso);
     if (!isFinite(t)) return '';
-    const days = Math.max(0, Math.round(((anchorTs || Date.now()) - t) / 86400000));
+    const days = Math.max(0, Math.round((Date.now() - t) / 86400000));
     if (days === 0) return 'today';
     if (days === 1) return '1d ago';
     if (days < 30)  return `${days}d ago`;
@@ -138,36 +144,73 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function renderVesselList(id, cp) {
     if (!gpEls.vesselList) return;
+    const captionEl = document.getElementById('gpVesselListCaption');
     const hint = 'color:var(--text-mute);font-family:var(--mono);font-size:11px;padding:6px 2px';
 
+    function setCaption(text) {
+      if (captionEl) captionEl.textContent = text || '';
+    }
+
     if (!INCIDENT_CHOKEPOINTS.has(id)) {
+      setCaption('');
       gpEls.vesselList.innerHTML = `<div style="${hint}">Incident overlay covers Hormuz, Bab el-Mandeb, and Suez.</div>`;
       return;
     }
     const bucket = window.CP && window.CP.incidents && window.CP.incidents[id];
     if (!bucket) {
+      setCaption('');
       gpEls.vesselList.innerHTML = `<div style="${hint}">Loading incidents…</div>`;
       return;
     }
     if (bucket.error) {
+      setCaption('');
       gpEls.vesselList.innerHTML = `<div style="${hint}">Incident feed unavailable (${escapeHtml(bucket.error)}).</div>`;
       return;
     }
-    const events = Array.isArray(bucket.events) ? bucket.events : [];
+
+    const events  = Array.isArray(bucket.events) ? bucket.events : [];
+    const days    = Number(bucket.window_days) || 90;
+    const newest  = bucket.zone_newest_date || null;
+
+    // Caption discloses the dataset window so a stale ACLED feed (12-mo
+    // embargo on the free tier) is visible at a glance. Format the newest
+    // date as "DD MON YYYY" to match the rest of the UI.
+    function fmtCaption(dateStr) {
+      if (!dateStr) return 'ACLED · no in-zone events on record';
+      const t = Date.parse(dateStr);
+      if (!isFinite(t)) return `ACLED · data through ${escapeHtml(dateStr)}`;
+      const d = new Date(t);
+      const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+      const dd = String(d.getUTCDate()).padStart(2,'0');
+      const mm = months[d.getUTCMonth()];
+      const yy = d.getUTCFullYear();
+      const ageDays = Math.max(0, Math.round((Date.now() - t) / 86400000));
+      const stale = ageDays > 60 ? ` · ${ageDays > 365 ? Math.round(ageDays/30) + 'mo stale' : ageDays + 'd stale'}` : '';
+      return `ACLED · data through ${dd} ${mm} ${yy}${stale}`;
+    }
+    setCaption(fmtCaption(newest));
+
     if (!events.length) {
-      gpEls.vesselList.innerHTML = `<div style="${hint}">No ACLED incidents in this zone over the last 90 days.</div>`;
+      // Honest empty state. The earlier UI showed events from the dump's
+      // newest 90-day window even when that window ended 13 months ago,
+      // labeled with "Xd ago" relative to the dump's newest. Now: if the
+      // wall-clock window is empty we say so plainly.
+      const reason = newest
+        ? `No incidents in the last ${days}d — most recent in-zone event is ${escapeHtml(newest)}.`
+        : `No ACLED incidents on record for this zone.`;
+      gpEls.vesselList.innerHTML = `<div style="${hint}">${reason}</div>`;
       return;
     }
+
     // Show the 6 most recent — sidebar is narrow, full set is on the §02.2 maps
     // (and the upstream ACLED dashboard via the footer link).
-    const anchor = bucket.anchor_ts ? bucket.anchor_ts * 1000 : Date.now();
     const top = events.slice(0, 6);
     gpEls.vesselList.innerHTML = top.map(ev => {
       const cls   = classifySidebarEvent(ev);
       const where = escapeHtml(ev.location || ev.country || '—');
       const actor = escapeHtml((ev.actor1 || '').split(/[(:]/)[0].trim() || '—');
       const fat   = ev.fatalities && Number(ev.fatalities) > 0 ? `${Number(ev.fatalities)}†` : '—';
-      const when  = escapeHtml(relativeDays(ev.date, anchor));
+      const when  = escapeHtml(relativeDays(ev.date));
       return `<div class="vessel-row">
         <span class="v-type ${cls.cls}">${cls.tag}</span>
         <span class="v-name" title="${escapeHtml(ev.notes || '')}">${where} · ${actor}</span>
@@ -192,21 +235,18 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const r = await window.API.chokepointIncidents(cp, 90);
         const events = Array.isArray(r && r.data) ? r.data : [];
-        // Anchor "X days ago" labels to the dataset's newest event ts
-        // (ACLED feeds lag wall-clock; using Date.now() makes everything
-        // look "13 months ago" which is misleading).
-        let anchor = 0;
-        for (const ev of events) {
-          if (ev.ts && ev.ts > anchor) anchor = ev.ts;
-        }
+        // No more dataset-newest anchor: relativeDays() now uses wall-clock
+        // unconditionally (see app.js relativeDays). zone_newest_date is
+        // surfaced separately for the panel caption.
         window.CP.incidents[cp] = {
           events,
-          anchor_ts: anchor || null,
-          window_days: r && r.days,
+          window_days:       r && r.days,
+          zone_newest_date:  r && r.zone_newest_date,
+          wall_clock_cutoff: r && r.wall_clock_cutoff,
           error: null,
         };
       } catch (e) {
-        window.CP.incidents[cp] = { events: [], anchor_ts: null, error: (e && e.message) || 'fetch failed' };
+        window.CP.incidents[cp] = { events: [], zone_newest_date: null, error: (e && e.message) || 'fetch failed' };
       }
     }));
     renderChokepoint(currentChokepoint);

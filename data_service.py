@@ -577,30 +577,197 @@ def _incident_actor_match(event: dict, hints: tuple) -> bool:
     return any(h in blob for h in hints)
 
 
-def get_chokepoint_incidents(chokepoint_id: str, days: int = 90, limit: int = 200) -> List[dict]:
+# Keyword sets for tagging curated war-timeline + news events to a chokepoint
+# when their coordinates don't fall inside the bounding box. Curated events
+# like "Trump Threatens Iran's Power Grid" are coded to Washington DC but are
+# fundamentally Hormuz-relevant — keyword tagging captures that. Match is
+# case-insensitive substring against the event's title + description.
+INCIDENT_KEYWORDS = {
+    "hormuz": (
+        "hormuz", "persian gulf", "strait of hormuz", "irgc", "kharg", "qeshm",
+        "bushehr", "bandar abbas", "fujairah", "gulf of oman", "iranian navy",
+        "khamenei", "tehran", "ovx",
+    ),
+    "bab": (
+        "bab el-mandeb", "bab al-mandab", "red sea", "houthi", "ansar allah",
+        "yemen", "salalah", "djibouti", "gulf of aden",
+    ),
+    "suez": (
+        "suez", "sinai", "egyptian canal",
+    ),
+}
+
+# Map curated `type` strings → ACLED event_type buckets so the downstream
+# protests/riots filter still works correctly (curated events are never
+# protests; we never want them dropped).
+_CURATED_TYPE_TO_ACLED = {
+    "military":   "Battles",
+    "proxy":      "Battles",
+    "nuclear":    "Strategic developments",
+    "sanctions":  "Strategic developments",
+    "diplomatic": "Strategic developments",
+    "event":      "Strategic developments",
+}
+
+# Heuristic mapping curated title → an ACLED-shaped sub_event_type so the
+# frontend's classifySidebarEvent() can tag rows as DRONE/MISSILE/NAVAL/HIJACK
+# instead of falling through to a generic "EVENT" badge.
+def _curated_sub_event_for(title: str) -> str:
+    t = (title or "").lower()
+    if "drone" in t or "shahed" in t or "uav" in t:                 return "Air/drone strike"
+    if "missile" in t or "torpedo" in t or "rocket" in t:           return "Shelling/artillery/missile attack"
+    if "tanker" in t and ("seiz" in t or "intercept" in t or "board" in t):
+                                                                    return "Abduction/forced disappearance"
+    if "tanker" in t or "naval" in t or "destroyer" in t or "submarine" in t or "vessel" in t:
+                                                                    return "Armed clash"
+    if "strike" in t or "attack" in t:                              return "Armed clash"
+    return "Strategic developments"
+
+
+def _kw_match(text: str, keywords: tuple) -> bool:
+    """Word-boundary keyword match. Naive substring matching produces false
+    positives like `unclea[red sea] mines` triggering the "red sea" keyword.
+    `\\b` boundaries ensure the keyword sits at real word edges."""
+    if not text or not keywords:
+        return False
+    import re
+    for k in keywords:
+        if re.search(r"\b" + re.escape(k) + r"\b", text):
+            return True
+    return False
+
+
+def _curated_events_for_chokepoint(chokepoint_id: str) -> List[dict]:
+    """Project the curated war timeline + news-promoted events into ACLED-shaped
+    incident records relevant to the given chokepoint.
+
+    Why this exists: the kill-zone-incidents panel is meant to surface RECENT
+    oil-impactful events for the chokepoint. The pure-ACLED stream can't do
+    that on the free tier — ACLED's 12-month embargo means the freshest event
+    is ~April 2025. The curated war timeline, by contrast, runs through April
+    2026 and is hand-tagged for oil relevance. Folding it into the same pool
+    lets the panel actually do its job (show recent oil-moving events at this
+    chokepoint), instead of going silently empty under the embargo.
+
+    Selection: events whose lat/lon fall inside the chokepoint's bbox OR whose
+    title/description match the chokepoint's keyword set. Keyword-only matches
+    are repinned to the bbox center so the downstream `in_box` check passes
+    without further plumbing.
+
+    Each curated event is tagged with `source = "curated_war_timeline"` (or
+    "news_scraper" if `auto: True`) so the UI can distinguish them from raw
+    ACLED rows.
+    """
+    box = INCIDENT_BOUNDING_BOXES.get(chokepoint_id)
+    if not box:
+        return []
+    (lat_n, lon_w), (lat_s, lon_e) = box
+    cp_center_lat = (lat_n + lat_s) / 2.0
+    cp_center_lon = (lon_w + lon_e) / 2.0
+    keywords = INCIDENT_KEYWORDS.get(chokepoint_id, ())
+
+    try:
+        merged = get_merged_curated_events(include_news=True) or []
+    except Exception as e:
+        logger.warning(f"_curated_events_for_chokepoint: merge failed: {e}")
+        return []
+
+    out: List[dict] = []
+    for ev in merged:
+        try:
+            lat = float(ev.get("lat") or 0)
+            lon = float(ev.get("lon") or 0)
+        except (TypeError, ValueError):
+            lat = lon = 0.0
+        ev_in_box = (lat or lon) and _incident_in_box(lat, lon, box)
+
+        title = ev.get("title") or ""
+        desc  = ev.get("description") or ""
+        text_blob = (title + " " + desc).lower()
+        kw_match = _kw_match(text_blob, keywords)
+
+        if not (ev_in_box or kw_match):
+            continue
+
+        # Pin keyword-only matches to chokepoint center so the downstream
+        # bbox check in get_chokepoint_incidents() accepts them.
+        out_lat = lat if ev_in_box else cp_center_lat
+        out_lon = lon if ev_in_box else cp_center_lon
+
+        type_ = (ev.get("type") or "event").lower()
+        # Stable per-event id so duplicates dedupe across calls.
+        eid = f"CURATED-{chokepoint_id}-{ev.get('date','')}-{title[:24].strip()}"
+
+        out.append({
+            "event_id_cnty": eid,
+            "event_date":    ev.get("date") or "",
+            "event_type":    _CURATED_TYPE_TO_ACLED.get(type_, "Strategic developments"),
+            "sub_event_type": _curated_sub_event_for(title),
+            "actor1":        title[:80],          # used by frontend for the row label
+            "actor2":        "",
+            "location":      ev.get("location") or "",
+            "country":       "",
+            "latitude":      str(out_lat),
+            "longitude":     str(out_lon),
+            "fatalities":    int(ev.get("fatalities") or 0),
+            "source":        "news_scraper" if ev.get("source_type") == "news_auto" else "curated_war_timeline",
+            "notes":         desc,
+        })
+    return out
+
+
+def get_chokepoint_incidents(chokepoint_id: str, days: int = 90, limit: int = 200) -> dict:
     """Real ACLED + iran-events incidents inside a chokepoint zone.
 
-    Returns events from the last `days` days that satisfy EITHER:
+    Returns a dict::
+
+        {
+          "events":             [ ...up to `limit` events from the last `days` days... ],
+          "zone_newest_date":   "YYYY-MM-DD" | None,   # newest event in this zone
+                                                       # ANYWHERE in the dump,
+                                                       # ignoring the wall-clock
+                                                       # cutoff. Powers the
+                                                       # "data through <date>"
+                                                       # caption so a stale
+                                                       # ACLED feed surfaces
+                                                       # honestly.
+          "wall_clock_cutoff":  "YYYY-MM-DD",          # the cutoff used
+        }
+
+    `events` contains records that satisfy EITHER:
       (a) lat/lon falls inside the chokepoint's incident bounding box, OR
       (b) actor1/actor2 matches the chokepoint's actor hints (Houthi for Bab,
           IRGC/Iran for Hormuz) — surfaces events whose coordinates are
           inland but whose target was the chokepoint.
 
-    Each returned record carries: event_date, event_type, sub_event_type,
+    Each event record carries: event_date, event_type, sub_event_type,
     actor1, location, latitude, longitude, fatalities, source, notes.
 
-    No synthesis. If the data files are empty or stale beyond `days`, returns
-    [] and the frontend surfaces that state honestly.
+    No synthesis. If the data files are empty or stale beyond `days`, the
+    `events` list is empty and `zone_newest_date` discloses how stale the
+    feed actually is so the frontend can show "no recent events · data
+    through YYYY-MM-DD" instead of dressing up old events as recent.
     """
     if chokepoint_id not in INCIDENT_BOUNDING_BOXES:
-        return []
+        return {"events": [], "zone_newest_date": None, "wall_clock_cutoff": None}
     box = INCIDENT_BOUNDING_BOXES[chokepoint_id]
     actor_hints = INCIDENT_ACTOR_HINTS.get(chokepoint_id, ())
 
-    # Date cutoff. We use the dataset's own newest event as the anchor (rather
-    # than wall-clock now) because the cached ACLED dump can lag the calendar
-    # by weeks — using wall-clock would silently produce empty results when
-    # the dump is stale.
+    # Date cutoff is anchored to WALL-CLOCK, not the dataset's newest event.
+    #
+    # An earlier version anchored the "last `days` days" window to
+    # max(event_date) in the dump so a stale ACLED feed (12-month embargo on
+    # the free tier) wouldn't produce empty panels. That hid the staleness:
+    # the panel was titled "RECENT KILL-ZONE INCIDENTS" but actually showed
+    # events from a 90-day window ending in March 2025, which the frontend
+    # then displayed with "Xd ago" labels relative to that fake anchor —
+    # implying everything was current. A user trusting the panel was being
+    # misled into believing those were last-week events.
+    #
+    # Honest behavior: filter against wall-clock. If ACLED is 12 months
+    # behind, the 90-day window is empty and the frontend surfaces that
+    # explicitly. Better to say "no recent incidents" than to dress up
+    # 13-month-old data as "recent".
 
     # Prefer the LIVE ACLED memo / cache over the bundled JSON fallback. The
     # bundled file is from the last manual refresh (currently Mar 2025) and
@@ -625,26 +792,26 @@ def get_chokepoint_incidents(chokepoint_id: str, days: int = 90, limit: int = 20
     if not iran:
         iran = _load_iran_json_fallback() or []
 
-    pool = list(acled) + list(iran)
+    # Curated war timeline + news-promoted events, projected onto this
+    # chokepoint. This is what keeps the panel populated with RECENT oil-
+    # impactful events under the ACLED 12-month embargo (which would
+    # otherwise leave the panel empty for free-tier deploys). See
+    # _curated_events_for_chokepoint for the selection logic.
+    curated_for_cp = _curated_events_for_chokepoint(chokepoint_id)
+
+    pool = list(acled) + list(iran) + curated_for_cp
 
     if not pool:
-        return []
+        return {"events": [], "zone_newest_date": None,
+                "wall_clock_cutoff": time.strftime("%Y-%m-%d", time.localtime(time.time() - days * 86400))}
 
-    # Find dataset anchor (newest event_date present)
-    newest_ts = 0
-    for e in pool:
-        d = e.get("event_date") or e.get("date")
-        if not d:
-            continue
-        try:
-            ts = time.mktime(time.strptime(d[:10], "%Y-%m-%d"))
-            if ts > newest_ts:
-                newest_ts = ts
-        except Exception:
-            continue
-    if newest_ts == 0:
-        newest_ts = time.time()
-    cutoff_ts = newest_ts - days * 86400
+    # Wall-clock cutoff (events strictly within the last `days` days of now).
+    # `zone_newest_ts` separately tracks the newest event in this chokepoint's
+    # zone REGARDLESS of the cutoff — surfaced back to the UI so a stale feed
+    # discloses "data through <date>" instead of silently producing an empty
+    # list with no explanation.
+    cutoff_ts = time.time() - days * 86400
+    zone_newest_ts = 0
 
     seen_ids = set()
     out = []
@@ -679,12 +846,15 @@ def get_chokepoint_incidents(chokepoint_id: str, days: int = 90, limit: int = 20
         if etype in ("protests", "riots"):
             continue
 
-        # Date filter
+        # Parse date. Track the newest in-zone date so we can disclose
+        # the dataset window even when no events fall inside the cutoff.
         d = e.get("event_date") or e.get("date") or ""
         try:
             ts = time.mktime(time.strptime(d[:10], "%Y-%m-%d"))
         except Exception:
             continue
+        if ts > zone_newest_ts:
+            zone_newest_ts = ts
         if ts < cutoff_ts:
             continue
 
@@ -709,7 +879,14 @@ def get_chokepoint_incidents(chokepoint_id: str, days: int = 90, limit: int = 20
 
     # Newest first
     out.sort(key=lambda x: x["ts"], reverse=True)
-    return out[:limit]
+    return {
+        "events": out[:limit],
+        "zone_newest_date": (
+            time.strftime("%Y-%m-%d", time.localtime(zone_newest_ts))
+            if zone_newest_ts else None
+        ),
+        "wall_clock_cutoff": time.strftime("%Y-%m-%d", time.localtime(cutoff_ts)),
+    }
 
 
 def get_chokepoint_incidents_meta() -> dict:
