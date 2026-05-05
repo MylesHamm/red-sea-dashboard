@@ -1865,12 +1865,42 @@ def fetch_gdelt_tone(timespan: str = "90d") -> dict:
 
 
 def _do_fetch_gdelt_tone(timespan: str) -> dict:
-    GDELT_TTL_S = 4 * 3600
-    # Re-check cache after singleflight handoff (the leader may have
-    # populated it while we were waiting).
-    cached = _read_cache(f"gdelt_tone_{timespan}", GDELT_TTL_S)
-    if cached:
-        return cached
+    # Cache TTLs:
+    #   full (tone + volume)  → 4h, the full refresh interval
+    #   partial (one missing) → 30 min, so we retry the missing series soon
+    #
+    # Earlier code wrote partial results to the same file with the same TTL,
+    # which meant a single tone-429 locked out tone fetching for 4 hours and
+    # the chart silently sat with tone:[] long after the rate limit reset.
+    # We read partial caches with the shorter TTL so a partial expires fast
+    # and the next request retries the missing series.
+    GDELT_TTL_FULL_S    = 4 * 3600
+    GDELT_TTL_PARTIAL_S = 30 * 60
+    cache_key = f"gdelt_tone_{timespan}"
+
+    # Re-check cache after singleflight handoff. Inspect the cached payload
+    # to determine which TTL applies — full caches are honored for 4h, but
+    # if it's a partial (one mode missing) we only honor it for 30 min so
+    # the next request retries the missing series.
+    #
+    # Partial detection is content-based, not just the `_partial` flag, so
+    # legacy caches written before this code (which carry tone:[] without
+    # the flag) are correctly identified as partial and re-fetched.
+    cached_full = _read_cache(cache_key, GDELT_TTL_FULL_S)
+    if cached_full:
+        is_partial = (
+            bool(cached_full.get("_partial"))
+            or not cached_full.get("tone")
+            or not cached_full.get("volume")
+        )
+        if not is_partial:
+            return cached_full
+        # Partial — re-check with shorter TTL. If the cache is younger than
+        # 30 min, return it; older, fall through and refetch the missing
+        # series.
+        cached_partial = _read_cache(cache_key, GDELT_TTL_PARTIAL_S)
+        if cached_partial:
+            return cached_partial
 
     query = 'iran AND (oil OR "strait of hormuz" OR military OR strikes OR sanctions)'
     base = "https://api.gdeltproject.org/api/v2/doc/doc"
@@ -1931,31 +1961,38 @@ def _do_fetch_gdelt_tone(timespan: str) -> dict:
                     time.sleep(2 * attempts)
 
     # Cache strategy:
-    # - Both series populated  → cache with full 4h TTL
-    # - One series populated   → cache with SHORTER 30min TTL by writing a
-    #                            "_partial" suffixed file. The /api/gdelt-tone
-    #                            handler merges partial + full caches so the
-    #                            second request fills in the missing mode
-    #                            without making the user wait 4h.
-    # - Neither populated      → don't cache; serve stale if available;
-    #                            else return the empty {tone:[],volume:[]}.
-    full = bool(result["tone"]) and bool(result["volume"])
-    partial = bool(result["tone"]) or bool(result["volume"])
+    # - Both series populated  → cache with `_partial: False`, honored 4h
+    # - One series populated   → cache with `_partial: True`,  honored 30min
+    #                            so we retry the missing series soon
+    # - Neither populated      → don't write a fresh cache; serve stale if
+    #                            available; else return empty
+    full    = bool(result["tone"]) and bool(result["volume"])
+    partial = bool(result["tone"]) or  bool(result["volume"])
     if full:
-        _write_cache(f"gdelt_tone_{timespan}", result)
+        result["_partial"] = False
+        _write_cache(cache_key, result)
         return result
     if partial:
-        # Merge with any existing stale cache so we don't lose what we had.
-        stale = _read_stale_cache(f"gdelt_tone_{timespan}") or {}
+        # Merge with any existing stale cache so we don't lose what we had
+        # (e.g. tone landed last refresh, volume landed this refresh — keep
+        # both even if only one mode succeeded this time).
+        stale = _read_stale_cache(cache_key) or {}
         merged = {
             "tone":   result["tone"]   or (stale.get("tone")   or []),
             "volume": result["volume"] or (stale.get("volume") or []),
+            "_partial": not (bool(result["tone"]) and bool(result["volume"])
+                             or (stale.get("tone") and stale.get("volume"))),
         }
-        _write_cache(f"gdelt_tone_{timespan}", merged)
-        logger.info(f"GDELT: cached partial (tone={len(merged['tone'])}, volume={len(merged['volume'])})")
+        # If the merge produced both series (this fetch + stale carry-forward),
+        # treat as full and use full TTL.
+        if not merged["_partial"]:
+            logger.info(f"GDELT: stale-merge produced full result (tone={len(merged['tone'])}, volume={len(merged['volume'])})")
+        else:
+            logger.info(f"GDELT: cached PARTIAL · 30min TTL (tone={len(merged['tone'])}, volume={len(merged['volume'])})")
+        _write_cache(cache_key, merged)
         return merged
     # Empty live result — serve stale cache if available.
-    stale = _read_stale_cache(f"gdelt_tone_{timespan}")
+    stale = _read_stale_cache(cache_key)
     if stale and (stale.get("tone") or stale.get("volume")):
         logger.info(f"GDELT: serving stale cache (tone={len(stale.get('tone') or [])}, volume={len(stale.get('volume') or [])})")
         return stale

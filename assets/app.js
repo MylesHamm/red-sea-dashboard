@@ -263,31 +263,74 @@ document.addEventListener('DOMContentLoaded', () => {
         window.CP.incidents[cp] = { events: [], zone_newest_date: null, error: (e && e.message) || 'fetch failed' };
       }
     }));
-    // Refresh hero "INCIDENTS · 30D" KPI from the now-correct counts.
+    // Refresh hero "INCIDENTS · 30D" KPI from the broader oil-impact pool.
+    refreshHeroIncidentsKpi();
+    // Re-render the §02 chokepoint card grid so each card's per-chokepoint
+    // INCIDENTS · 30D box picks up the merged-pool count we just wrote.
     try {
-      const incidentEl = document.querySelector('[data-kpi="incidents30"]');
-      if (incidentEl && window.CHOKEPOINTS) {
-        const total = (window.CHOKEPOINTS.hormuz && window.CHOKEPOINTS.hormuz.incidents30d || 0) +
-                      (window.CHOKEPOINTS.bab    && window.CHOKEPOINTS.bab.incidents30d    || 0);
-        incidentEl.textContent = String(total);
-      }
-      // Refresh "as of" footer to be honest about the cutoff window.
-      const asofEl = document.querySelector('[data-kpi-foot-asof="incidents30"]');
-      if (asofEl) {
-        const d = new Date();
-        const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-        asofEl.textContent = `${String(d.getDate()).padStart(2,'0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
-      }
-      // Re-render the §02 chokepoint card grid so each card's INCIDENTS·30D
-      // box picks up the merged-pool count we just wrote. Without this the
-      // cards would stick to the value that hydrate.js wrote on first paint
-      // (which is 0 under ACLED's 12-mo embargo).
       if (typeof window.__hydrateChokepointCards === 'function') {
         window.__hydrateChokepointCards();
       }
     } catch (e) { /* non-fatal */ }
     renderChokepoint(currentChokepoint);
   }
+
+  // Hero "INCIDENTS · 30D" KPI — globally deduped count of recent oil-impactful
+  // events from curated war timeline + Google News (the same pool that feeds
+  // §09 timeline and §11 feed). Earlier this was just summed across chokepoint
+  // pools, which under-counted because the chokepoint endpoint caps the news
+  // contribution to news-promoted (~5 entries per refresh) and ignored the
+  // broader ~45-article live news feed.
+  //
+  // Called after /api/chokepoint-incidents fetches AND after /api/iran-events
+  // lands ('data-hydrated' event), so the count converges to the right value
+  // regardless of which API resolves first.
+  function refreshHeroIncidentsKpi() {
+    try {
+      const incidentEl = document.querySelector('[data-kpi="incidents30"]');
+      if (!incidentEl) return;
+      const iranState = (window.CP && window.CP.state && window.CP.state.iran) || {};
+      const curated = Array.isArray(iranState.curated) ? iranState.curated : [];
+      const news    = Array.isArray(iranState.news)    ? iranState.news    : [];
+      const now      = Date.now();
+      const cutoff30 = now - 30 * 86400000;
+      const cutoff60 = now - 60 * 86400000;
+
+      const seen = new Set();
+      let total = 0, prior = 0;
+      const accept = (date, title) => {
+        if (!date) return;
+        const key = `${date}::${(title || '').slice(0, 50).toLowerCase().trim()}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        const t = Date.parse(date);
+        if (!isFinite(t)) return;
+        if (t >= cutoff30)      total++;
+        else if (t >= cutoff60) prior++;
+      };
+      for (const c of curated) accept(c.date, c.title || c.label);
+      for (const n of news)    accept(n.date, n.title || n.label);
+
+      incidentEl.textContent = String(total);
+      const deltaEl = document.querySelector('[data-kpi="incidents30Delta"]');
+      if (deltaEl) {
+        const d = total - prior;
+        const sign = d > 0 ? '+' : d < 0 ? '−' : '±';
+        deltaEl.textContent = `${sign}${Math.abs(d)} vs prior 30D`;
+        deltaEl.classList.toggle('up-alert', d > 0);
+        deltaEl.classList.toggle('down', d < 0);
+      }
+      const asofEl = document.querySelector('[data-kpi-foot-asof="incidents30"]');
+      if (asofEl) {
+        const d = new Date();
+        const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+        asofEl.textContent = `${String(d.getDate()).padStart(2,'0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
+      }
+    } catch (e) { /* non-fatal */ }
+  }
+  // Recompute when iran data finishes loading (it lands later than the
+  // initial chokepoint-incidents fetch on cold start).
+  window.addEventListener('data-hydrated', refreshHeroIncidentsKpi);
   refreshSidebarIncidents();
   setInterval(refreshSidebarIncidents, 300_000);
 
