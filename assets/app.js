@@ -285,10 +285,44 @@ document.addEventListener('DOMContentLoaded', () => {
   // Called after /api/chokepoint-incidents fetches AND after /api/iran-events
   // lands ('data-hydrated' event), so the count converges to the right value
   // regardless of which API resolves first.
+  // Cached server-computed dashboard state (from /api/dashboard-state).
+  // This is the authoritative source; client-side dedup is a fallback for
+  // the brief window before the first fetch resolves. Refreshed every
+  // 30s by the hero KPI poller below.
+  window.__dashState = null;
+
+  function _writeDeltaKpi(deltaEl, d) {
+    if (!deltaEl) return;
+    const sign = d > 0 ? '+' : d < 0 ? '−' : '±';
+    deltaEl.textContent = `${sign}${Math.abs(d)} vs prior 30D`;
+    deltaEl.classList.toggle('up-alert', d > 0);
+    deltaEl.classList.toggle('down', d < 0);
+  }
+  function _writeAsofKpi(asofEl) {
+    if (!asofEl) return;
+    const d = new Date();
+    const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    asofEl.textContent = `${String(d.getDate()).padStart(2,'0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  }
+
   function refreshHeroIncidentsKpi() {
     try {
       const incidentEl = document.querySelector('[data-kpi="incidents30"]');
       if (!incidentEl) return;
+
+      // Preferred path: server-composed state. Server runs the same dedup
+      // logic in Python and returns a single canonical number.
+      const ds = window.__dashState;
+      if (ds && ds.kpis && ds.kpis.incidents_30d) {
+        const k = ds.kpis.incidents_30d;
+        incidentEl.textContent = String(k.count != null ? k.count : '—');
+        _writeDeltaKpi(document.querySelector('[data-kpi="incidents30Delta"]'), k.delta || 0);
+        _writeAsofKpi(document.querySelector('[data-kpi-foot-asof="incidents30"]'));
+        return;
+      }
+
+      // Fallback: client-side dedup of curated + news. Used only for the
+      // first-paint window before /api/dashboard-state resolves.
       const iranState = (window.CP && window.CP.state && window.CP.state.iran) || {};
       const curated = Array.isArray(iranState.curated) ? iranState.curated : [];
       const news    = Array.isArray(iranState.news)    ? iranState.news    : [];
@@ -312,22 +346,27 @@ document.addEventListener('DOMContentLoaded', () => {
       for (const n of news)    accept(n.date, n.title || n.label);
 
       incidentEl.textContent = String(total);
-      const deltaEl = document.querySelector('[data-kpi="incidents30Delta"]');
-      if (deltaEl) {
-        const d = total - prior;
-        const sign = d > 0 ? '+' : d < 0 ? '−' : '±';
-        deltaEl.textContent = `${sign}${Math.abs(d)} vs prior 30D`;
-        deltaEl.classList.toggle('up-alert', d > 0);
-        deltaEl.classList.toggle('down', d < 0);
-      }
-      const asofEl = document.querySelector('[data-kpi-foot-asof="incidents30"]');
-      if (asofEl) {
-        const d = new Date();
-        const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-        asofEl.textContent = `${String(d.getDate()).padStart(2,'0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
-      }
+      _writeDeltaKpi(document.querySelector('[data-kpi="incidents30Delta"]'), total - prior);
+      _writeAsofKpi(document.querySelector('[data-kpi-foot-asof="incidents30"]'));
     } catch (e) { /* non-fatal */ }
   }
+
+  // Poll /api/dashboard-state and stash on window.__dashState. The poller
+  // populates the hero KPI deck the moment the server responds, which is
+  // typically faster than the master + iran-events round-trip the client
+  // was waiting on previously.
+  async function refreshDashboardState() {
+    if (!window.API || !window.API.dashboardState) return;
+    try {
+      const ds = await window.API.dashboardState();
+      if (ds && ds.kpis) {
+        window.__dashState = ds;
+        refreshHeroIncidentsKpi();
+      }
+    } catch (e) { /* non-fatal — fallback path will run */ }
+  }
+  refreshDashboardState();
+  setInterval(refreshDashboardState, 60_000);
   // Recompute when iran data finishes loading (it lands later than the
   // initial chokepoint-incidents fetch on cold start). Also expose on
   // window so hydrate.js's /api/events callback can delegate here instead

@@ -99,6 +99,131 @@ async def get_constants():
     }
 
 
+@app.get("/api/dashboard-state")
+async def get_dashboard_state():
+    """Composed dashboard state — every derived KPI in one place.
+
+    Replaces the pattern where the frontend computed `incidents30d`,
+    `oilFlowAtRisk`, `warPremiumPct`, etc. from raw API responses in
+    multiple components, leading to multi-writer races (the "59 → 32
+    flicker" we just fixed). The values are computed server-side once
+    per request — frontend reads them directly.
+    """
+    import time as _time
+    from datetime import datetime as _dt, timezone as _tz
+
+    # ── Source feeds (read memos / caches; never trigger a fetch) ───
+    master   = await _run_sync(data_service.load_master_dataset)
+    iran_resp_curated = data_service.get_merged_curated_events(include_news=True) or []
+    iran_news_cache = data_service._read_cache("iran_news", 7200) or []
+
+    ts = (master or {}).get("timeseries") or []
+    kpis_master = (master or {}).get("kpis") or {}
+
+    # ── Brent KPIs (latest, delta, war premium, 30D range) ──────────
+    brent_rows = [r for r in ts if r.get("brent_price") is not None]
+    latest = brent_rows[-1] if brent_rows else None
+    prior  = brent_rows[-2] if len(brent_rows) >= 2 else None
+    war_anchor = next((r for r in brent_rows if r.get("date", "") >= config.WAR_ONSET_DATE), None)
+    last30 = brent_rows[-30:] if len(brent_rows) >= 2 else brent_rows
+
+    def _pct(cur, base):
+        if cur is None or base in (None, 0): return None
+        return round((cur - base) / base * 100, 2)
+
+    brent_kpi = {
+        "price":         (latest or {}).get("brent_price"),
+        "change_24h":    round((latest or {}).get("brent_price", 0) - (prior or {}).get("brent_price", 0), 2) if latest and prior else None,
+        "change_24h_pct": _pct((latest or {}).get("brent_price"), (prior or {}).get("brent_price")) if latest and prior else None,
+        "range_30d":     [
+            min((r.get("brent_price") for r in last30 if r.get("brent_price") is not None), default=None),
+            max((r.get("brent_price") for r in last30 if r.get("brent_price") is not None), default=None),
+        ],
+        "war_premium_pct": _pct((latest or {}).get("brent_price"), (war_anchor or {}).get("brent_price")) if latest and war_anchor else None,
+        "as_of":         (latest or {}).get("date"),
+    }
+
+    # ── OVX / DXY (latest from master timeseries) ───────────────────
+    def _last_nonnull(key):
+        for r in reversed(ts):
+            if r.get(key) is not None:
+                return r.get(key), r.get("date")
+        return None, None
+    ovx_v, ovx_d = _last_nonnull("ovx")
+    dxy_v, dxy_d = _last_nonnull("dxy")
+
+    # ── INCIDENTS · 30D — globally deduped union of curated + news ──
+    # Same logic the frontend's refreshHeroIncidentsKpi was doing,
+    # moved to the backend so it's the canonical answer.
+    now_ts = _time.time()
+    cutoff30 = now_ts - 30 * 86400
+    cutoff60 = now_ts - 60 * 86400
+    seen = set()
+    inc_30d = inc_prior = 0
+    def _accept(date, title):
+        nonlocal inc_30d, inc_prior
+        if not date: return
+        key = f"{date[:10]}::{(title or '').strip().lower()[:50]}"
+        if key in seen: return
+        seen.add(key)
+        try:
+            t = _time.mktime(_time.strptime(date[:10], "%Y-%m-%d"))
+        except Exception:
+            return
+        if t >= cutoff30:      inc_30d += 1
+        elif t >= cutoff60:    inc_prior += 1
+    for c in iran_resp_curated:
+        _accept(c.get("date"), c.get("title") or c.get("label"))
+    for n in iran_news_cache:
+        _accept(n.get("date"), n.get("title") or n.get("label"))
+
+    # ── OIL FLOW AT RISK — Hormuz + Bab structural (mbd) ────────────
+    flow_h = config.CHOKEPOINT_REF_FLOW_MBD.get("hormuz", 21.0)
+    flow_b = config.CHOKEPOINT_REF_FLOW_MBD.get("bab",     8.2)
+    flow_total = flow_h + flow_b
+
+    # ── Per-chokepoint snapshot ─────────────────────────────────────
+    chokepoints = {}
+    for cp_id in ("hormuz", "bab", "suez"):
+        cp_data = data_service.get_chokepoint_incidents(cp_id, 90, 200)
+        events = cp_data.get("events", [])
+        ev_30d = sum(1 for e in events if (e.get("ts") or 0) >= cutoff30)
+        chokepoints[cp_id] = {
+            "ref_flow_mbd": config.CHOKEPOINT_REF_FLOW_MBD.get(cp_id),
+            "incidents_30d": ev_30d,
+            "incidents_90d": len(events),
+            "zone_newest_date": cp_data.get("zone_newest_date"),
+            "wall_clock_cutoff": cp_data.get("wall_clock_cutoff"),
+        }
+
+    # ── Wall-clock date string for UI captions ──────────────────────
+    today_iso = _dt.now(_tz.utc).date().isoformat()
+
+    return {
+        "as_of":  today_iso,
+        "kpis": {
+            "brent": brent_kpi,
+            "ovx":   {"value": ovx_v, "as_of": ovx_d},
+            "dxy":   {"value": dxy_v, "as_of": dxy_d},
+            "incidents_30d": {
+                "count":      inc_30d,
+                "prior_30d":  inc_prior,
+                "delta":      inc_30d - inc_prior,
+                "as_of":      today_iso,
+            },
+            "oil_flow_at_risk": {
+                "mbd":        round(flow_total, 1),
+                "pct_global": round(flow_total / config.GLOBAL_LIQUIDS_MBD * 100, 1),
+            },
+        },
+        "chokepoints": chokepoints,
+        "anchors": {
+            "war_onset":    config.WAR_ONSET_DATE,
+            "hamas_attack": config.HAMAS_ATTACK_DATE,
+        },
+    }
+
+
 @app.get("/api/diag")
 async def diagnostic():
     """Diagnostic snapshot: data freshness + last fetch errors.

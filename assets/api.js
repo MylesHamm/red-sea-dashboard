@@ -46,6 +46,11 @@ window.API = (function () {
     // page load into window.CONSTANTS so every component reads the same
     // values. Long TTL because these only change when config.py is edited.
     constants:        ()  => _fetch('/api/constants',            { ttlMs: 3600_000 }),
+    // Composed dashboard state — every derived KPI in one place.
+    // The frontend should prefer this over hand-computing values from
+    // raw /api/master + /api/iran-events responses, which historically
+    // raced and produced flickering KPIs (the "59 → 32" bug).
+    dashboardState:   ()  => _fetch('/api/dashboard-state',       { ttlMs: 30_000 }),
     // Diagnostic snapshot — exposes ACLED + Iran-events `last_fetch_error`
     // (the actual exception string from the backend) plus credential
     // configuration flags. Used by the §03 warning badge so a stale
