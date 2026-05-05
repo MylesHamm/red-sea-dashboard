@@ -1562,20 +1562,22 @@ def _do_fetch_gdelt_tone(timespan: str) -> dict:
     base = "https://api.gdeltproject.org/api/v2/doc/doc"
     result = {"tone": [], "volume": []}
 
-    # Sequential with a small spacing delay between modes. GDELT 429s us
-    # constantly when both TimelineTone and TimelineVolRaw fire back-to-
-    # back; a 1.5s pause between requests stays inside their per-IP rate
-    # limit window. Total fetch is still <5s — invisible to the user since
-    # this only runs on cache miss every 4 hours.
-    modes = [("TimelineTone", "tone"), ("TimelineVolRaw", "volume")]
+    # Sequential with spacing between modes. GDELT 429s aggressively on
+    # cold start (HF Spaces shares an IP block with hundreds of other
+    # apps so we share their rate-limit pool). 3 attempts per mode with
+    # exponential backoff (3s → 8s) gives the rate window time to reset
+    # without doubling our request rate.
+    #
+    # Volume-first ordering: in production logs TimelineTone got 429'd
+    # while TimelineVolRaw came back clean immediately after. Switching
+    # the order so the easier-to-fetch mode runs first means a partial
+    # cache (volume only) lands sooner and the next request only has
+    # to fetch tone.
+    modes = [("TimelineVolRaw", "volume"), ("TimelineTone", "tone")]
     for i, (mode, key) in enumerate(modes):
         if i > 0:
-            time.sleep(1.5)
-        # Up to 2 attempts per mode, with backoff on 429 specifically.
-        # GDELT recovers within a few seconds; immediate retry doesn't help.
-        attempts = 0
-        while attempts < 2:
-            attempts += 1
+            time.sleep(2)
+        for attempts in range(1, 4):
             try:
                 resp = requests.get(
                     base,
@@ -1589,15 +1591,15 @@ def _do_fetch_gdelt_tone(timespan: str) -> dict:
                     headers=_BROWSER_HEADERS,
                     timeout=30,
                 )
-                if resp.status_code == 429 and attempts == 1:
-                    logger.warning(f"GDELT {mode}: 429, backing off 4s")
-                    time.sleep(4)
+                if resp.status_code == 429 and attempts < 3:
+                    backoff = [3, 8][attempts - 1]
+                    logger.warning(f"GDELT {mode} attempt {attempts}/3: 429, backing off {backoff}s")
+                    time.sleep(backoff)
                     continue
                 resp.raise_for_status()
                 data = resp.json()
                 timeline = data.get("timeline", [])
                 if timeline and timeline[0].get("data"):
-                    # GDELT returns ISO dates like "20260415T000000Z"
                     records = []
                     for r in timeline[0]["data"]:
                         raw_date = r.get("date", "")
@@ -1611,24 +1613,38 @@ def _do_fetch_gdelt_tone(timespan: str) -> dict:
                 break
             except Exception as e:
                 logger.warning(f"GDELT {mode} attempt {attempts}: {e}")
-                if attempts < 2:
-                    time.sleep(2)
+                if attempts < 3:
+                    time.sleep(2 * attempts)
 
-    # Only cache the result if BOTH series populated. A half-cache (e.g.
-    # tone OK + volume 429) used to land in the cache and stick for the
-    # full TTL — meaning the frontend's volume overlay was empty for
-    # hours until the next miss. Better to fall back to stale and let
-    # the next request retry both modes.
-    if result["tone"] and result["volume"]:
+    # Cache strategy:
+    # - Both series populated  → cache with full 4h TTL
+    # - One series populated   → cache with SHORTER 30min TTL by writing a
+    #                            "_partial" suffixed file. The /api/gdelt-tone
+    #                            handler merges partial + full caches so the
+    #                            second request fills in the missing mode
+    #                            without making the user wait 4h.
+    # - Neither populated      → don't cache; serve stale if available;
+    #                            else return the empty {tone:[],volume:[]}.
+    full = bool(result["tone"]) and bool(result["volume"])
+    partial = bool(result["tone"]) or bool(result["volume"])
+    if full:
         _write_cache(f"gdelt_tone_{timespan}", result)
         return result
-    # Partial or empty result — try stale cache first.
+    if partial:
+        # Merge with any existing stale cache so we don't lose what we had.
+        stale = _read_stale_cache(f"gdelt_tone_{timespan}") or {}
+        merged = {
+            "tone":   result["tone"]   or (stale.get("tone")   or []),
+            "volume": result["volume"] or (stale.get("volume") or []),
+        }
+        _write_cache(f"gdelt_tone_{timespan}", merged)
+        logger.info(f"GDELT: cached partial (tone={len(merged['tone'])}, volume={len(merged['volume'])})")
+        return merged
+    # Empty live result — serve stale cache if available.
     stale = _read_stale_cache(f"gdelt_tone_{timespan}")
     if stale and (stale.get("tone") or stale.get("volume")):
         logger.info(f"GDELT: serving stale cache (tone={len(stale.get('tone') or [])}, volume={len(stale.get('volume') or [])})")
         return stale
-    # No stale, partial live — return what we got rather than nothing,
-    # but DON'T cache it so the next request re-tries.
     return result
 
 

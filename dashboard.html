@@ -13,12 +13,15 @@
 <script src="https://d3js.org/topojson.v3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
-<!-- Twitter/X timeline widget — used by §12 HormuzLetter feed. Async-loaded
-     so it doesn't block first paint; fails-open (the section shows a
-     fallback link if X is blocked by the user's network or an ad blocker). -->
-<script async defer src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+<!-- Twitter/X timeline widget — used by §12 HormuzLetter feed. Loaded
+     async; the explicit twttr.widgets.load() call below forces the
+     scanner to run after our DOM is built, fixing the case where the
+     <a class="twitter-timeline"> markup is added AFTER widgets.js has
+     already auto-scanned. Fails-open: if X is blocked by an ad blocker
+     or the user's network, the inline link stays visible. -->
+<script>window.twttr=(function(d,s,id){var t,js,fjs=d.getElementsByTagName(s)[0];if(d.getElementById(id))return;js=d.createElement(s);js.id=id;js.src="https://platform.twitter.com/widgets.js";fjs.parentNode.insertBefore(js,fjs);return window.twttr||(t={_e:[],ready:function(f){t._e.push(f);}});}(document,"script","twitter-wjs"));</script>
 
-<link rel="stylesheet" href="assets/app.css?v=20260502i">
+<link rel="stylesheet" href="assets/app.css?v=20260505a">
 </head>
 <body>
 
@@ -876,12 +879,12 @@
 </div>
 
 <!-- Scripts -->
-<script src="assets/api.js?v=20260502i"></script>
-<script src="assets/data.js?v=20260502i"></script>
-<script src="assets/hydrate.js?v=20260502i"></script>
-<script src="assets/globe.js?v=20260502i"></script>
-<script src="assets/tacmap.js?v=20260502i"></script>
-<script src="assets/charts.js?v=20260502i"></script>
-<script src="assets/app.js?v=20260502i"></script>
+<script src="assets/api.js?v=20260505a"></script>
+<script src="assets/data.js?v=20260505a"></script>
+<script src="assets/hydrate.js?v=20260505a"></script>
+<script src="assets/globe.js?v=20260505a"></script>
+<script src="assets/tacmap.js?v=20260505a"></script>
+<script src="assets/charts.js?v=20260505a"></script>
+<script src="assets/app.js?v=20260505a"></script>
 </body>
 </html>

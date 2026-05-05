@@ -2,6 +2,44 @@
 
 document.addEventListener('DOMContentLoaded', () => {
 
+  // ── Twitter/X timeline embed — explicit scan + fallback handling ──────────
+  // widgets.js auto-scans on first load, but it can race the DOM in some
+  // browsers / when our scripts load slowly. Force a manual scan once the
+  // DOM is ready, then watch for render-success to log/style accordingly.
+  // If the widget never renders (X blocked, network blip, sandboxed iframe)
+  // we leave the inline fallback link visible — the user can still click
+  // through to x.com.
+  if (window.twttr && window.twttr.ready) {
+    window.twttr.ready((tw) => {
+      try {
+        tw.widgets.load();  // explicit scan for .twitter-timeline elements
+        // Mark the wrapper as "loaded" once an iframe lands inside it so
+        // CSS can hide the fallback text. The X widget renders via iframe
+        // injection — observing that mutation is the cleanest signal.
+        const wrap = document.querySelector('.hormuz-letter-wrap');
+        if (wrap && 'MutationObserver' in window) {
+          const obs = new MutationObserver(() => {
+            if (wrap.querySelector('iframe')) {
+              wrap.classList.add('hl-loaded');
+              obs.disconnect();
+            }
+          });
+          obs.observe(wrap, { childList: true, subtree: true });
+          // Safety: give up after 15s and surface a link-only fallback.
+          setTimeout(() => {
+            if (!wrap.classList.contains('hl-loaded')) wrap.classList.add('hl-failed');
+          }, 15_000);
+          // Click on the failed wrapper opens x.com profile.
+          wrap.addEventListener('click', (ev) => {
+            if (wrap.classList.contains('hl-failed')) {
+              window.open('https://x.com/HormuzLetter', '_blank', 'noopener');
+            }
+          });
+        }
+      } catch (e) { console.warn('twttr widgets.load failed', e); }
+    });
+  }
+
   // ── Tabs ──
   const navItems = document.querySelectorAll('.nav-item');
   const tabs = document.querySelectorAll('.tab-content');
