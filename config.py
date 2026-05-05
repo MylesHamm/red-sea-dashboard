@@ -112,25 +112,36 @@ INCIDENT_ACTOR_HINTS = {
 
 # Keyword sets for tagging curated war-timeline + news events to a chokepoint
 # when their lat/lon doesn't fall inside the bbox. Word-boundary matched,
-# case-insensitive. Cross-theater spillover is intentional: an Iran escalation
-# raises Bab risk (Houthis are Iran proxies) and pushes Suez transits to the
-# Cape route.
+# case-insensitive against title + description.
+#
+# Each chokepoint gets its OWN event stream — no cross-theater spillover.
+# Earlier, broadening the sets to include "iran" / "khamenei" / "hormuz" in
+# Bab + Suez made every Iran-war news article match all three, so the cards
+# all collapsed to the same count (16 / 16 / 16 in the last screenshot).
+# That hid the reality that the active war is centered on Hormuz; Bab and
+# Suez have their own dynamics (Houthi pause, Suez transit metrics) and
+# their cards should reflect that, not echo Hormuz.
 INCIDENT_KEYWORDS = {
+    # Hormuz: Iran war + Persian Gulf shipping incidents.
     "hormuz": (
         "hormuz", "persian gulf", "strait of hormuz", "irgc", "kharg", "qeshm",
         "bushehr", "bandar abbas", "fujairah", "gulf of oman", "iranian navy",
-        "khamenei", "tehran", "iran", "uae", "abu dhabi", "saudi", "kuwait",
+        "khamenei", "tehran", "iran", "uae", "abu dhabi",
         "us strikes iran", "us-iran", "us iran",
     ),
+    # Bab: Houthi maritime ops, Red Sea, Yemen. Strictly direct — Iran-war
+    # spillover is real economically but it's not "an event happening at
+    # Bab", it's an event happening at Hormuz that may affect Bab risk.
+    # The card's transit-decline % captures the spillover; this count is
+    # for the direct event stream.
     "bab": (
         "bab el-mandeb", "bab al-mandab", "red sea", "houthi", "houthis",
         "ansar allah", "yemen", "salalah", "djibouti", "gulf of aden",
-        "iran", "irgc", "khamenei", "hormuz", "us-iran", "us iran",
     ),
+    # Suez: Canal-direct events. Almost always sparse — the meaningful Suez
+    # signal is transit volume (PortWatch), not direct-attack events.
     "suez": (
         "suez", "sinai", "egyptian canal",
-        "houthi", "houthis", "ansar allah", "red sea", "yemen",
-        "iran", "irgc", "khamenei", "hormuz",
     ),
 }
 

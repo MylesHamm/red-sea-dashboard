@@ -252,27 +252,45 @@ def test_dashboard_state_endpoint(page: Page):
     assert data["kpis"]["brent"]["price"] is not None and data["kpis"]["brent"]["price"] > 30
 
 
-def test_chokepoint_cards_have_recent_events(page: Page):
-    """Each chokepoint card's INCIDENTS · 30D should reflect recent activity.
+def test_chokepoint_cards_have_distinct_event_streams(page: Page):
+    """Each chokepoint card's INCIDENTS · 30D should reflect that chokepoint's
+    OWN event stream, not echo events from another theater.
 
-    With the merged-pool keyword scope, both Hormuz and Bab should report a
-    non-zero count (overlapping Iran-war news matches both). If either
-    collapses to 0 here under the active war, the keyword filter or the
-    merged-pool path has regressed. Cape is the safe alternate route and
-    legitimately reports 0 (intentionally hardcoded). Suez does NOT have
-    a card in §02 — it lives only in the active-target sidebar.
+    Earlier the keyword sets included Iran-war terms in Bab + Suez, so all
+    three cards collapsed to the same count (e.g. 16/16/16 last screenshot).
+    Now each card uses chokepoint-specific keywords:
+      - Hormuz: Iran/IRGC/Persian-Gulf events — must be > 0 under the war
+      - Bab: Houthi/Red-Sea/Yemen events — can be low post-ceasefire
+      - Cape: hardcoded 0 (alternate safe route)
+      - Suez: no §02 card; transit decline is the meaningful Suez metric
+
+    This test enforces that Hormuz is active AND that Hormuz != Bab
+    (no keyword spillover sending the same news to both cards).
     """
     page.click('.nav-item[data-tab="geospatial"]')
     page.wait_for_timeout(2_000)
-    for cp in ("hormuz", "bab"):
+
+    def _card_count(cp: str) -> int:
         el = page.query_selector(f'[data-cp-card="{cp}"] [data-stat="incidents"]')
         assert el is not None, f"{cp} card not found in DOM"
         val = (el.text_content() or "").strip()
         try:
-            n = int(val)
+            return int(val)
         except ValueError:
             pytest.fail(f"{cp} card's INCIDENTS · 30D is not numeric: {val!r}")
-        assert n > 0, f"{cp} card shows {n} incidents — keyword filter may have regressed"
+
+    n_hormuz = _card_count("hormuz")
+    n_bab    = _card_count("bab")
+
+    # Hormuz must be active under the war
+    assert n_hormuz > 0, \
+        f"Hormuz shows {n_hormuz} incidents — keyword filter or merged-pool regressed"
+    # Streams must be distinct — if hormuz==bab, the keyword sets are
+    # cross-matching the same news to both chokepoints (the bug this
+    # test was renamed to catch).
+    assert n_hormuz != n_bab, \
+        f"Hormuz ({n_hormuz}) and Bab ({n_bab}) report identical counts " \
+        f"— keyword cross-match is back, both cards are showing the same events"
 
 
 # ── Expanded coverage ────────────────────────────────────────────────────
