@@ -13,8 +13,12 @@
 <script src="https://d3js.org/topojson.v3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
+<!-- Twitter/X timeline widget — used by §12 HormuzLetter feed. Async-loaded
+     so it doesn't block first paint; fails-open (the section shows a
+     fallback link if X is blocked by the user's network or an ad blocker). -->
+<script async defer src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
 
-<link rel="stylesheet" href="assets/app.css?v=20260502h">
+<link rel="stylesheet" href="assets/app.css?v=20260502i">
 </head>
 <body>
 
@@ -794,18 +798,47 @@
       </div>
     </section>
 
-    <!-- Live feed -->
-    <section class="narrative-block">
-      <div class="nb-header">
-        <div class="nb-index">§ 11</div>
-        <div>
-          <h2 class="nb-title">Live Intelligence Feed</h2>
-          <p class="nb-subtitle">Auto-curated headlines · refreshed every 30 min.</p>
+    <!-- Live feed + HormuzLetter side-by-side on wide screens -->
+    <section class="feed-pair">
+      <div class="narrative-block">
+        <div class="nb-header">
+          <div class="nb-index">§ 11</div>
+          <div>
+            <h2 class="nb-title">Live Intelligence Feed</h2>
+            <p class="nb-subtitle">Curated war timeline + live Google News (war-relevant keywords). Auto-deduplicated.</p>
+          </div>
+          <div class="nb-badges"><span class="badge badge-green">LIVE</span></div>
         </div>
-        <div class="nb-badges"><span class="badge badge-green">LIVE</span></div>
+        <div class="feed-list" id="feedList">
+          <!-- populated -->
+        </div>
       </div>
-      <div class="feed-list" id="feedList">
-        <!-- populated -->
+
+      <!-- §12 HormuzLetter live X feed.
+           Free X timeline embed (no API costs). Twitter's widgets.js script
+           replaces this <a> with an iframe containing the live timeline.
+           If X is blocked (ad blocker, corporate network, X is down), the
+           link itself stays visible as a graceful fallback. -->
+      <div class="narrative-block">
+        <div class="nb-header">
+          <div class="nb-index">§ 12</div>
+          <div>
+            <h2 class="nb-title">@HormuzLetter · Live X Feed</h2>
+            <p class="nb-subtitle">Maritime incidents, tanker tracking, and IRGC/US Navy operations from <a href="https://x.com/HormuzLetter" target="_blank" rel="noopener" style="color:var(--cyan);">@HormuzLetter</a>. Embedded directly from X — if blocked by your network/ad-blocker, click through to view on x.com.</p>
+          </div>
+          <div class="nb-badges"><span class="badge badge-blue">X · 3RD-PARTY</span></div>
+        </div>
+        <div class="hormuz-letter-wrap">
+          <a class="twitter-timeline"
+             data-theme="dark"
+             data-chrome="noheader nofooter noborders transparent"
+             data-tweet-limit="20"
+             data-height="600"
+             data-dnt="true"
+             href="https://twitter.com/HormuzLetter?ref_src=twsrc%5Etfw">
+            Loading tweets from @HormuzLetter…
+          </a>
+        </div>
       </div>
     </section>
 
@@ -843,12 +876,12 @@
 </div>
 
 <!-- Scripts -->
-<script src="assets/api.js?v=20260502h"></script>
-<script src="assets/data.js?v=20260502h"></script>
-<script src="assets/hydrate.js?v=20260502h"></script>
-<script src="assets/globe.js?v=20260502h"></script>
-<script src="assets/tacmap.js?v=20260502h"></script>
-<script src="assets/charts.js?v=20260502h"></script>
-<script src="assets/app.js?v=20260502h"></script>
+<script src="assets/api.js?v=20260502i"></script>
+<script src="assets/data.js?v=20260502i"></script>
+<script src="assets/hydrate.js?v=20260502i"></script>
+<script src="assets/globe.js?v=20260502i"></script>
+<script src="assets/tacmap.js?v=20260502i"></script>
+<script src="assets/charts.js?v=20260502i"></script>
+<script src="assets/app.js?v=20260502i"></script>
 </body>
 </html>

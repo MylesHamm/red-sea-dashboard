@@ -2048,6 +2048,51 @@ button { font-family: inherit; cursor: pointer; }
 }
 
 /* ═══ FEED ═══ */
+/* §11 + §12 share a side-by-side layout on wide screens. Stacks
+   vertically below 920px so both panels stay full-width on tablets. */
+.feed-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+.feed-pair > .narrative-block { margin-bottom: 0; }
+@media (max-width: 920px) {
+  .feed-pair { grid-template-columns: 1fr; }
+}
+
+/* HormuzLetter X-embed wrapper — frames the iframe Twitter's widget script
+   injects so it matches the dashboard's other panels. The min-height keeps
+   the panel from collapsing during widget load; max-height matches §11's
+   feed-list height so the two panels visually align. */
+.hormuz-letter-wrap {
+  position: relative;
+  min-height: 600px;
+  max-height: 600px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: rgba(0,212,255,0.02);
+  border: 1px solid rgba(0,212,255,0.10);
+}
+.hormuz-letter-wrap .twitter-timeline,
+.hormuz-letter-wrap iframe {
+  border: 0 !important;
+  width: 100% !important;
+  background: transparent !important;
+}
+/* Plaintext fallback shown until widgets.js replaces the <a> with an
+   iframe. Without this the link looks like a broken hyperlink. */
+.hormuz-letter-wrap > a.twitter-timeline {
+  display: block;
+  padding: 24px;
+  color: var(--text-mute);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-align: center;
+  text-decoration: none;
+  letter-spacing: 1px;
+}
+
 .feed-list { display: flex; flex-direction: column; gap: 4px; max-height: 440px; overflow-y: auto; }
 .feed-item {
   display: grid;
