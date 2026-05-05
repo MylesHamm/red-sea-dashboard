@@ -13,13 +13,15 @@
 <script src="https://d3js.org/topojson.v3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
-<!-- Note: the previous Twitter widgets.js loader was removed (it was
-     blocked by virtually every ad blocker). §12's HormuzLetter feed
-     now loads server-side via /api/hormuz-letter and renders natively
-     — see hydrateHormuzLetter() in assets/hydrate.js. -->
+<!-- Note: a previous version of this dashboard tried two approaches to
+     embed @HormuzLetter posts inline (Twitter widgets.js, then a
+     server-side scraper). Both failed reliably — widgets.js is blocked
+     by every common ad blocker, and Twitter's syndication endpoint
+     rate-limits/blocks unauthenticated scraping. The simplest honest
+     UX is a direct link, which lives inline in §11's subtitle. -->
 
 
-<link rel="stylesheet" href="assets/app.css?v=20260505c">
+<link rel="stylesheet" href="assets/app.css?v=20260505d">
 </head>
 <body>
 
@@ -799,45 +801,22 @@
       </div>
     </section>
 
-    <!-- Live feed + HormuzLetter side-by-side on wide screens -->
-    <section class="feed-pair">
-      <div class="narrative-block">
-        <div class="nb-header">
-          <div class="nb-index">§ 11</div>
-          <div>
-            <h2 class="nb-title">Live Intelligence Feed</h2>
-            <p class="nb-subtitle">Curated war timeline + live Google News (war-relevant keywords). Auto-deduplicated.</p>
-          </div>
-          <div class="nb-badges"><span class="badge badge-green">LIVE</span></div>
+    <!-- Live feed (full-width). Companion link to @HormuzLetter on X
+         lives inline in the subtitle — Twitter widget embeds are blocked
+         by virtually every ad blocker, and Twitter has closed the free
+         programmatic backdoors, so a direct link is the simplest
+         honest UX. -->
+    <section class="narrative-block">
+      <div class="nb-header">
+        <div class="nb-index">§ 11</div>
+        <div>
+          <h2 class="nb-title">Live Intelligence Feed</h2>
+          <p class="nb-subtitle">Curated war timeline + live Google News (war-relevant keywords). Auto-deduplicated. For real-time Hormuz / IRGC / US Navy maritime updates from a single trusted source, follow <a href="https://x.com/HormuzLetter" target="_blank" rel="noopener" class="hl-inline-link">@HormuzLetter on X ↗</a>.</p>
         </div>
-        <div class="feed-list" id="feedList">
-          <!-- populated -->
-        </div>
+        <div class="nb-badges"><span class="badge badge-green">LIVE</span></div>
       </div>
-
-      <!-- §12 HormuzLetter live posts — backend-scraped, ad-blocker proof.
-           The previous Twitter widget embed was blocked by every common
-           ad blocker since platform.twitter.com is classified as a
-           tracking script. We now fetch HormuzLetter's recent posts
-           server-side via Twitter's public syndication endpoint and
-           render them ourselves — the user's browser never requests
-           anything from twitter.com / x.com / platform.twitter.com so
-           ad blockers have nothing to block. -->
-      <div class="narrative-block">
-        <div class="nb-header">
-          <div class="nb-index">§ 12</div>
-          <div>
-            <h2 class="nb-title">@HormuzLetter · Live X Feed</h2>
-            <p class="nb-subtitle">Maritime incidents, tanker tracking, and IRGC/US Navy operations from <a href="https://x.com/HormuzLetter" target="_blank" rel="noopener" style="color:var(--cyan);">@HormuzLetter</a>. Posts are fetched server-side every 10 min — no third-party scripts, ad-blocker safe.</p>
-          </div>
-          <div class="nb-badges"><span class="badge badge-blue">X · BACKEND</span></div>
-        </div>
-        <div class="hormuz-letter-list" id="hormuzLetterList">
-          <div class="hl-empty">Loading posts from @HormuzLetter…</div>
-        </div>
-        <a class="hormuz-letter-cta" href="https://x.com/HormuzLetter" target="_blank" rel="noopener">
-          → Open @HormuzLetter on x.com
-        </a>
+      <div class="feed-list" id="feedList">
+        <!-- populated -->
       </div>
     </section>
 
@@ -875,12 +854,12 @@
 </div>
 
 <!-- Scripts -->
-<script src="assets/api.js?v=20260505c"></script>
-<script src="assets/data.js?v=20260505c"></script>
-<script src="assets/hydrate.js?v=20260505c"></script>
-<script src="assets/globe.js?v=20260505c"></script>
-<script src="assets/tacmap.js?v=20260505c"></script>
-<script src="assets/charts.js?v=20260505c"></script>
-<script src="assets/app.js?v=20260505c"></script>
+<script src="assets/api.js?v=20260505d"></script>
+<script src="assets/data.js?v=20260505d"></script>
+<script src="assets/hydrate.js?v=20260505d"></script>
+<script src="assets/globe.js?v=20260505d"></script>
+<script src="assets/tacmap.js?v=20260505d"></script>
+<script src="assets/charts.js?v=20260505d"></script>
+<script src="assets/app.js?v=20260505d"></script>
 </body>
 </html>

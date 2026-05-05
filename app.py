@@ -256,17 +256,6 @@ async def get_iran_events():
     return result
 
 
-@app.get("/api/hormuz-letter")
-async def get_hormuz_letter():
-    """Server-side fetch of @HormuzLetter recent posts via Twitter's
-    syndication endpoint. Bypasses client-side ad blockers that block
-    platform.twitter.com — the user's browser only requests data from
-    our backend, never from twitter/X directly.
-    """
-    tweets = await _run_sync(data_service.fetch_hormuz_letter_tweets)
-    return {"count": len(tweets), "tweets": tweets}
-
-
 @app.get("/api/iran-impact")
 async def get_iran_impact():
     """Oil price impact analysis around Iran events.

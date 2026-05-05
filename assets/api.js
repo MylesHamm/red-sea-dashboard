@@ -70,10 +70,6 @@ window.API = (function () {
     babElMandeb:      ()  => _fetch('/api/bab-el-mandeb-transits',{ttlMs: 300_000 }),
     hormuzTransits:   ()  => _fetch('/api/hormuz-transits',      { ttlMs: 300_000 }),
     iranEvents:       ()  => _fetch('/api/iran-events',          { ttlMs: 60_000 }),
-    // @HormuzLetter posts, server-side scraped to bypass ad blockers
-    // that block twitter/X widget scripts. 5-min client cache; backend
-    // refreshes every 10 min from syndication.twitter.com.
-    hormuzLetter:     ()  => _fetch('/api/hormuz-letter',        { ttlMs: 300_000 }),
     iranImpact:       ()  => _fetch('/api/iran-impact',          { ttlMs: 60_000 }),
     comparative:      ()  => _fetch('/api/comparative',          { ttlMs: 300_000 }),
     iranIntensity:    ()  => _fetch('/api/iran-intensity',       { ttlMs: 300_000 }),

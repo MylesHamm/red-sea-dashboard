@@ -2047,178 +2047,24 @@ button { font-family: inherit; cursor: pointer; }
   vertical-align: middle;
 }
 
-/* ═══ FEED ═══ */
-/* §11 + §12 share a side-by-side layout on wide screens. Stacks
-   vertically below 920px so both panels stay full-width on tablets. */
-.feed-pair {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 22px;
-}
-/* §11/§12 cards are content-dense — the default 24px outer padding +
-   18px header bottom + 14px header padding = ~56px chrome, which
-   visually overwhelms the small feed items. Tighten so the container
-   feels like a panel of items, not a card-of-a-card. Both panels are
-   flex columns so the scrollable content region (feed list / X embed
-   wrapper) expands to fill the remaining height after the header. */
-.feed-pair > .narrative-block {
-  margin-bottom: 0;
-  padding: 14px 16px 16px;
-  display: flex;
-  flex-direction: column;
-}
-.feed-pair > .narrative-block .nb-header {
-  margin-bottom: 12px;
-  padding-bottom: 10px;
-  gap: 12px;
-}
-.feed-pair > .narrative-block .nb-title { font-size: 13px; }
-.feed-pair > .narrative-block .nb-subtitle { font-size: 11.5px; line-height: 1.45; }
-/* §11's feed list grows to fill the panel; the only scrolling happens
-   when there are MORE items than fit. Was capped at 440px before so it
-   left ~100px of empty space at the bottom of a 540px panel. */
-.feed-pair > .narrative-block .feed-list {
-  flex: 1 1 auto;
-  max-height: none;
-  min-height: 0;
-}
-@media (max-width: 920px) {
-  .feed-pair { grid-template-columns: 1fr; }
-}
 
-/* HormuzLetter native post list — replaces the Twitter widget. Posts
-   fetched server-side via /api/hormuz-letter. Ad-blocker proof because
-   the user's browser only talks to our backend, never twitter.com. */
-.hormuz-letter-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-right: 4px;
-}
-.hormuz-letter-list .hl-post {
-  display: block;
-  padding: 10px 12px;
-  background: rgba(0,212,255,0.03);
-  border: 1px solid rgba(0,212,255,0.10);
-  border-left: 2px solid var(--cyan);
-  border-radius: 4px;
-  text-decoration: none;
-  color: var(--text);
-  transition: all 0.15s;
-  cursor: pointer;
-}
-.hormuz-letter-list .hl-post:hover {
-  background: rgba(0,212,255,0.08);
-  border-left-color: #fff;
-}
-.hormuz-letter-list .hl-post-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 1.2px;
-  color: var(--text-mute);
-  text-transform: uppercase;
-}
-.hormuz-letter-list .hl-post-handle { color: var(--cyan); }
-.hormuz-letter-list .hl-post-text {
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--text-dim);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.hormuz-letter-list .hl-empty {
-  padding: 24px;
-  text-align: center;
-  color: var(--text-mute);
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 1px;
-}
-/* Always-visible CTA at the bottom of §12 — guarantees the user can reach
-   the X profile even if widgets.js is blocked, in addition to whatever
-   the widget itself rendered. */
-.hormuz-letter-cta {
-  display: block;
-  margin-top: 10px;
-  padding: 10px 14px;
-  text-align: center;
-  background: rgba(0,212,255,0.08);
-  border: 1px solid rgba(0,212,255,0.40);
-  border-radius: 4px;
+/* ═══ FEED ═══ */
+/* Inline @HormuzLetter link in §11's subtitle — cyan tint with a
+   dashed underline that solidifies on hover. Keeps the link
+   discoverable without making it loud. */
+.hl-inline-link {
   color: var(--cyan);
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
   text-decoration: none;
+  font-weight: 600;
+  border-bottom: 1px dashed rgba(0,212,255,0.45);
+  padding-bottom: 1px;
   transition: all 0.15s;
 }
-.hormuz-letter-cta:hover {
-  background: rgba(0,212,255,0.18);
-  border-color: var(--cyan);
+.hl-inline-link:hover {
   color: #fff;
+  border-bottom-color: #fff;
+  border-bottom-style: solid;
 }
-.hormuz-letter-wrap .twitter-timeline,
-.hormuz-letter-wrap iframe {
-  border: 0 !important;
-  width: 100% !important;
-  background: transparent !important;
-}
-/* Plaintext fallback shown until widgets.js replaces the <a> with an
-   iframe. Hidden once .hl-loaded fires (iframe successfully injected);
-   stays visible if .hl-failed fires (15s timeout with no iframe). */
-.hormuz-letter-wrap > a.twitter-timeline {
-  display: block;
-  padding: 24px;
-  color: var(--text-mute);
-  font-family: var(--mono);
-  font-size: 11px;
-  text-align: center;
-  text-decoration: none;
-  letter-spacing: 1px;
-}
-.hormuz-letter-wrap.hl-loaded > a.twitter-timeline { display: none; }
-.hormuz-letter-wrap.hl-failed::before {
-  content: "X widget didn't load (likely blocked by ad blocker or browser policy).";
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 24px 32px 60px;
-  color: var(--text-mute);
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 1px;
-  line-height: 1.6;
-}
-.hormuz-letter-wrap.hl-failed::after {
-  content: "→ Open @HormuzLetter on x.com";
-  position: absolute;
-  bottom: 18px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 6px 14px;
-  background: rgba(0,212,255,0.10);
-  border: 1px solid rgba(0,212,255,0.45);
-  border-radius: 3px;
-  color: var(--cyan);
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1.2px;
-}
-.hormuz-letter-wrap.hl-failed { cursor: pointer; }
 
 .feed-list { display: flex; flex-direction: column; gap: 4px; max-height: 440px; overflow-y: auto; }
 .feed-item {
