@@ -705,37 +705,46 @@
     const canvas = document.getElementById('gdeltToneChart');
     if (!canvas || !window.Chart) return;
     if (!gdelt) {
-      _gdeltShowEmpty(canvas, 'GDELT request failed.<br>Check <a href="/api/gdelt-tone" target="_blank" style="color:#3d99d4">/api/gdelt-tone</a> for details. <br><br><span data-gdelt-retry style="display:inline-block;cursor:pointer;padding:5px 12px;border:1px solid rgba(0,212,255,0.5);background:rgba(0,212,255,0.08);color:#3d99d4;border-radius:3px;font-weight:700;letter-spacing:1.4px">⟳ RETRY</span>');
+      _gdeltShowEmpty(canvas, 'GDELT request failed.<br><br><span data-gdelt-retry style="display:inline-block;cursor:pointer;padding:6px 14px;border:1px solid rgba(0,212,255,0.5);background:rgba(0,212,255,0.08);color:#3d99d4;border-radius:3px;font-weight:700;letter-spacing:1.4px">⟳ RETRY</span>');
       return;
     }
-    // Cache the payload so the tab-changed listener can re-render once the
-    // canvas's parent becomes visible (display:none → block).
     __gdeltLastPayload = gdelt;
     const tone = Array.isArray(gdelt.tone) ? gdelt.tone : [];
-    if (!tone.length) {
+
+    // Brent — also independently optional. We render whichever series is
+    // present rather than bailing if either is empty. Fixes the case where
+    // GDELT 429s TimelineTone but TimelineVolRaw + Brent are both fine —
+    // previously the chart went blank waiting for tone; now Brent renders
+    // and the empty-tone state is shown as a small overlay note.
+    const brent = (window.CP && window.CP.state && Array.isArray(window.CP.state.brent))
+      ? window.CP.state.brent : [];
+    if (!tone.length && !brent.length) {
       _gdeltShowEmpty(canvas,
-        'No GDELT tone series in this client-side cache window.<br>' +
-        'Most likely the first fetch happened during a backend cold-start and<br>' +
-        'GDELT was slow. Click below to bypass the cache and re-fetch live:' +
-        '<br><br><span data-gdelt-retry style="display:inline-block;cursor:pointer;padding:5px 12px;border:1px solid rgba(0,212,255,0.5);background:rgba(0,212,255,0.08);color:#3d99d4;border-radius:3px;font-weight:700;letter-spacing:1.4px">⟳ RETRY GDELT</span>');
+        'GDELT tone unavailable + Brent not yet loaded.<br>' +
+        '<br><span data-gdelt-retry style="display:inline-block;cursor:pointer;padding:6px 14px;border:1px solid rgba(0,212,255,0.5);background:rgba(0,212,255,0.08);color:#3d99d4;border-radius:3px;font-weight:700;letter-spacing:1.4px">⟳ RETRY GDELT</span>');
       return;
     }
     // Clear any previous empty-state overlay before drawing.
     const overlay = canvas.parentElement && canvas.parentElement.querySelector('.gdelt-empty');
     if (overlay) overlay.remove();
 
-    // Sort ascending by date (GDELT returns newest first)
-    const sorted = tone.slice().sort((a, b) => a.date.localeCompare(b.date));
-    const labels = sorted.map(r => r.date);
-    const values = sorted.map(r => +r.value);
+    // Build the date axis from whichever source has dates. If both have
+    // data we use tone's dates (the chart's primary signal). If only
+    // Brent, we use Brent's dates filtered to the GDELT 90d window.
+    let labels, values;
+    if (tone.length) {
+      const sorted = tone.slice().sort((a, b) => a.date.localeCompare(b.date));
+      labels = sorted.map(r => r.date);
+      values = sorted.map(r => +r.value);
+    } else {
+      // No tone — use last 90 days of Brent dates as the axis.
+      const cutoff = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+      const sorted = brent.filter(r => r.date >= cutoff).sort((a, b) => a.date.localeCompare(b.date));
+      labels = sorted.map(r => r.date);
+      values = [];  // no tone series to plot
+    }
 
-    // Pull Brent daily closes for the SAME date window so the chart can
-    // visually validate the subtitle's claim ("swings precede price
-    // spikes"). Replaces the previous 7-day-avg-of-tone series, which
-    // was double-smoothing the same data instead of giving the user a
-    // second signal to compare against.
-    const brent = (window.CP && window.CP.state && Array.isArray(window.CP.state.brent))
-      ? window.CP.state.brent : [];
+    // brent already captured above; just build the by-date lookup here.
     const brentByDate = new Map();
     for (const r of brent) brentByDate.set(r.date, +r.price);
     // Align Brent to the tone date axis. Markets close weekends/holidays
@@ -754,8 +763,10 @@
     if (__gdeltChartInstance) {
       try { __gdeltChartInstance.destroy(); } catch (_) {}
     }
-    const datasets = [
-      {
+    // Build datasets conditionally — render whichever series is available.
+    const datasets = [];
+    if (tone.length) {
+      datasets.push({
         label: 'Daily tone',
         data: values,
         borderColor: 'rgba(61, 153, 212, 0.55)',
@@ -765,8 +776,8 @@
         fill: true,
         tension: 0.2,
         yAxisID: 'yTone',
-      },
-    ];
+      });
+    }
     if (brentHasData) {
       datasets.push({
         label: 'Brent close ($/bbl)',
@@ -809,21 +820,42 @@
           yTone: {
             type: 'linear',
             position: 'left',
+            display: tone.length > 0,
             ticks: { color: 'rgba(61, 153, 212, 0.85)', font: { family: 'JetBrains Mono', size: 9 } },
             grid: { color: 'rgba(255,255,255,0.05)' },
             title: { display: true, text: 'GDELT TONE', color: 'rgba(61, 153, 212, 0.85)', font: { size: 10, weight: 'bold' } },
           },
           yBrent: {
             type: 'linear',
-            position: 'right',
+            position: tone.length ? 'right' : 'left',
             display: brentHasData,
             ticks: { color: '#ffaa00', font: { family: 'JetBrains Mono', size: 9 }, callback: v => '$' + v },
-            grid: { display: false },
+            grid: { display: !tone.length, color: 'rgba(255,255,255,0.05)' },
             title: { display: true, text: 'BRENT $/bbl', color: '#ffaa00', font: { size: 10, weight: 'bold' } },
           },
         },
       },
     });
+    // If tone is missing, surface a small note over the chart explaining
+    // why — the chart isn't broken, GDELT just hasn't returned tone yet.
+    if (!tone.length && brentHasData) {
+      const parent = canvas.parentElement;
+      if (parent) {
+        let note = parent.querySelector('.gdelt-tone-note');
+        if (!note) {
+          note = document.createElement('div');
+          note.className = 'gdelt-tone-note';
+          note.style.cssText = 'position:absolute;top:10px;left:14px;padding:5px 10px;background:rgba(255,170,0,0.10);border:1px solid rgba(255,170,0,0.40);color:#ffaa00;font-family:JetBrains Mono,monospace;font-size:10px;letter-spacing:1.2px;border-radius:3px;cursor:pointer;z-index:5;';
+          note.setAttribute('data-gdelt-retry', '1');
+          if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+          parent.appendChild(note);
+        }
+        note.textContent = '⚠ GDELT TONE FETCHING — CLICK TO RETRY';
+      }
+    } else {
+      const note = canvas.parentElement && canvas.parentElement.querySelector('.gdelt-tone-note');
+      if (note) note.remove();
+    }
   }
 
   // ── News & event feed ─────────────────────────────────────────────────────

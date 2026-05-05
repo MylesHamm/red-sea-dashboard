@@ -21,7 +21,7 @@
      or the user's network, the inline link stays visible. -->
 <script>window.twttr=(function(d,s,id){var t,js,fjs=d.getElementsByTagName(s)[0];if(d.getElementById(id))return;js=d.createElement(s);js.id=id;js.src="https://platform.twitter.com/widgets.js";fjs.parentNode.insertBefore(js,fjs);return window.twttr||(t={_e:[],ready:function(f){t._e.push(f);}});}(document,"script","twitter-wjs"));</script>
 
-<link rel="stylesheet" href="assets/app.css?v=20260505a">
+<link rel="stylesheet" href="assets/app.css?v=20260505b">
 </head>
 <body>
 
@@ -818,16 +818,23 @@
       </div>
 
       <!-- §12 HormuzLetter live X feed.
-           Free X timeline embed (no API costs). Twitter's widgets.js script
-           replaces this <a> with an iframe containing the live timeline.
-           If X is blocked (ad blocker, corporate network, X is down), the
-           link itself stays visible as a graceful fallback. -->
+           Twitter's widgets.js attempts to inject an iframe of the live
+           timeline. In practice the widget is blocked or fails-to-load
+           in many environments (ad blockers, corporate networks,
+           HF Space iframe-of-iframe contexts). When that happens we
+           always show a clean "open profile" card so the user has a
+           one-click path to x.com. The wrapper toggles classes:
+             default state    = both widget anchor + fallback present
+             .hl-loaded       = widget injected an iframe → hide fallback
+             .hl-failed       = 15s timeout → hide widget anchor, show
+                                "view on x.com" prompt
+       -->
       <div class="narrative-block">
         <div class="nb-header">
           <div class="nb-index">§ 12</div>
           <div>
             <h2 class="nb-title">@HormuzLetter · Live X Feed</h2>
-            <p class="nb-subtitle">Maritime incidents, tanker tracking, and IRGC/US Navy operations from <a href="https://x.com/HormuzLetter" target="_blank" rel="noopener" style="color:var(--cyan);">@HormuzLetter</a>. Embedded directly from X — if blocked by your network/ad-blocker, click through to view on x.com.</p>
+            <p class="nb-subtitle">Maritime incidents, tanker tracking, and IRGC/US Navy operations from <a href="https://x.com/HormuzLetter" target="_blank" rel="noopener" style="color:var(--cyan);">@HormuzLetter</a> on X. Live embed below — if blocked, use the button to view on x.com directly.</p>
           </div>
           <div class="nb-badges"><span class="badge badge-blue">X · 3RD-PARTY</span></div>
         </div>
@@ -836,12 +843,15 @@
              data-theme="dark"
              data-chrome="noheader nofooter noborders transparent"
              data-tweet-limit="20"
-             data-height="600"
+             data-height="540"
              data-dnt="true"
              href="https://twitter.com/HormuzLetter?ref_src=twsrc%5Etfw">
             Loading tweets from @HormuzLetter…
           </a>
         </div>
+        <a class="hormuz-letter-cta" href="https://x.com/HormuzLetter" target="_blank" rel="noopener">
+          → Open @HormuzLetter on x.com
+        </a>
       </div>
     </section>
 
@@ -879,12 +889,12 @@
 </div>
 
 <!-- Scripts -->
-<script src="assets/api.js?v=20260505a"></script>
-<script src="assets/data.js?v=20260505a"></script>
-<script src="assets/hydrate.js?v=20260505a"></script>
-<script src="assets/globe.js?v=20260505a"></script>
-<script src="assets/tacmap.js?v=20260505a"></script>
-<script src="assets/charts.js?v=20260505a"></script>
-<script src="assets/app.js?v=20260505a"></script>
+<script src="assets/api.js?v=20260505b"></script>
+<script src="assets/data.js?v=20260505b"></script>
+<script src="assets/hydrate.js?v=20260505b"></script>
+<script src="assets/globe.js?v=20260505b"></script>
+<script src="assets/tacmap.js?v=20260505b"></script>
+<script src="assets/charts.js?v=20260505b"></script>
+<script src="assets/app.js?v=20260505b"></script>
 </body>
 </html>
