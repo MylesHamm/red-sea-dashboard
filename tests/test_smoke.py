@@ -504,5 +504,105 @@ def test_days_since_war_headline(page: Page):
     assert re.search(r"\d+ days", txt), f"days-since-war not interpolated: {txt!r}"
 
 
+# ── Cross-panel data consistency ─────────────────────────────────────────
+# The "is it populated" tests above don't catch scope mismatches like the
+# §01 chart plotting HDX country-level totals (~600/week) while the cards
+# count maritime-relevant events (~16/30d). Same axis label, two different
+# definitions, 50× discrepancy. These tests assert the dashboard's panels
+# share one definition of "event."
+
+def test_weekly_events_consistent_with_hero_kpi(page: Page):
+    """Sum of the last 4 weeks of /api/dashboard-state.weekly_oil_events
+    should be in the same ballpark as kpis.incidents_30d.count.
+
+    Both should be sourced from the merged curated + iran_news pool. If
+    the two diverge by more than ~50%, one of them has drifted onto a
+    different data source — the bug the user flagged.
+    """
+    resp = page.request.get(f"{DASHBOARD_URL}/api/dashboard-state")
+    assert resp.status == 200
+    data = resp.json()
+    weekly = data.get("weekly_oil_events", [])
+    inc30  = data.get("kpis", {}).get("incidents_30d", {}).get("count")
+    assert weekly, "weekly_oil_events series is empty — backend regressed"
+    last4 = sum(w.get("count", 0) for w in weekly[-4:])
+    assert inc30 is not None
+    # Allow generous tolerance — last-4-week sum can legitimately differ
+    # from a 30-day sliding count by a partial week's worth on either end.
+    if inc30 == 0:
+        return  # trivially consistent
+    ratio = last4 / inc30
+    assert 0.5 <= ratio <= 2.0, (
+        f"weekly_oil_events last-4 sum ({last4}) and incidents_30d "
+        f"({inc30}) diverged: ratio={ratio:.2f}. The two should share "
+        f"one data source — one has likely drifted onto another scope."
+    )
+
+
+def test_hero_kpi_dominates_chokepoint_cards(page: Page):
+    """Hero KPI count should be >= the largest single chokepoint card
+    count (the hero is the deduped UNION across chokepoints; it can't be
+    smaller than its biggest member). If hero < max(card), some events
+    that the cards count are missing from the hero pool, or vice versa.
+    """
+    resp = page.request.get(f"{DASHBOARD_URL}/api/dashboard-state")
+    data = resp.json()
+    hero = data["kpis"]["incidents_30d"]["count"]
+    cps = data.get("chokepoints", {})
+    card_max = max(
+        (cps.get(cp, {}).get("incidents_30d", 0) or 0)
+        for cp in ("hormuz", "bab", "suez")
+    )
+    assert hero >= card_max, (
+        f"Hero KPI ({hero}) is smaller than max chokepoint card "
+        f"({card_max}). Hero pool is meant to be the deduped union of "
+        f"chokepoint events — if it's smaller, dedup or the merge is broken."
+    )
+
+
+def test_priceattack_chart_bars_match_card_scope(page: Page):
+    """Read the §01 chart's actual rendered bar values via Chart.js's
+    instance, then compare the most recent bar against the Hormuz card's
+    30-day count.
+
+    The bug the user flagged: §01 was showing ~600/week post-Oct 2025
+    (HDX country-level Yemen + Iran) while the Hormuz card showed ~16
+    in 30 days. The bar should NOT exceed the card's 30D count by more
+    than the natural ratio (a single week of events compared to 30 days
+    of events from the same source).
+    """
+    page.click('.nav-item[data-tab="overview"]')
+    page.wait_for_timeout(2_000)
+    # Read max post-Oct bar value from Chart.js
+    max_bar = page.evaluate("""() => {
+      const canvas = document.getElementById('priceAttackChart');
+      if (!canvas) return null;
+      const chart = window.Chart && window.Chart.getChart && window.Chart.getChart(canvas);
+      if (!chart) return null;
+      let m = 0;
+      for (const ds of chart.data.datasets) {
+        if (ds.type === 'bar' && /Oil-impactful|Live conflict/.test(ds.label || '')) {
+          for (const v of ds.data) if (typeof v === 'number' && v > m) m = v;
+        }
+      }
+      return m;
+    }""")
+    assert max_bar is not None, "Could not read priceAttackChart Chart.js instance"
+    resp = page.request.get(f"{DASHBOARD_URL}/api/dashboard-state")
+    hormuz_30d = resp.json().get("chokepoints", {}).get("hormuz", {}).get("incidents_30d", 0)
+    if hormuz_30d == 0:
+        return  # trivially consistent
+    # A single week's bar shouldn't exceed the 30-day card count by more
+    # than 1.5× (allows a peak week to legitimately be most of the month).
+    # If it's ~50× larger, the chart is on a different data source.
+    ratio = max_bar / hormuz_30d
+    assert ratio <= 1.5, (
+        f"§01 chart's max recent weekly bar ({max_bar}) is {ratio:.1f}× "
+        f"the Hormuz card's 30-day count ({hormuz_30d}). The chart is "
+        f"plotting a different data scope from the cards — scope mismatch "
+        f"regression."
+    )
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
