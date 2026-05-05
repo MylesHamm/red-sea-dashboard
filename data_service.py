@@ -578,22 +578,43 @@ def _incident_actor_match(event: dict, hints: tuple) -> bool:
 
 
 # Keyword sets for tagging curated war-timeline + news events to a chokepoint
-# when their coordinates don't fall inside the bounding box. Curated events
-# like "Trump Threatens Iran's Power Grid" are coded to Washington DC but are
-# fundamentally Hormuz-relevant — keyword tagging captures that. Match is
-# case-insensitive substring against the event's title + description.
+# when their coordinates don't fall inside the bounding box. Word-boundary
+# matched against `title + " " + description` lower-cased.
+#
+# Cross-theater spillover is intentional: an Iran escalation raises Bab risk
+# (Houthis are Iran proxies) and pushes Suez transits to the Cape route
+# (collapsing Suez throughput). A user looking at the Bab card during a Hormuz
+# crisis still wants to see the Hormuz news because it materially moves Bab's
+# oil-disruption probability — the same event can legitimately appear on
+# multiple chokepoint cards since each chokepoint has a real risk channel
+# from it.
 INCIDENT_KEYWORDS = {
     "hormuz": (
+        # Direct
         "hormuz", "persian gulf", "strait of hormuz", "irgc", "kharg", "qeshm",
         "bushehr", "bandar abbas", "fujairah", "gulf of oman", "iranian navy",
-        "khamenei", "tehran", "ovx",
+        "khamenei", "tehran", "iran", "uae", "abu dhabi", "saudi", "kuwait",
+        # Iran-war proxies that spill into Hormuz transit decisions
+        "us strikes iran", "us-iran", "us iran",
     ),
     "bab": (
-        "bab el-mandeb", "bab al-mandab", "red sea", "houthi", "ansar allah",
-        "yemen", "salalah", "djibouti", "gulf of aden",
+        # Direct (Bab el-Mandeb / southern Red Sea / Yemen)
+        "bab el-mandeb", "bab al-mandab", "red sea", "houthi", "houthis",
+        "ansar allah", "yemen", "salalah", "djibouti", "gulf of aden",
+        # Iran-war spillover — Houthis are Iran proxies; an Iran escalation
+        # directly raises Bab risk. Without this the card reads 0 during
+        # active Hormuz crises even though Bab insurance premia are spiking.
+        "iran", "irgc", "khamenei", "hormuz", "us-iran", "us iran",
     ),
     "suez": (
+        # Direct
         "suez", "sinai", "egyptian canal",
+        # Bab spillover — when Houthis attack, ships divert Bab→Cape (bypass
+        # Suez), so Houthi escalation IS Suez-relevant. Iran-war keywords
+        # included for the same reason: anything that shuts Hormuz reroutes
+        # global flows away from Suez.
+        "houthi", "houthis", "ansar allah", "red sea", "yemen",
+        "iran", "irgc", "khamenei", "hormuz",
     ),
 }
 
