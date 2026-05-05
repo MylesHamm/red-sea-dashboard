@@ -233,14 +233,46 @@ function renderPriceVsAttacks(state) {
       return counts.get(key) || 0;
     });
   } else {
-    attacks = rows.map(r => (r.weekly_attacks != null ? +r.weekly_attacks : 0));
+    // Pre-Oct 2025: thesis ACLED Houthi-maritime weekly counts (from CSV).
+    // Post-Oct 2025: weekly buckets from the SAME merged-pool the chokepoint
+    // cards + hero KPI use (curated war timeline + iran_news, deduped).
+    // Earlier this section pulled HDX country-level Yemen + Iran totals
+    // (~600/week) which was a totally different scope from what the cards
+    // showed (~10-15/week of oil-impactful events at the chokepoints).
+    // Same chart label, two different definitions — the user flagged this.
+    // Sourcing the post-Oct portion from /api/dashboard-state.weekly_oil_events
+    // gives one consistent definition across §01, the hero KPI, and the cards.
+    const THESIS_END_DATE = '2025-10-01';
+    const oilWeekly = (window.__dashState && Array.isArray(window.__dashState.weekly_oil_events))
+                      ? window.__dashState.weekly_oil_events : [];
+    const oilByWeek = new Map();
+    for (const w of oilWeekly) oilByWeek.set(w.week_start, w.count);
+
+    function weekStartFor(dateStr) {
+      const dt = new Date(dateStr);
+      if (isNaN(dt)) return null;
+      const day = dt.getUTCDay() || 7;  // Sun=0 → 7
+      const monday = new Date(dt);
+      monday.setUTCDate(dt.getUTCDate() - (day - 1));
+      return monday.toISOString().slice(0, 10);
+    }
+
+    attacks = rows.map(r => {
+      if (!r.date) return 0;
+      if (r.date <= THESIS_END_DATE) {
+        // Thesis window — use the regression's Houthi-maritime weekly series
+        return r.weekly_attacks != null ? +r.weekly_attacks : 0;
+      }
+      // Live window — use the merged oil-events pool, same as the cards.
+      const wk = weekStartFor(r.date);
+      return wk ? (oilByWeek.get(wk) || 0) : 0;
+    });
   }
 
   // Source-band coloring: pre-Oct 2025 = thesis Houthi maritime strikes
-  // (Bab/Yemen subset, red); post-Oct 2025 = HDX Yemen + Iran combined
-  // (broader scope reflecting the Hormuz war front, gold). The y-axis
-  // jump at the boundary is real — coloring makes that visible at a
-  // glance rather than burying it in the subtitle.
+  // (Bab/Yemen subset, red); post-Oct 2025 = merged oil-events pool
+  // (curated war timeline + Google News, gold). Same definition as the
+  // chokepoint cards — coloring makes the source change visible at a glance.
   const THESIS_END = '2025-10-01';
   const C_HOUTHI   = 'rgba(255,61,94,0.55)';   // C_RED-ish
   const C_HOUTHI_B = 'rgba(255,61,94,0.85)';
@@ -263,7 +295,7 @@ function renderPriceVsAttacks(state) {
           borderWidth: 2, pointRadius: 0, tension: 0.35, fill: true, yAxisID: 'y', spanGaps: true },
         { label: 'Houthi maritime strikes (thesis · Bab)', data: attacks.map((v,i) => i < (splitIdx === -1 ? rows.length : splitIdx) ? v : null),
           borderColor: C_HOUTHI_B, backgroundColor: C_HOUTHI, type: 'bar', yAxisID: 'y1', barThickness: 4 },
-        { label: 'Live conflict events (HDX · Yemen + Iran)', data: attacks.map((v,i) => i >= (splitIdx === -1 ? rows.length : splitIdx) ? v : null),
+        { label: 'Oil-impactful events (curated + news, weekly)', data: attacks.map((v,i) => i >= (splitIdx === -1 ? rows.length : splitIdx) ? v : null),
           borderColor: C_WAR_B, backgroundColor: C_WAR, type: 'bar', yAxisID: 'y1', barThickness: 4 }
       ]
     },

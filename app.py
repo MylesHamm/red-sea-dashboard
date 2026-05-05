@@ -195,6 +195,38 @@ async def get_dashboard_state():
     for n in iran_news_cache:
         _accept(n.get("date"), n.get("title") or n.get("label"))
 
+    # ── Weekly oil-events series — for §01 "Price vs Conflict Intensity" ───
+    # Same merged pool that feeds the chokepoint cards + hero KPI, bucketed
+    # by ISO week. Frontend uses this for the post-Oct 2025 portion of §01
+    # so the chart's bars and the cards' counts agree.
+    #
+    # Without this, the §01 chart was plotting HDX country-level Yemen + Iran
+    # totals (~600/week) while the cards showed ~59 maritime-relevant events;
+    # same axis label, two completely different scopes — which the user flagged
+    # as inconsistent.
+    from collections import defaultdict as _dd
+    weekly_buckets: _dd = _dd(int)
+    seen_w = set()
+    def _bucket_event(date, title):
+        if not date: return
+        key = f"{date[:10]}::{(title or '').strip().lower()[:50]}"
+        if key in seen_w: return
+        seen_w.add(key)
+        try:
+            d = _dt.strptime(date[:10], "%Y-%m-%d")
+            # ISO week start (Monday)
+            monday = d - _dt.resolution * 0  # placeholder
+            from datetime import timedelta as _td
+            monday = d - _td(days=d.weekday())
+            weekly_buckets[monday.date().isoformat()] += 1
+        except Exception:
+            return
+    for c in iran_resp_curated:
+        _bucket_event(c.get("date"), c.get("title") or c.get("label"))
+    for n in iran_news_cache:
+        _bucket_event(n.get("date"), n.get("title") or n.get("label"))
+    weekly_oil_events = [{"week_start": k, "count": v} for k, v in sorted(weekly_buckets.items())]
+
     # ── OIL FLOW AT RISK — Hormuz + Bab structural (mbd) ────────────
     flow_h = config.CHOKEPOINT_REF_FLOW_MBD.get("hormuz", 21.0)
     flow_b = config.CHOKEPOINT_REF_FLOW_MBD.get("bab",     8.2)
@@ -247,6 +279,7 @@ async def get_dashboard_state():
         },
         "chokepoints": chokepoints,
         "energy_equities": energy_equities,
+        "weekly_oil_events": weekly_oil_events,
         "anchors": {
             "war_onset":    config.WAR_ONSET_DATE,
             "hamas_attack": config.HAMAS_ATTACK_DATE,
