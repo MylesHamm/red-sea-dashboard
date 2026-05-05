@@ -790,9 +790,61 @@ async def preload_data():
     t = threading.Thread(target=_preload, daemon=True)
     t.start()
 
-    # Live AIS feed was removed (see ais_service.py removal note above).
-    # The chokepoint maps show live ACLED incidents from
-    # /api/chokepoint-incidents/{cp} instead.
+    # ── Periodic cache warmer ──────────────────────────────────────────
+    #
+    # Eliminates the cold-start 429 pattern: previously, when a cache
+    # expired mid-session the next user request paid the cost of a fresh
+    # external fetch — and if it 429'd (GDELT especially), the resulting
+    # partial cache locked in for the full TTL, leaving the chart silent.
+    # By re-fetching just BEFORE each cache TTL elapses, user requests
+    # always hit warm cache and rate-limit pressure is amortized.
+    #
+    # Per-source intervals (chosen well below their cache TTL so refresh
+    # runs while the previous data is still valid):
+    #   GDELT tone   — 25 min  (partial TTL 30 min)
+    #   iran_news    — 60 min  (Google News updates roughly hourly)
+    #   Brent        — 6 hours (daily data, 24h TTL)
+    #   DXY/OVX      — 6 hours
+    #   HDX (ACLED)  — 12 hours
+    #   transits     — 12 hours (PortWatch publishes weekly)
+    def _periodic_warmer():
+        # Stagger the first wakes so they don't pile on the preload thread.
+        time.sleep(60)
+        intervals = [
+            ("gdelt",       25 * 60,  data_service.fetch_gdelt_tone),
+            ("iran_news",   60 * 60,  data_service.fetch_iran_news),
+            ("brent",        6 * 3600, data_service.fetch_brent_prices),
+            ("dxy",          6 * 3600, data_service.fetch_dxy),
+            ("ovx",          6 * 3600, data_service.fetch_ovx),
+            ("hdx",         12 * 3600, lambda: data_service.fetch_hdx_event_counts(force=True)),
+            ("hormuz_tx",   12 * 3600, data_service.fetch_hormuz_transits),
+            ("bab_tx",      12 * 3600, data_service.fetch_bab_el_mandeb_transits),
+            ("suez_tx",     12 * 3600, data_service.fetch_suez_transits),
+        ]
+        last = {name: time.time() for name, _, _ in intervals}
+        while True:
+            try:
+                now = time.time()
+                for name, every, fn in intervals:
+                    if now - last[name] >= every:
+                        try:
+                            fn()
+                            last[name] = now
+                        except Exception as e:
+                            # Don't crash the warmer on a single fetcher's
+                            # exception — log and try again next cycle.
+                            print(f"  [warmer] {name}: FAILED ({e})")
+                # Sleep 60s between cycles. Each iteration only wakes the
+                # fetchers whose interval has elapsed, so the loop is cheap.
+                time.sleep(60)
+            except Exception as e:
+                # Cosmic-ray defense — if anything in the warmer loop ever
+                # explodes, log and keep going. The dashboard tolerates a
+                # missed refresh; it doesn't tolerate a dead warmer thread.
+                print(f"  [warmer] loop error: {e}")
+                time.sleep(60)
+
+    threading.Thread(target=_periodic_warmer, daemon=True).start()
 
 
 # ─── Frontend Entry Point ────────────────────────────────────────────────────
