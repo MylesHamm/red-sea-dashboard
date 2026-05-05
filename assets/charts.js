@@ -1023,43 +1023,55 @@ function renderIranTimeline(state) {
   // currently selected ACLED filter type from the doughnut.
   const xf = xfActiveType();
   showXfBanner(canvas, xf);
-  const eventDatasets = events.map(e => {
-    // Prefer the event's own price if the backend supplied one; otherwise
-    // snap to the nearest Brent trading day in the chart's window.
+
+  // Bucket events into a small fixed set of datasets — one per
+  // (source, type, match-state) combo. Earlier the chart minted one dataset
+  // per event, so a date with 30 events on it produced 30 stacked datasets
+  // at the same (x, y), and hovering rendered a tooltip listing all 30 with
+  // identical "153 — $110.17 · LIVE NEWS" lines. The dataset's `label` is
+  // intentionally generic now — the per-point title comes from the data
+  // point's `_evLabel` carried on the point object.
+  const TYPES = ['military', 'diplomatic', 'sanctions', 'nuclear', 'proxy'];
+  const buckets = new Map();
+  for (const e of events) {
     let x = e.date, y = (e.price != null ? +e.price : null);
     if (y == null || !brentByDate.has(e.date)) {
       const row = nearestBrent(e.date);
-      if (!row) return null;          // event before Brent window — skip
-      x = row.date;                   // snap to an existing category label
+      if (!row) continue;        // event before Brent window — skip
+      x = row.date;
       if (y == null) y = row.price;
     }
-    const match = xfMatchesIranType(xf, e.type);
-    // Visual distinction between curated (solid filled circle) and live
-    // news (hollow ring with the type's color as the stroke). Live
-    // markers are smaller so the curated war-period events still
-    // dominate the eye but post-cutoff continuation is clearly visible.
     const isLive = e.source === 'live-news';
-    const color = eventColor(e.type);
-    return {
-      label: e.label + (isLive ? ' · LIVE' : ''),
-      type: 'scatter',
-      data: [{ x, y }],
-      backgroundColor: isLive
-        ? 'rgba(0,0,0,0)'                                                // hollow for live
-        : (match ? color : color + '30'),                                // solid for curated
-      borderColor: isLive
-        ? (match ? color : color + '60')                                 // colored ring
-        : (match ? '#fff' : 'rgba(255,255,255,0.2)'),
-      borderWidth: isLive ? 2 : 1.5,
-      pointRadius:      isLive ? (match ? 5 : 3) : (match ? 7 : 4),
-      pointHoverRadius: isLive ? (match ? 8 : 4) : (match ? 10 : 5),
-      pointStyle: 'circle',
-      order: 0,
-      // Carry source through so the tooltip can show "LIVE NEWS" vs "CURATED"
-      _evSource: e.source,
-      _evUrl: e.url || null,
-    };
-  }).filter(Boolean);
+    const type = TYPES.includes((e.type || '').toLowerCase()) ? e.type.toLowerCase() : 'diplomatic';
+    const match = xfMatchesIranType(xf, type);
+    const bucketKey = `${isLive ? 'live' : 'curated'}::${type}::${match ? 'on' : 'dim'}`;
+    let bucket = buckets.get(bucketKey);
+    if (!bucket) {
+      const color = eventColor(type);
+      bucket = {
+        label: `${isLive ? 'Live news' : 'Curated'} · ${type[0].toUpperCase()}${type.slice(1)}`,
+        type: 'scatter',
+        data: [],
+        backgroundColor: isLive
+          ? 'rgba(0,0,0,0)'                                                // hollow for live
+          : (match ? color : color + '30'),                                // solid for curated
+        borderColor: isLive
+          ? (match ? color : color + '60')                                 // colored ring
+          : (match ? '#fff' : 'rgba(255,255,255,0.2)'),
+        borderWidth: isLive ? 2 : 1.5,
+        pointRadius:      isLive ? (match ? 5 : 3) : (match ? 7 : 4),
+        pointHoverRadius: isLive ? (match ? 8 : 4) : (match ? 10 : 5),
+        pointStyle: 'circle',
+        order: 0,
+        _evSource: isLive ? 'live-news' : 'curated',
+      };
+      buckets.set(bucketKey, bucket);
+    }
+    // Per-point metadata — read by the tooltip callback so each marker
+    // carries its own headline rather than the dataset's generic label.
+    bucket.data.push({ x, y, _evLabel: e.label || '', _evType: type, _evDate: e.date, _evUrl: e.url || null });
+  }
+  const eventDatasets = Array.from(buckets.values());
 
   new Chart(canvas, {
     type: 'line',
@@ -1073,23 +1085,33 @@ function renderIranTimeline(state) {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      interaction: { mode: 'nearest', intersect: true },
+      // `mode: 'point'` shows ONLY the single point under the cursor — not
+      // every dataset that intersects (x, y). With multiple events per
+      // date, 'nearest' was returning all of them.
+      interaction: { mode: 'point', intersect: true },
       plugins: {
         legend: { display: false },
         tooltip: {
+          // Cap to 8 entries in case a single (x, y) has multiple stacked
+          // markers — keeps the tooltip box from overflowing the chart.
+          filter: (item, idx) => idx < 8,
           callbacks: {
-            // For scatter event markers, dataset.label IS the event title;
-            // for the Brent line the X-axis label IS the date — use the right one.
             title: items => {
               const it = items[0];
-              if (it && it.dataset && it.dataset.type === 'scatter') return it.dataset.label;
-              return it ? it.label : '';
+              if (!it) return '';
+              if (it.dataset && it.dataset.type === 'scatter') {
+                const raw = it.raw || {};
+                const date = raw._evDate || it.parsed.x || '';
+                return `${date}`;
+              }
+              return it.label || '';
             },
             label: ctx => {
               if (ctx.dataset.type === 'scatter') {
-                const src = ctx.dataset._evSource === 'live-news'
-                  ? '· LIVE NEWS' : '· CURATED';
-                return `${ctx.parsed.x} — $${ctx.parsed.y} ${src}`;
+                const raw  = ctx.raw || {};
+                const lbl  = (raw._evLabel || '').slice(0, 80);
+                const src  = ctx.dataset._evSource === 'live-news' ? '· LIVE NEWS' : '· CURATED';
+                return `${lbl} ${src} ($${ctx.parsed.y})`;
               }
               return `Brent  $${ctx.parsed.y}`;
             }
