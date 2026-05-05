@@ -20,7 +20,12 @@ def main() -> None:
         log_level="warning",
         http="httptools",
         loop="asyncio",
-        reload=False,
+        # Hot-reload Python edits — saves a kill/restart cycle on every
+        # backend tweak. JS/CSS edits already hot-reload via the
+        # mtime-hash cache-buster + Cmd+Shift+R.
+        reload=True,
+        reload_dirs=[".", "assets"],
+        reload_includes=["*.py", "*.json"],
     )
 
 
