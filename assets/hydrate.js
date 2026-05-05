@@ -238,9 +238,17 @@
   }
 
   function countRecentIncidents(events, cp, km = 300, days = 30) {
+    // Wall-clock cutoff. Earlier versions used dataNowTs(events) (the
+    // dataset's newest event) as the anchor — under ACLED's free-tier
+    // 12-month embargo that anchored "30D" to a window ending in April
+    // 2025, so the KPI counted year-old incidents as recent. The honest
+    // count is "events in the last 30 calendar days from now"; the
+    // /api/chokepoint-incidents pipeline already augments this with
+    // curated war-timeline + news-promoted events so the count reflects
+    // real recent oil-impactful activity even when raw ACLED is empty.
     if (!Array.isArray(events)) return 0;
-    const anchor = dataNowTs(events);
-    const cutoff = anchor - days * 86400000;
+    const now    = Date.now();
+    const cutoff = now - days * 86400000;
     let n = 0;
     for (const e of events) {
       // Mirror the backend chokepoint_incidents filter: exclude
@@ -254,7 +262,7 @@
       const d = e.event_date || e.date;
       if (!d) continue;
       const t = Date.parse(d);
-      if (isNaN(t) || t < cutoff || t > anchor) continue;
+      if (isNaN(t) || t < cutoff || t > now) continue;
       if (haversineKm(lat, lon, cp.lat, cp.lon) <= km) n++;
     }
     return n;

@@ -231,6 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // so the Suez sidebar permanently displayed "Loading incidents…" — the
     // bucket was never populated.
     const targets = ['hormuz', 'bab', 'suez'];
+    const cutoff30 = Date.now() - 30 * 86400000;
     await Promise.all(targets.map(async (cp) => {
       try {
         const r = await window.API.chokepointIncidents(cp, 90);
@@ -245,10 +246,39 @@ document.addEventListener('DOMContentLoaded', () => {
           wall_clock_cutoff: r && r.wall_clock_cutoff,
           error: null,
         };
+        // Promote the merged-pool 30-day count up to window.CHOKEPOINTS so
+        // the hero "INCIDENTS · 30D" KPI and chokepoint cards reflect the
+        // same wall-clock-recent oil-impactful events the kill-zone panel
+        // shows. Without this the KPI fell back to raw-ACLED-only counts
+        // which under the 12-month embargo collapse to 0.
+        if (window.CHOKEPOINTS && window.CHOKEPOINTS[cp]) {
+          let n = 0;
+          for (const ev of events) {
+            const t = Date.parse(ev.date || ev.event_date || '');
+            if (isFinite(t) && t >= cutoff30) n++;
+          }
+          window.CHOKEPOINTS[cp].incidents30d = n;
+        }
       } catch (e) {
         window.CP.incidents[cp] = { events: [], zone_newest_date: null, error: (e && e.message) || 'fetch failed' };
       }
     }));
+    // Refresh hero "INCIDENTS · 30D" KPI from the now-correct counts.
+    try {
+      const incidentEl = document.querySelector('[data-kpi="incidents30"]');
+      if (incidentEl && window.CHOKEPOINTS) {
+        const total = (window.CHOKEPOINTS.hormuz && window.CHOKEPOINTS.hormuz.incidents30d || 0) +
+                      (window.CHOKEPOINTS.bab    && window.CHOKEPOINTS.bab.incidents30d    || 0);
+        incidentEl.textContent = String(total);
+      }
+      // Refresh "as of" footer to be honest about the cutoff window.
+      const asofEl = document.querySelector('[data-kpi-foot-asof="incidents30"]');
+      if (asofEl) {
+        const d = new Date();
+        const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+        asofEl.textContent = `${String(d.getDate()).padStart(2,'0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
+      }
+    } catch (e) { /* non-fatal */ }
     renderChokepoint(currentChokepoint);
   }
   refreshSidebarIncidents();
