@@ -1,0 +1,75 @@
+name: smoke
+
+# Runs the Playwright smoke suite on every push and PR. Catches the
+# regression class we kept fixing by hand: a chart that renders blank,
+# a KPI stuck at "—", a JS console error from schema drift, or an /api/*
+# endpoint returning the wrong shape.
+#
+# Test failures block the PR but don't block the HF Spaces deploy
+# (HF watches the repo independently). To redeploy only on green,
+# move HF Spaces to a deploy-key + push step gated on this job.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install backend deps
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install httptools playwright pytest pytest-playwright
+
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Start dashboard
+        env:
+          # FastAPI reads these from env. Tests can hit the public
+          # endpoints without ACLED credentials — the JSON fallbacks
+          # cover the test data.
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          EIA_API_KEY:  ${{ secrets.EIA_API_KEY }}
+        run: |
+          python dev_server.py > /tmp/dashboard.log 2>&1 &
+          # Wait up to 60s for the server to become responsive
+          for i in {1..60}; do
+            if curl -fs http://127.0.0.1:8765/api/health > /dev/null; then
+              echo "server up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "server failed to start" >&2
+          tail -50 /tmp/dashboard.log >&2
+          exit 1
+
+      - name: Run smoke tests
+        env:
+          DASHBOARD_URL: http://127.0.0.1:8765
+        run: pytest tests/test_smoke.py -v --tb=short
+
+      - name: Upload server log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-log
+          path: /tmp/dashboard.log

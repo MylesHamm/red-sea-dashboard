@@ -33,12 +33,18 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── Sparkline (hero KPI) ──
   const sparkLine = document.getElementById('sparkLine');
   const sparkPath = document.getElementById('sparkPath');
-  if (sparkLine && window.BRENT_SPARK) {
+  // Skip rendering if BRENT_SPARK is missing/empty/single-point — earlier
+  // versions checked truthiness only and an empty `[]` produced a fill
+  // path like " L198,50 L2,50 Z" (no leading M), throwing an SVG console
+  // error. hydrate.js takes over once /api/brent lands; this initial pass
+  // is just for the fallback.
+  if (sparkLine && Array.isArray(window.BRENT_SPARK) && window.BRENT_SPARK.length >= 2) {
     const data = window.BRENT_SPARK;
     const w = 200, h = 50, pad = 2;
     const min = Math.min(...data), max = Math.max(...data);
+    const range = max - min || 1;
     const x = i => pad + (i/(data.length-1)) * (w - pad*2);
-    const y = v => h - pad - ((v-min)/(max-min)) * (h - pad*2);
+    const y = v => h - pad - ((v-min)/range) * (h - pad*2);
     const line = data.map((v,i) => `${i===0?'M':'L'}${x(i)},${y(v)}`).join(' ');
     const fill = line + ` L${x(data.length-1)},${h} L${x(0)},${h} Z`;
     sparkLine.setAttribute('d', line);
