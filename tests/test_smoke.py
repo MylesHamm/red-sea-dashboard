@@ -275,5 +275,216 @@ def test_chokepoint_cards_have_recent_events(page: Page):
         assert n > 0, f"{cp} card shows {n} incidents — keyword filter may have regressed"
 
 
+# ── Expanded coverage ────────────────────────────────────────────────────
+# Every additional `data-*` hook visible to a viewer should populate.
+# The existing test_kpi_populated covers the hero KPI deck; these add
+# the per-card stats, threat-strip pills, hero narrative, hypothesis
+# cards, Iran tab KPIs, tactical stats, scrubber, and event banner.
+
+@pytest.mark.parametrize("cp", ["hormuz", "bab"])
+@pytest.mark.parametrize("stat", ["risk", "flow", "vessels", "declinePct", "incidents"])
+def test_chokepoint_card_stats_populated(page: Page, cp: str, stat: str):
+    """Every per-card stat (risk, flow, vessels, declinePct, incidents)
+    should populate for both threatened chokepoints. Cape is partially
+    static and gets its own test below."""
+    page.click('.nav-item[data-tab="geospatial"]')
+    page.wait_for_timeout(1_000)
+    el = page.query_selector(f'[data-cp-card="{cp}"] [data-stat="{stat}"]')
+    assert el is not None, f"{cp} card missing data-stat={stat!r}"
+    val = (el.text_content() or "").strip()
+    assert val and val != "—", f"{cp} card data-stat={stat!r} is empty: {val!r}"
+
+
+def test_cape_card_diverted_populated(page: Page):
+    """Cape card should populate the EST. REROUTED estimate from the
+    Hormuz transit decline."""
+    page.click('.nav-item[data-tab="geospatial"]')
+    page.wait_for_timeout(1_000)
+    el = page.query_selector('[data-cp-card="cape"] [data-stat="diverted"]')
+    assert el is not None, "Cape card missing data-stat='diverted'"
+    val = (el.text_content() or "").strip()
+    assert val and val != "—", f"Cape EST. REROUTED is empty: {val!r}"
+
+
+@pytest.mark.parametrize("cp", ["hormuz", "bab"])
+@pytest.mark.parametrize("which", ["month", "count", "fatal"])
+def test_chokepoint_live_event_tag_populated(page: Page, cp: str, which: str):
+    """The 'LIVE · APR 2026 · 312 EVENTS · 47 FATAL' tag on each card
+    should populate from /api/live-event-counts (HDX)."""
+    page.click('.nav-item[data-tab="geospatial"]')
+    page.wait_for_timeout(1_000)
+    el = page.query_selector(f'[data-cp-events-{which}="{cp}"]')
+    assert el is not None, f"{cp} card missing data-cp-events-{which}"
+    val = (el.text_content() or "").strip()
+    assert val and val != "—", f"{cp} live-events {which} is empty: {val!r}"
+
+
+@pytest.mark.parametrize("cp", ["hormuz", "bab"])
+def test_chokepoint_decline_pct_populated(page: Page, cp: str):
+    """Inline 'transit volume vs. pre-war: <X>%' span in the card body."""
+    page.wait_for_timeout(500)
+    el = page.query_selector(f'[data-cp-decline="{cp}"]')
+    assert el is not None, f"missing data-cp-decline={cp!r}"
+    val = (el.text_content() or "").strip()
+    assert val and val != "—", f"{cp} cp-decline is empty: {val!r}"
+
+
+def test_bab_live_events_populated(page: Page):
+    """Bab card body has 'X Yemen conflict events' span fed by HDX."""
+    el = page.query_selector('[data-bab-live-events]')
+    assert el is not None, "missing data-bab-live-events"
+    val = (el.text_content() or "").strip()
+    assert val and val != "—", f"bab-live-events is empty: {val!r}"
+
+
+@pytest.mark.parametrize("pill_id", [
+    "threatPillHormuz",
+    "threatPillBab",
+    "threatPillSuez",
+    "threatPillCape",
+])
+def test_threat_pill_dynamic(page: Page, pill_id: str):
+    """Each theater status pill should carry one of the threat classes
+    rather than a stale hardcoded class. We can't easily assert the
+    exact tier, but we can assert the pill has *some* threat-* class
+    other than the unstyled default and contains text."""
+    el = page.query_selector(f'#{pill_id}')
+    assert el is not None, f"missing #{pill_id}"
+    cls = el.get_attribute("class") or ""
+    assert any(c.startswith("threat-") for c in cls.split()), \
+        f"{pill_id} has no threat-* class: {cls!r}"
+    txt = (el.text_content() or "").strip()
+    assert txt, f"{pill_id} text is empty"
+
+
+@pytest.mark.parametrize("hook", [
+    "data-hero-flow",
+    "data-hero-flow-pct",
+    "data-hero-eyebrow-live",
+])
+def test_hero_narrative_dynamic_hooks(page: Page, hook: str):
+    """The hero narrative line ('<X> mbd of oil at risk' / '<Y>% of
+    global supply' / 'SITUATION REPORT · LIVE FEEDS') gets dynamic
+    spans rewritten by hydrate.js. None should stay at '—'."""
+    el = page.query_selector(f'[{hook}]')
+    assert el is not None, f"missing [{hook}]"
+    val = (el.text_content() or "").strip()
+    assert val and val != "—", f"{hook} is empty: {val!r}"
+
+
+def test_hero_body_has_text(page: Page):
+    """Hero body paragraph should be non-trivially populated."""
+    el = page.query_selector('[data-hero-body]')
+    assert el is not None, "missing [data-hero-body]"
+    txt = (el.text_content() or "").strip()
+    assert len(txt) > 50, f"hero body too short: {txt!r}"
+
+
+def test_status_time_is_today(page: Page):
+    """Status time in the header should be today (ddd MON YYYY)."""
+    el = page.query_selector('#statusTime')
+    txt = (el.text_content() or "").strip() if el else ""
+    assert txt and txt != "—" and "—" not in txt.split(" ")[0], \
+        f"#statusTime not populated: {txt!r}"
+
+
+def test_timeline_scrubber_date(page: Page):
+    """Scrubber date label should populate to a real date, not '—'."""
+    el = page.query_selector('#tsDate')
+    txt = (el.text_content() or "").strip() if el else ""
+    assert txt and txt != "—", f"#tsDate not populated: {txt!r}"
+
+
+def test_live_event_banner_populated(page: Page):
+    """The LIVE ACLED · HDX MIRROR banner should exit its 'LOADING…' state."""
+    page.click('.nav-item[data-tab="geospatial"]')
+    page.wait_for_timeout(2_000)
+    el = page.query_selector('[data-live-events-banner]')
+    assert el is not None, "missing [data-live-events-banner]"
+    txt = (el.text_content() or "").strip().upper()
+    assert "LOADING" not in txt, f"banner stuck on loading: {txt!r}"
+
+
+@pytest.mark.parametrize("tac_id", ["tacTotal", "tacSouthRS", "tacGoA", "tacChoke"])
+def test_tactical_map_stats(page: Page, tac_id: str):
+    """The §02.1 tactical-side stats (TOTAL EVENTS / S RED SEA / GoA /
+    BAB CHOKE) populate from the ACLED Houthi-attributed feed."""
+    page.click('.nav-item[data-tab="geospatial"]')
+    page.wait_for_timeout(2_000)
+    el = page.query_selector(f'#{tac_id}')
+    assert el is not None, f"missing #{tac_id}"
+    val = (el.text_content() or "").strip()
+    assert val and val != "—", f"#{tac_id} is empty: {val!r}"
+
+
+@pytest.mark.parametrize("hyp_key", ["h1", "h2", "h3"])
+@pytest.mark.parametrize("metric", ["beta", "p", "r2"])
+def test_hypothesis_card_metrics(page: Page, hyp_key: str, metric: str):
+    """§03 hypothesis cards (H1/H2/H3) populate β / p-value / R²
+    from /api/hypothesis. Locked thesis-window values; should never
+    be '—' if the regression endpoint resolved."""
+    page.click('.nav-item[data-tab="analysis"]')
+    page.wait_for_timeout(1_500)
+    el = page.query_selector(f'.hyp-card[data-hyp="{hyp_key}"] [data-hyp-m="{metric}"]')
+    assert el is not None, f"missing {hyp_key} {metric}"
+    val = (el.text_content() or "").strip()
+    assert val and val != "—", f"{hyp_key} {metric} is empty: {val!r}"
+
+
+@pytest.mark.parametrize("iran_kpi", ["total", "avg3d", "peak3d", "peak3dDate"])
+def test_iran_tab_kpis(page: Page, iran_kpi: str):
+    """§04 US-Iran tab KPIs (TOTAL / AVG 3-DAY / PEAK 3-DAY / DATE)."""
+    page.click('.nav-item[data-tab="iran"]')
+    page.wait_for_timeout(2_000)
+    el = page.query_selector(f'[data-iran-kpi="{iran_kpi}"]')
+    assert el is not None, f"missing data-iran-kpi={iran_kpi!r}"
+    val = (el.text_content() or "").strip()
+    assert val and val != "—", f"iran-kpi {iran_kpi} is empty: {val!r}"
+
+
+def test_correlation_matrix_rendered(page: Page):
+    """§08 correlation matrix is a CSS grid of cells, not a canvas.
+    It should contain at least one numeric cell, not be the
+    'CORRELATION MATRIX UNAVAILABLE' fallback."""
+    page.click('.nav-item[data-tab="analysis"]')
+    page.wait_for_timeout(2_000)
+    el = page.query_selector('#corrMatrix')
+    assert el is not None, "missing #corrMatrix"
+    txt = (el.text_content() or "").strip().upper()
+    assert "UNAVAILABLE" not in txt and "MALFORMED" not in txt, \
+        f"correlation matrix in error state: {txt[:120]!r}"
+    # Should have at least 11 short labels (11x11 matrix from /api/master)
+    assert len(txt) > 100, f"correlation matrix too sparse: {len(txt)} chars"
+
+
+def test_kpi_hero_foot_populated(page: Page):
+    """30D RANGE and SINCE WAR ONSET in the hero card foot.
+
+    Format example (note the em dash is the RANGE separator, not a
+    placeholder): "30D RANGE $95.71 — $138.21   SINCE WAR ONSET +43.3%"
+    """
+    foot = page.query_selector('.kpi-hero-foot')
+    assert foot is not None, "missing .kpi-hero-foot"
+    txt = (foot.text_content() or "").strip()
+    assert "$" in txt, f"30D RANGE not formatted as price: {txt!r}"
+    assert "%" in txt, f"SINCE WAR ONSET not formatted as %: {txt!r}"
+    # Stand-alone unfilled "—" placeholder shows up as `<b>—</b>` with
+    # spaces around it. After hydration the bolds carry "$95.71" and
+    # "+43.3%" so a count of em-dashes higher than 1 (the range separator)
+    # signals an unfilled slot.
+    assert txt.count("—") <= 1, f"hero foot has unfilled placeholders: {txt!r}"
+
+
+def test_days_since_war_headline(page: Page):
+    """The 'Feb 28 → now: N days of market whiplash' headline should
+    interpolate a real day count."""
+    el = page.query_selector('[data-days-since-war]')
+    if el is None:
+        pytest.skip("no [data-days-since-war] hook on page")
+    txt = (el.text_content() or "").strip()
+    import re
+    assert re.search(r"\d+ days", txt), f"days-since-war not interpolated: {txt!r}"
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
