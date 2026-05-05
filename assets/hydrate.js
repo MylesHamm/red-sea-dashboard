@@ -1000,18 +1000,28 @@
 
     // Normalize curated entries first — these are the hand-built war-period
     // timeline (highest editorial quality, but the list ends at whatever
-    // date the dev last edited).
+    // date the dev last edited). Preserve `auto` flag so we can tell
+    // hand-curated events apart from news-promoted items.
     const curatedEvents = curated.map(e => ({
       date:  e.date,
       type:  (e.type || e.category || 'diplomatic').toLowerCase(),
       label: e.label || e.title || e.name || '',
       price: e.brent_price != null ? +e.brent_price : null,
       source: 'curated',
+      auto:  Boolean(e.auto),    // True when this curated entry was promoted from live news
     })).filter(e => e.date);
 
-    // Find the curated cutoff so we know where to splice live news in.
+    // Curated cutoff = the last HAND-CURATED event date (auto:false).
+    // Important: skip auto-promoted news entries when computing the
+    // cutoff. Backend's get_merged_curated_events() promotes a few news
+    // articles into the curated list each refresh; if we use those
+    // promoted dates as the cutoff, today's news always equals the
+    // cutoff and NOTHING gets added as live-news hollow rings.
     let curatedCutoff = '';
-    for (const e of curatedEvents) if (e.date > curatedCutoff) curatedCutoff = e.date;
+    for (const e of curatedEvents) {
+      if (e.auto) continue;
+      if (e.date > curatedCutoff) curatedCutoff = e.date;
+    }
 
     // Live-news markers fill the post-curated gap. Without this, the §09
     // chart's price line continues live but event dots stop dead at the

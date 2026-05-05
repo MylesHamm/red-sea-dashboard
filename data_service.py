@@ -2285,8 +2285,22 @@ def load_master_dataset() -> dict:
                 _extend_master_timeseries_with_live(result)
             except Exception as e:
                 logger.warning(f"master_dataset.json: live timeseries extend failed: {e}")
-            _master_memo = result
-            _master_memo_ts = time.time()
+            # Only memoize the result if the HDX cache is actually populated.
+            # Otherwise we risk caching a "live rows have weekly_attacks=0"
+            # snapshot for 90s — which is what made the §05 scatter's right
+            # panel show every point at x=0 if a request hit the master
+            # endpoint before HDX preload finished. When HDX is missing we
+            # still RETURN the result (Brent/DXY/OVX/SPR still landed and
+            # the charts using those work fine), we just don't memoize so
+            # the next request retries with hopefully-now-warm HDX.
+            try:
+                hdx_cached = _read_cache("hdx_event_counts", 86_400 * 7) or {}
+                hdx_has_data = bool(hdx_cached.get("by_country"))
+            except Exception:
+                hdx_has_data = False
+            if hdx_has_data:
+                _master_memo = result
+                _master_memo_ts = time.time()
             return result
         except Exception as e:
             logger.error(f"master_dataset.json read failed, falling back to live: {e}")
