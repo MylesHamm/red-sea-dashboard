@@ -21,7 +21,7 @@
      UX is a direct link, which lives inline in §11's subtitle. -->
 
 
-<link rel="stylesheet" href="assets/app.css?v=20260505i">
+<link rel="stylesheet" href="assets/app.css?v=20260505j">
 </head>
 <body>
 
@@ -68,7 +68,7 @@
           <span class="status-dot live"></span>
           <span class="status-text">LIVE · ACLED + EIA</span>
         </div>
-        <div class="status-time" id="statusTime">22 APR 2026 · 14:22Z</div>
+        <div class="status-time" id="statusTime">— · — —Z</div>
       </div>
     </div>
   </div>
@@ -134,20 +134,18 @@
         <div class="kpi-label">INCIDENTS · 30D</div>
         <div class="kpi-value" data-kpi="incidents30">—</div>
         <div class="kpi-trend">
-          <svg viewBox="0 0 60 20" width="60" height="20"><polyline points="0,16 8,14 16,15 24,10 32,12 40,8 48,6 60,4" fill="none" stroke="#ff5252" stroke-width="1.3"/></svg>
           <span class="up-alert" data-kpi="incidents30Delta">—</span>
         </div>
         <div class="kpi-foot" data-kpi-foot="incidents30">Hormuz + Bab · excl. protests · 30d ending <span data-kpi-foot-asof="incidents30">—</span></div>
       </div>
 
-      <div class="kpi-primary kpi-primary-warn">
+      <div class="kpi-primary kpi-primary-warn" title="Combined daily flow through the two threatened chokepoints (Hormuz + Bab el-Mandeb). Source: EIA reference flows; denominator EIA STEO 2026 world liquids consumption. These are macro reference values — they shift with EIA STEO updates, not with daily AIS — and represent the structural amount at risk under a closure.">
         <div class="kpi-label">OIL FLOW AT RISK</div>
         <div class="kpi-value" data-kpi="flowAtRisk">— <span class="kpi-unit">mbd</span></div>
         <div class="kpi-trend">
-          <svg viewBox="0 0 60 20" width="60" height="20"><polyline points="0,14 12,14 24,13 36,10 48,8 60,8" fill="none" stroke="#ffab00" stroke-width="1.3"/></svg>
           <span class="warn"><span data-hero-flow-pct>—</span> of global supply</span>
         </div>
-        <div class="kpi-foot">Hormuz + Bab el-Mandeb combined</div>
+        <div class="kpi-foot">Hormuz + Bab el-Mandeb combined · EIA reference</div>
       </div>
 
       <!-- Secondary KPIs -->
@@ -334,13 +332,13 @@
       <div class="ts-header">
         <div class="ts-left">
           <span class="ts-eyebrow">TEMPORAL FILTER</span>
-          <span class="ts-date" id="tsDate">22 APR 2026</span>
+          <span class="ts-date" id="tsDate">—</span>
         </div>
         <div class="ts-controls">
           <button class="ts-btn" data-epoch="pre">PRE-CRISIS<span>Nov 2023</span></button>
           <button class="ts-btn" data-epoch="houthi">HOUTHI CAMPAIGN<span>Dec 2023</span></button>
           <button class="ts-btn" data-epoch="war">US–IRAN WAR<span>Feb 2026</span></button>
-          <button class="ts-btn active" data-epoch="now">CURRENT<span>Apr 2026</span></button>
+          <button class="ts-btn active" data-epoch="now">CURRENT<span data-ts-now-label>—</span></button>
         </div>
       </div>
       <div class="ts-track-wrap">
@@ -419,7 +417,7 @@
         <div class="cp-meta">
           <span><b data-stat="vessels">—</b> MONTHLY TRANSITS</span>
           <span><b data-stat="declinePct">—</b> VS PRE-WAR</span>
-          <span><b data-stat="incidents">—</b> INCIDENTS · 30D (THESIS WINDOW)</span>
+          <span><b data-stat="incidents">—</b> INCIDENTS · 30D</span>
         </div>
         <div class="cp-live">
           <span class="cp-live-tag">LIVE · <span data-cp-events-month="hormuz">—</span></span>
@@ -440,7 +438,7 @@
         <div class="cp-meta">
           <span><b data-stat="vessels">—</b> MONTHLY TRANSITS</span>
           <span><b data-stat="declinePct">—</b> VS PRE-WAR</span>
-          <span><b data-stat="incidents">—</b> INCIDENTS · 30D (THESIS WINDOW)</span>
+          <span><b data-stat="incidents">—</b> INCIDENTS · 30D</span>
         </div>
         <div class="cp-live">
           <span class="cp-live-tag">LIVE · <span data-cp-events-month="bab">—</span></span>
@@ -840,7 +838,7 @@
       <div class="dc-group"><label>SEARCH</label><input type="text" id="dpSearch" placeholder="tanker, drone, missile…"></div>
       <div class="dc-group"><label>TYPE</label><select id="dpType"><option value="">All</option></select></div>
       <div class="dc-group"><label>FROM</label><input type="date" id="dpFrom" value="2023-10-01"></div>
-      <div class="dc-group"><label>TO</label><input type="date" id="dpTo" value="2026-04-22"></div>
+      <div class="dc-group"><label>TO</label><input type="date" id="dpTo" value=""></div>
       <button class="btn-go" id="dpApply">APPLY</button>
       <button class="btn-ghost" id="dpExport">EXPORT CSV</button>
     </div>
@@ -857,12 +855,12 @@
 </div>
 
 <!-- Scripts -->
-<script src="assets/api.js?v=20260505i"></script>
-<script src="assets/data.js?v=20260505i"></script>
-<script src="assets/hydrate.js?v=20260505i"></script>
-<script src="assets/globe.js?v=20260505i"></script>
-<script src="assets/tacmap.js?v=20260505i"></script>
-<script src="assets/charts.js?v=20260505i"></script>
-<script src="assets/app.js?v=20260505i"></script>
+<script src="assets/api.js?v=20260505j"></script>
+<script src="assets/data.js?v=20260505j"></script>
+<script src="assets/hydrate.js?v=20260505j"></script>
+<script src="assets/globe.js?v=20260505j"></script>
+<script src="assets/tacmap.js?v=20260505j"></script>
+<script src="assets/charts.js?v=20260505j"></script>
+<script src="assets/app.js?v=20260505j"></script>
 </body>
 </html>

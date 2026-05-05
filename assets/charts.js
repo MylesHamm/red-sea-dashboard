@@ -560,16 +560,17 @@ function updateIncidentsKpi() {
     (window.CP && window.CP.state && window.CP.state.events) || window.THESIS_EVENTS || []
   );
 
-  // Compute current 30-day count and prior 30-day count for the delta display.
-  // Even when scrubber is at "now" we want the delta vs the prior 30 days, so
-  // count from events directly rather than deferring to the chokepoint sum.
-  // When no scrubber cut is active, anchor the window to the dataset's most
-  // recent event (the ACLED fallback is frozen post-thesis, so `Date.now()`
-  // would collapse the 30-day window to 0 events).
-  const anchorNow = (typeof window.__dataNowTs === 'function')
-    ? window.__dataNowTs(events)
-    : Date.now();
-  const endTs = tlTs || anchorNow;
+  // Anchor the 30-day window to wall-clock now (or the scrubber's cutoff
+  // when one is set). Earlier versions anchored to dataset-newest via
+  // __dataNowTs to "avoid showing 0 under a stale ACLED frame", but that
+  // was masking the real problem — and produced misleading "delta vs
+  // prior 30D" against a window that ended a year ago. The merged-pool
+  // chokepoint sums (which we promote up to window.CHOKEPOINTS in
+  // refreshSidebarIncidents + the /api/events callback) are the
+  // authoritative recent-count under the embargo; we use them whenever
+  // there is no cross-filter and no scrubber cut. The local recompute
+  // is only needed when a filter narrows the count by event type.
+  const endTs = tlTs || Date.now();
   const startTs = endTs - 30 * 24 * 3600 * 1000;
   const priorEnd = startTs;
   const priorStart = priorEnd - 30 * 24 * 3600 * 1000;
@@ -585,9 +586,11 @@ function updateIncidentsKpi() {
     else if (dt >= priorStart && dt < priorEnd) prior++;
   }
 
-  // No filters, scrubber at "now", and events not yet loaded: defer to the
-  // chokepoint-aggregated count so we don't show 0 while events load.
-  if (!sel && !tlTs && !events.length) {
+  // Default case (no filter, scrubber at "now"): defer to merged-pool
+  // chokepoint sums. Raw ACLED is empty under the embargo, but
+  // window.CHOKEPOINTS[*].incidents30d is the wall-clock-windowed
+  // merged-pool count maintained by refreshSidebarIncidents.
+  if (!sel && !tlTs) {
     const cps = window.CHOKEPOINTS || {};
     n = ((cps.hormuz && cps.hormuz.incidents30d) || 0)
       + ((cps.bab    && cps.bab.incidents30d)    || 0);

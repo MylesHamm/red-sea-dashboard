@@ -304,7 +304,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ═════════════════════════════════════════════════════════════════════
   // Timeline scrubber — interactive drag / click / keyboard
-  // Track maps 0%→100% onto 2023-10-07 (Hamas attack) → today (2026-04-22).
+  // Track maps 0%→100% onto 2023-10-07 (Hamas attack) → wall-clock today.
+  // Earlier versions hardcoded END to a frozen date; that meant the scrubber
+  // ran out of room as the calendar advanced and the "CURRENT" position
+  // pointed at a stale date (e.g. Apr 22 instead of today).
   // ═════════════════════════════════════════════════════════════════════
   (function initTimeline() {
     const track  = document.querySelector('.ts-track');
@@ -314,8 +317,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const tsButtons = document.querySelectorAll('.ts-btn');
     if (!track || !tsFill || !tsThumb || !tsDate) return;
 
+    const _MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    const _now = new Date();
+    const _todayIso = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-${String(_now.getDate()).padStart(2,'0')}`;
+    const _todayLabel = `${String(_now.getDate()).padStart(2,'0')} ${_MONTHS[_now.getMonth()]} ${_now.getFullYear()}`;
+
     const START = new Date('2023-10-07').getTime();
-    const END   = new Date('2026-04-22').getTime();
+    const END   = _now.getTime();
     const SPAN  = END - START;
 
     // Preset positions (in pct) tied to real dates
@@ -323,7 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
       pre:    { date: '2023-11-01', label: 'NOV 2023' },
       houthi: { date: '2023-12-01', label: 'DEC 2023' },
       war:    { date: '2026-02-28', label: 'FEB 2026' },
-      now:    { date: '2026-04-22', label: '22 APR 2026' }
+      now:    { date: _todayIso,    label: _todayLabel }
     };
     const dateToPct = iso => {
       const t = new Date(iso).getTime();
@@ -464,6 +472,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (diff < bestDiff) { bestDiff = diff; bestBtn = b; }
     });
     if (bestBtn && bestDiff < 1.5) bestBtn.classList.add('active');
+
+    // Populate the "CURRENT" button label with today's month/year so it
+    // doesn't display a stale "Apr 2026" when wall-clock is past that.
+    const nowLabelEl = document.querySelector('[data-ts-now-label]');
+    if (nowLabelEl) {
+      const monthsTitle = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      nowLabelEl.textContent = `${monthsTitle[_now.getMonth()]} ${_now.getFullYear()}`;
+    }
   })();
 
   // ── Data explorer overlay ──
@@ -480,6 +496,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const dpType   = document.getElementById('dpType');
   const dpFrom   = document.getElementById('dpFrom');
   const dpTo     = document.getElementById('dpTo');
+  // Default the TO date to wall-clock today so the explorer never silently
+  // hides events newer than a hardcoded value left in the markup.
+  if (dpTo && !dpTo.value) {
+    const _d = new Date();
+    dpTo.value = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
+  }
   const dpApply  = document.getElementById('dpApply');
   const dpExport = document.getElementById('dpExport');
   const dpMeta   = document.getElementById('dpMeta');
