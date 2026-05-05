@@ -733,6 +733,15 @@ function updateIncidentsKpi() {
     pending = true;
     requestAnimationFrame(flush);
   });
+  // §01's post-Oct bars come from window.__dashState.weekly_oil_events,
+  // which is populated by app.js's dashboard-state poller. The chart
+  // typically renders BEFORE the poller's first response lands, so the
+  // initial paint shows zero post-Oct bars. Re-render when state arrives.
+  window.addEventListener('dashboard-state-ready', () => {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(flush);
+  });
 })();
 
 // ═══════════════════════════════════════════════════════════════════════════

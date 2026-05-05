@@ -196,35 +196,39 @@ async def get_dashboard_state():
         _accept(n.get("date"), n.get("title") or n.get("label"))
 
     # ── Weekly oil-events series — for §01 "Price vs Conflict Intensity" ───
-    # Same merged pool that feeds the chokepoint cards + hero KPI, bucketed
-    # by ISO week. Frontend uses this for the post-Oct 2025 portion of §01
-    # so the chart's bars and the cards' counts agree.
+    # Sourced from the UNION of the Hormuz + Bab chokepoint pools (the
+    # chart's title is "BAB + HORMUZ THEATRES"). Both pools share the same
+    # selection logic (curated war timeline + iran_news + ACLED, keyword-
+    # filtered to that chokepoint) so this is the canonical "weekly conflict
+    # events for the threatened chokepoints" series. Bucketed by ISO week.
     #
-    # Without this, the §01 chart was plotting HDX country-level Yemen + Iran
-    # totals (~600/week) while the cards showed ~59 maritime-relevant events;
-    # same axis label, two completely different scopes — which the user flagged
-    # as inconsistent.
+    # Earlier versions sourced from HDX country-level Yemen + Iran totals
+    # (~600/week, included civil unrest) — same axis label, totally different
+    # scope from the cards. User flagged the inconsistency.
     from collections import defaultdict as _dd
+    from datetime import timedelta as _td
     weekly_buckets: _dd = _dd(int)
     seen_w = set()
-    def _bucket_event(date, title):
+    def _bucket_event(date, key_id):
         if not date: return
-        key = f"{date[:10]}::{(title or '').strip().lower()[:50]}"
-        if key in seen_w: return
-        seen_w.add(key)
+        if key_id in seen_w: return
+        seen_w.add(key_id)
         try:
             d = _dt.strptime(date[:10], "%Y-%m-%d")
-            # ISO week start (Monday)
-            monday = d - _dt.resolution * 0  # placeholder
-            from datetime import timedelta as _td
             monday = d - _td(days=d.weekday())
             weekly_buckets[monday.date().isoformat()] += 1
         except Exception:
             return
-    for c in iran_resp_curated:
-        _bucket_event(c.get("date"), c.get("title") or c.get("label"))
-    for n in iran_news_cache:
-        _bucket_event(n.get("date"), n.get("title") or n.get("label"))
+    for cp_id in ("hormuz", "bab"):
+        try:
+            cp_pool = data_service.get_chokepoint_incidents(cp_id, 540, 5000)
+        except Exception:
+            cp_pool = {"events": []}
+        for ev in cp_pool.get("events", []):
+            # Stable dedup key — prefer event_id (curated/news entries carry
+            # one); fall back to date+title-prefix.
+            eid = ev.get("event_id") or f"{ev.get('date','')[:10]}::{(ev.get('actor1') or '').strip().lower()[:50]}"
+            _bucket_event(ev.get("date"), eid)
     weekly_oil_events = [{"week_start": k, "count": v} for k, v in sorted(weekly_buckets.items())]
 
     # ── OIL FLOW AT RISK — Hormuz + Bab structural (mbd) ────────────

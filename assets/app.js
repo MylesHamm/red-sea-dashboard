@@ -408,6 +408,11 @@ document.addEventListener('DOMContentLoaded', () => {
         window.__dashState = ds;
         refreshHeroIncidentsKpi();
         _applyHeroBrentFromState(ds);
+        // Notify chart renderers that depend on dashboard-state. §01
+        // reads weekly_oil_events from here; without a re-render, the
+        // chart paints once with an empty oilByWeek map and the
+        // post-Oct bars stay at 0 even after the state lands.
+        window.dispatchEvent(new CustomEvent('dashboard-state-ready', { detail: ds }));
       }
     } catch (e) { /* non-fatal — fallback path will run */ }
   }
