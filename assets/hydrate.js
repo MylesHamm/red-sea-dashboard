@@ -1006,28 +1006,40 @@
     const curated = (iranResp && Array.isArray(iranResp.curated)) ? iranResp.curated : [];
     const news    = (iranResp && Array.isArray(iranResp.news))    ? iranResp.news    : [];
 
-    // Normalize curated entries first — these are the hand-built war-period
-    // timeline (highest editorial quality, but the list ends at whatever
-    // date the dev last edited). Preserve `auto` flag so we can tell
-    // hand-curated events apart from news-promoted items.
+    // Normalize curated entries first.
+    //
+    // The backend's get_merged_curated_events() returns a single list mixing
+    // two flavors:
+    //   • hand-curated war-period events (source_type:'curated') — the
+    //     editorial spine of the chart, but the list ends at whatever date
+    //     the dev last edited (currently ~Apr 17, 2026).
+    //   • news-promoted entries (source_type:'news_auto') — top-scored
+    //     Google News headlines that auto-extend the timeline past the
+    //     curated cutoff. These are the "hollow rings" the chart subtitle
+    //     advertises; without distinguishing them, they'd render as small
+    //     solid dots indistinguishable from curated.
+    //
+    // Earlier code read `e.auto` here but that field doesn't exist — the
+    // backend uses `source_type`. As a result curatedCutoff was computed
+    // including news_auto dates → equaled today → liveEvents below
+    // filtered to date > today → empty hollow-ring set, AND the
+    // news_auto entries that did get plotted looked like ordinary
+    // curated dots. Fix: read `source_type` correctly so news_auto is
+    // tagged as `live-news` source.
     const curatedEvents = curated.map(e => ({
       date:  e.date,
       type:  (e.type || e.category || 'diplomatic').toLowerCase(),
       label: e.label || e.title || e.name || '',
       price: e.brent_price != null ? +e.brent_price : null,
-      source: 'curated',
-      auto:  Boolean(e.auto),    // True when this curated entry was promoted from live news
+      source: e.source_type === 'news_auto' ? 'live-news' : 'curated',
     })).filter(e => e.date);
 
-    // Curated cutoff = the last HAND-CURATED event date (auto:false).
-    // Important: skip auto-promoted news entries when computing the
-    // cutoff. Backend's get_merged_curated_events() promotes a few news
-    // articles into the curated list each refresh; if we use those
-    // promoted dates as the cutoff, today's news always equals the
-    // cutoff and NOTHING gets added as live-news hollow rings.
+    // Curated cutoff = the last HAND-CURATED event date (source_type:'curated').
+    // Skip news_auto entries when computing the cutoff so today's news
+    // doesn't push the cutoff to today and starve liveEvents below.
     let curatedCutoff = '';
     for (const e of curatedEvents) {
-      if (e.auto) continue;
+      if (e.source === 'live-news') continue;
       if (e.date > curatedCutoff) curatedCutoff = e.date;
     }
 
@@ -1061,9 +1073,19 @@
       return LIVE_KEYWORDS.some(kw => t.includes(kw));
     }
 
+    // Dedupe key: backend's news-promoted entries are already in curatedEvents
+    // with source='live-news'. Skip any raw-news item whose title prefix already
+    // matches one of those so we don't double-mark the same headline.
+    const seenLive = new Set();
+    for (const e of curatedEvents) {
+      if (e.source === 'live-news' && e.label) {
+        seenLive.add((e.label || '').slice(0, 60).toLowerCase());
+      }
+    }
     const liveEvents = news
       .filter(n => n && n.date && (!curatedCutoff || n.date > curatedCutoff))
       .filter(n => _looksLikeEvent(n.title))
+      .filter(n => !seenLive.has((n.title || '').slice(0, 60).toLowerCase()))
       .map(n => ({
         date:   n.date,
         type:   (n.type || n.category || 'military').toLowerCase(),
@@ -1126,6 +1148,11 @@
   // multiplier with no relationship to actual oil/insurance premia and
   // has been removed in favor of the live transit-decline metric, which
   // is computed from real PortWatch transit data.
+  // Exposed so app.js's refreshSidebarIncidents can re-render the chokepoint
+  // cards after it promotes the merged-pool 30-day count up to
+  // window.CHOKEPOINTS. Without this the cards stick to whatever the prior
+  // hydrate pass wrote.
+  window.__hydrateChokepointCards = () => hydrateChokepointCards();
   function hydrateChokepointCards() {
     const cards = document.querySelectorAll('[data-cp-card]');
     cards.forEach(card => {
@@ -1568,12 +1595,36 @@
         S.events = events;
         // Refresh chokepoint incident counts now that real events are in.
         // Per-chokepoint radii match the module-level RADIUS_KM constant.
+        //
+        // PREFER the merged-pool counts written by app.js's
+        // refreshSidebarIncidents (which folds in curated war timeline +
+        // news so the count reflects real recent oil-impactful activity).
+        // Fall back to raw ACLED+iran only if the merged pool hasn't
+        // landed yet — this avoids the race where /api/events finishes
+        // last and overwrites the merged count back to ~0 under ACLED's
+        // 12-month embargo.
         const iranEv2 = (S.iran && Array.isArray(S.iran.data)) ? S.iran.data : [];
         ['hormuz', 'bab', 'suez'].forEach(k => {
           const cp = window.CHOKEPOINTS[k];
           if (!cp) return;
-          const evForCount = eventsForChokepoint(k, events, iranEv2);
-          cp.incidents30d = countRecentIncidents(evForCount, cp, RADIUS_KM[k] || 300, 30);
+          const merged = (window.CP && window.CP.incidents && window.CP.incidents[k] &&
+                          Array.isArray(window.CP.incidents[k].events))
+                        ? window.CP.incidents[k].events
+                        : null;
+          if (merged && merged.length) {
+            // Merged events are already chokepoint-filtered + within 90d
+            // wall-clock. Just count those within 30d.
+            const cutoff30 = Date.now() - 30 * 86400000;
+            let n = 0;
+            for (const ev of merged) {
+              const t = Date.parse(ev.date || ev.event_date || '');
+              if (isFinite(t) && t >= cutoff30) n++;
+            }
+            cp.incidents30d = n;
+          } else {
+            const evForCount = eventsForChokepoint(k, events, iranEv2);
+            cp.incidents30d = countRecentIncidents(evForCount, cp, RADIUS_KM[k] || 300, 30);
+          }
         });
         // Refresh aggregate incidents KPI
         const incidentEl = document.querySelector('[data-kpi="incidents30"]');

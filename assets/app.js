@@ -278,6 +278,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
         asofEl.textContent = `${String(d.getDate()).padStart(2,'0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
       }
+      // Re-render the §02 chokepoint card grid so each card's INCIDENTS·30D
+      // box picks up the merged-pool count we just wrote. Without this the
+      // cards would stick to the value that hydrate.js wrote on first paint
+      // (which is 0 under ACLED's 12-mo embargo).
+      if (typeof window.__hydrateChokepointCards === 'function') {
+        window.__hydrateChokepointCards();
+      }
     } catch (e) { /* non-fatal */ }
     renderChokepoint(currentChokepoint);
   }
