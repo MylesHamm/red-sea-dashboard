@@ -454,17 +454,29 @@
     const change24 = (latest != null && prev != null) ? (latest - prev) : (kpis.brent_price_change ?? null);
     const pct24    = (latest != null && prev != null && prev !== 0) ? ((latest - prev) / prev * 100) : null;
 
-    setText('heroPrice',   latest != null ? latest.toFixed(2) : '—');
-    const change = $('heroChange') || document.querySelector('.kpi-hero-change');
-    if (change) {
-      if (change24 == null) {
-        change.textContent = '—';
-      } else {
-        const arrow = change24 > 0 ? '▲' : change24 < 0 ? '▼' : '•';
-        const sign  = change24 > 0 ? '+' : '';
-        change.innerHTML = `<span class="change-arrow">${arrow}</span> ${sign}$${change24.toFixed(2)}${pct24!=null?` (${sign}${pct24.toFixed(2)}%)`:''} · 24h`;
-        change.classList.toggle('up', change24 > 0);
-        change.classList.toggle('down', change24 < 0);
+    // Skip overwriting the hero price + change if dashboard-state has
+    // already applied FMP intraday values. Earlier hydrateHero resolved
+    // AFTER /api/dashboard-state and clobbered the live $108.17 with the
+    // EIA daily-settle $110.69 — same multi-writer race the user kept
+    // flagging on the incidents KPI, just on the price line.
+    const fmpApplied = !!(window.__dashState
+                          && window.__dashState.kpis
+                          && window.__dashState.kpis.brent
+                          && window.__dashState.kpis.brent.is_intraday);
+    if (!fmpApplied) {
+      setText('heroPrice',   latest != null ? latest.toFixed(2) : '—');
+      const change = $('heroChange') || document.querySelector('.kpi-hero-change');
+      if (change) {
+        if (change24 == null) {
+          change.textContent = '—';
+        } else {
+          const arrow = change24 > 0 ? '▲' : change24 < 0 ? '▼' : '•';
+          const fmt = (n) => (n < 0 ? '−' : (n > 0 ? '+' : '')) + '$' + Math.abs(n).toFixed(2);
+          const fmtPct = (n) => (n < 0 ? '−' : (n > 0 ? '+' : '')) + Math.abs(n).toFixed(2) + '%';
+          change.innerHTML = `<span class="change-arrow">${arrow}</span> ${fmt(change24)}${pct24!=null?` (${fmtPct(pct24)})`:''} · 24h`;
+          change.classList.toggle('up', change24 > 0);
+          change.classList.toggle('down', change24 < 0);
+        }
       }
     }
 
@@ -476,10 +488,15 @@
       el.textContent = `Feb 28 → now: ${daysSinceWar} days of market whiplash.`;
     });
 
-    // 30-day range foot row + war-onset % (also surfaced in threat-strip below)
+    // 30-day range foot row + war-onset %. Skip the foot rewrite when FMP
+    // has already supplied the war-premium % anchored to its intraday
+    // price — re-rendering here would reset the foot to EIA-anchored
+    // text and force _applyHeroBrentFromState to re-fire on the next
+    // poll. Always re-render the 30D RANGE part though (uses brent
+    // history, not the spot price).
     let warPct = null;
     const foot = document.querySelector('.kpi-hero-foot');
-    if (Array.isArray(brent) && brent.length) {
+    if (Array.isArray(brent) && brent.length && !fmpApplied) {
       const last30 = brent.slice(-30).map(r => r.price).filter(v => v != null);
       const _warDate = (window.CONSTANTS && window.CONSTANTS.anchors && window.CONSTANTS.anchors.war_onset) || '2026-02-28';
       const warStart = brent.find(r => r.date >= _warDate);
@@ -487,8 +504,19 @@
       if (foot && last30.length) {
         const lo = Math.min(...last30), hi = Math.max(...last30);
         foot.innerHTML = `
-          <span>30D RANGE <b>$${lo.toFixed(2)} — $${hi.toFixed(2)}</b></span>
-          <span>SINCE WAR ONSET <b class="${warPct>=0?'up':'down'}">${warPct!=null?(warPct>=0?'+':'')+warPct.toFixed(1)+'%':'—'}</b></span>`;
+          <span data-30d-range>30D RANGE <b>$${lo.toFixed(2)} — $${hi.toFixed(2)}</b></span>
+          <span data-since-war>SINCE WAR ONSET <b data-war-prem class="${warPct>=0?'up':'down'}">${warPct!=null?(warPct>=0?'+':'')+warPct.toFixed(1)+'%':'—'}</b></span>`;
+      }
+    } else if (Array.isArray(brent) && brent.length && fmpApplied && foot) {
+      // FMP applied — only refresh the 30D RANGE label, keep the war-prem
+      // span that _applyHeroBrentFromState owns intact.
+      const last30 = brent.slice(-30).map(r => r.price).filter(v => v != null);
+      if (last30.length) {
+        const lo = Math.min(...last30), hi = Math.max(...last30);
+        const rangeSpan = foot.querySelector('[data-30d-range]');
+        if (rangeSpan) {
+          rangeSpan.innerHTML = `30D RANGE <b>$${lo.toFixed(2)} — $${hi.toFixed(2)}</b>`;
+        }
       }
     }
 
@@ -529,9 +557,12 @@
         ovxDeltaEl.className = '';
       }
     }
-    // WAR PREM = % vs Feb-28-2026 onset (defined above)
+    // WAR PREM = % vs Feb-28-2026 onset. When FMP intraday is live the
+    // canonical writer is _applyHeroBrentFromState (FMP-anchored). Skip
+    // the rewrite here so we don't reset threatWarPrem back to '—' on
+    // every hydrate pass under FMP.
     const warPremEl = $('threatWarPrem');
-    if (warPremEl) {
+    if (warPremEl && !fmpApplied) {
       warPremEl.textContent = warPct == null ? '—' : (warPct >= 0 ? '+' : '') + warPct.toFixed(1) + '%';
     }
 

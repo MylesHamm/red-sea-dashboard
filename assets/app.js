@@ -375,12 +375,38 @@ document.addEventListener('DOMContentLoaded', () => {
       const c = +b.change_24h;
       const p = b.change_24h_pct != null ? +b.change_24h_pct : null;
       const arrow = c > 0 ? '▲' : c < 0 ? '▼' : '•';
-      const sign  = c > 0 ? '+' : '';
-      heroChange.innerHTML = `<span class="change-arrow">${arrow}</span> ${sign}$${c.toFixed(2)}` +
-        (p != null ? ` (${sign}${p.toFixed(2)}%)` : '') + ' · 24h';
+      // Format: "+$1.70 (+1.55%)" or "−$1.70 (−1.55%)" — the dollar sign
+      // stays attached to the unsigned magnitude so the sign reads
+      // cleanly. Earlier this rendered as "$-1.70" which is awkward.
+      const fmt = (n) => (n < 0 ? '−' : (n > 0 ? '+' : '')) + '$' + Math.abs(n).toFixed(2);
+      const fmtPct = (n) => (n < 0 ? '−' : (n > 0 ? '+' : '')) + Math.abs(n).toFixed(2) + '%';
+      heroChange.innerHTML = `<span class="change-arrow">${arrow}</span> ${fmt(c)}` +
+        (p != null ? ` (${fmtPct(p)})` : '') + ' · 24h';
       heroChange.classList.toggle('up',   c > 0);
       heroChange.classList.toggle('down', c < 0);
     }
+    // Methodology footer — live values
+    try {
+      const fmt$ = v => v == null ? '—' : '$' + Number(v).toFixed(2);
+      const fmt  = v => v == null ? '—' : Number(v).toFixed(1);
+      const buildEl = document.querySelector('[data-build-id]');
+      if (buildEl && !buildEl.textContent.trim()) {
+        // Asset cache-buster doubles as a build id (mtime hash)
+        const link = document.querySelector('link[rel=stylesheet][href*="?v="]');
+        const m = link && /\?v=([A-Za-z0-9]+)/.exec(link.href);
+        buildEl.textContent = m ? m[1].slice(0, 7) : '—';
+      }
+      const setFoot = (k, v) => {
+        const el = document.querySelector(`[data-foot-${k}]`);
+        if (el) el.textContent = v;
+      };
+      setFoot('brent', fmt$(b.price));
+      setFoot('ovx',   fmt(ds.kpis && ds.kpis.ovx && ds.kpis.ovx.value));
+      const now = new Date();
+      const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+      setFoot('asof', `${String(now.getDate()).padStart(2,'0')} ${months[now.getMonth()]} ${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`);
+    } catch (e) { /* non-fatal */ }
+
     // SINCE WAR ONSET % must use the SAME price as the hero ($108.17 from
     // FMP, not $110.69 from EIA). hydrateHero originally computed this
     // from the EIA daily-settle series, leaving the page showing two
@@ -389,15 +415,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // live; use it directly so the hero price and the % below it agree.
     const heroFootEl = document.querySelector('.kpi-hero-foot');
     if (heroFootEl && b.war_premium_pct != null) {
-      // Replace just the value inside the SINCE WAR ONSET span if present.
-      const sinceSpan = heroFootEl.querySelector('.up,.down');
+      const sinceSpan = heroFootEl.querySelector('[data-war-prem]');
       const wp = Number(b.war_premium_pct);
       const fmtWp = (wp >= 0 ? '+' : '') + wp.toFixed(1) + '%';
       if (sinceSpan) {
         sinceSpan.textContent = fmtWp;
         sinceSpan.className = wp >= 0 ? 'up' : 'down';
+        sinceSpan.setAttribute('data-war-prem', '');
       }
-      // Threat-strip WAR PREM should also reflect FMP anchor.
       const threatWarPremEl = document.getElementById('threatWarPrem');
       if (threatWarPremEl) threatWarPremEl.textContent = fmtWp;
     }

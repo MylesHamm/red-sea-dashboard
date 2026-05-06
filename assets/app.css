@@ -2286,3 +2286,143 @@ button { font-family: inherit; cursor: pointer; }
   .narrative-block { padding: 18px; }
   .ts-controls { flex-wrap: wrap; }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THESIS METHODOLOGY & DATA-SOURCES FOOTER
+   ───────────────────────────────────────────────────────────────────────────
+   Editorial / academic-press treatment for the dashboard's most committee-
+   facing surface. Two-column body grid, tight monospace meta-banner up top,
+   restrained source list with hyperlinks. Sits below the data and reads as
+   the methodology page of a printed report — the thing the committee will
+   thumb to first.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.thesis-footer {
+  margin-top: 56px;
+  border-top: 1px solid var(--line, rgba(0,212,255,0.10));
+  background:
+    linear-gradient(180deg, rgba(0,212,255,0.02), transparent 320px),
+    linear-gradient(0deg, rgba(255,170,0,0.015), transparent);
+  padding: 0;
+}
+.thesis-footer-inner {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 36px 32px 48px;
+}
+
+.tf-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1px solid rgba(0,212,255,0.12);
+  padding-bottom: 14px;
+  margin-bottom: 24px;
+  font-family: var(--mono, 'JetBrains Mono', monospace);
+  font-size: 11px;
+  letter-spacing: 1.6px;
+  color: var(--text-mute, #8794a7);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tf-mark {
+  color: var(--gold, #ffaa00);
+  font-weight: 700;
+  letter-spacing: 2.4px;
+}
+.tf-sep { opacity: 0.4; padding: 0 8px; }
+.tf-cite {
+  color: var(--text-dim, #c8d0dc);
+  font-style: italic;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  text-transform: none;
+}
+.tf-sub-title {
+  color: var(--cyan, #00d4ff);
+  font-weight: 600;
+  letter-spacing: 2.4px;
+}
+
+.tf-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1fr;
+  gap: 36px;
+  margin-bottom: 28px;
+}
+.tf-block {}
+.tf-h {
+  font-family: var(--mono, monospace);
+  font-size: 10px;
+  letter-spacing: 2.6px;
+  color: var(--gold, #ffaa00);
+  text-transform: uppercase;
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255,170,0,0.18);
+  font-weight: 700;
+}
+.tf-block p {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text-dim, #c8d0dc);
+  margin: 0;
+}
+.tf-block p b { color: var(--text, #dfe7f0); font-weight: 600; }
+.tf-srcs, .tf-lims {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-dim, #c8d0dc);
+}
+.tf-srcs li, .tf-lims li {
+  padding: 5px 0;
+  border-bottom: 1px dotted rgba(0,212,255,0.06);
+}
+.tf-srcs li:last-child, .tf-lims li:last-child { border-bottom: none; }
+.tf-srcs li b, .tf-lims li b { color: var(--text, #dfe7f0); font-weight: 600; }
+.tf-srcs li code {
+  font-family: var(--mono, monospace);
+  font-size: 10.5px;
+  padding: 1px 4px;
+  background: rgba(0,212,255,0.07);
+  border-radius: 2px;
+  color: var(--cyan, #00d4ff);
+}
+.tf-lims li i {
+  color: var(--text-mute, #8794a7);
+  font-style: italic;
+}
+
+.tf-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(0,212,255,0.10);
+  font-family: var(--mono, monospace);
+  font-size: 10px;
+  letter-spacing: 1.4px;
+  color: var(--text-mute, #8794a7);
+}
+.tf-foot a {
+  color: var(--cyan, #00d4ff);
+  text-decoration: none;
+  margin-left: 8px;
+  border-bottom: 1px dotted rgba(0,212,255,0.4);
+  padding-bottom: 1px;
+  transition: color 0.15s;
+}
+.tf-foot a:hover { color: var(--gold, #ffaa00); border-bottom-color: var(--gold, #ffaa00); }
+
+@media (max-width: 980px) {
+  .tf-grid { grid-template-columns: 1fr; gap: 24px; }
+  .tf-banner { font-size: 10px; }
+}

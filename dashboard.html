@@ -124,8 +124,8 @@
           <path id="sparkLine" d="" fill="none" stroke="#00d4ff" stroke-width="1.5"/>
         </svg>
         <div class="kpi-hero-foot">
-          <span>30D RANGE <b>—</b></span>
-          <span>SINCE WAR ONSET <b>—</b></span>
+          <span data-30d-range>30D RANGE <b>—</b></span>
+          <span data-since-war>SINCE WAR ONSET <b data-war-prem>—</b></span>
         </div>
       </div>
 
@@ -853,6 +853,82 @@
     </div>
   </div>
 </div>
+
+<!-- ═══ METHODOLOGY & DATA SOURCES FOOTER ═══ -->
+<footer class="thesis-footer">
+  <div class="thesis-footer-inner">
+    <div class="tf-banner">
+      <div class="tf-banner-left">
+        <span class="tf-mark">CHOKEPOINT INTEL</span>
+        <span class="tf-sep">·</span>
+        <span class="tf-cite">Mercyhurst University, MS Applied Intelligence — Hamm (2026)</span>
+      </div>
+      <div class="tf-banner-right">
+        <span class="tf-sub-title">METHODOLOGY · DATA SOURCES · LIMITATIONS</span>
+      </div>
+    </div>
+
+    <div class="tf-grid">
+      <section class="tf-block">
+        <h3 class="tf-h">Methodology</h3>
+        <p>
+          Thesis observation window: <b>Oct 2 2023 — Sep 30 2025 (N = 505 trading days)</b>.
+          Dependent variable: GJR-GARCH(1,1,1) conditional volatility of Brent log-returns.
+          Hypotheses test the effect of weekly Houthi maritime attack frequency (H1),
+          chokepoint proximity (H2), and severity (H3) on Brent volatility, controlling for
+          DXY, OVX, SPR releases, OPEC dummies, the Russia-Ukraine campaign, China PMI, and
+          Baker Hughes US rig count. Headline finding: chokepoint events register
+          statistically (H1 p = 0.026, H2 p = 0.004) but with negative coefficients —
+          markets adapt rather than price a fear premium. Macro controls (OVX, DXY,
+          rig count) dominate explanatory power (R² ≈ 0.46-0.49).
+        </p>
+      </section>
+
+      <section class="tf-block">
+        <h3 class="tf-h">Live Data Sources</h3>
+        <ul class="tf-srcs">
+          <li><b>Brent (intraday)</b> — Financial Modeling Prep <code>/stable/quote</code>, BZUSD, 10-min refresh</li>
+          <li><b>Brent / WTI / VIX / HY credit / breakevens</b> — FRED (Federal Reserve Bank of St. Louis), daily</li>
+          <li><b>OVX, DXY</b> — FRED <code>OVXCLS</code> + DTWEXBGS rescaled, daily</li>
+          <li><b>US crude inventories, SPR</b> — EIA Open Data API, weekly</li>
+          <li><b>Chokepoint transit volume</b> — IMF PortWatch ArcGIS feed, weekly publication</li>
+          <li><b>Conflict events (live)</b> — ACLED HDX humanitarian mirror, weekly publication</li>
+          <li><b>Conflict events (row-level)</b> — ACLED OAuth API + curated war timeline + Google News scraper</li>
+          <li><b>Media tone</b> — GDELT DOC 2.0 TimelineTone + TimelineVolRaw, hourly refresh</li>
+        </ul>
+      </section>
+
+      <section class="tf-block">
+        <h3 class="tf-h">Disclosed Limitations</h3>
+        <ul class="tf-lims">
+          <li>ACLED's free tier embargoes row-level events for ~12 months. Live monthly aggregates via HDX fill the gap; the <i>kill-zone</i> panels merge curated war-timeline + Google News so the live event flow remains visible.</li>
+          <li>The §03/§05/§06/§08 analytical sections are <b>locked</b> to the thesis sample (Oct 2023 – Sep 2025) and do not update with live data — by academic design.</li>
+          <li>News-source counts are capped at 5 stories/day per chokepoint to prevent a single news cycle from inflating the event count over distinct events.</li>
+          <li>Vessel-position overlays use third-party iframe widgets (MarineTraffic free embed) which silently drop server-side filters; "OPEN TANKER VIEW" buttons link to the filtered view on MarineTraffic's full site.</li>
+          <li>OIL FLOW AT RISK uses EIA reference values (21.0 mbd Hormuz, 8.2 mbd Bab) — slow-moving macro estimates, not daily AIS.</li>
+        </ul>
+      </section>
+    </div>
+
+    <div class="tf-foot">
+      <span>Build <span data-build-id></span></span>
+      <span>·</span>
+      <span>Live Brent <span data-foot-brent>—</span></span>
+      <span>·</span>
+      <span>OVX <span data-foot-ovx>—</span></span>
+      <span>·</span>
+      <span>Last refresh <span data-foot-asof>—</span></span>
+      <span>·</span>
+      <a href="https://acleddata.com" target="_blank" rel="noopener">ACLED</a>
+      <a href="https://fred.stlouisfed.org" target="_blank" rel="noopener">FRED</a>
+      <a href="https://www.eia.gov/opendata/" target="_blank" rel="noopener">EIA</a>
+      <a href="https://portwatch.imf.org" target="_blank" rel="noopener">IMF PortWatch</a>
+      <a href="https://data.humdata.org" target="_blank" rel="noopener">HDX</a>
+      <a href="https://www.gdeltproject.org" target="_blank" rel="noopener">GDELT</a>
+      <a href="https://site.financialmodelingprep.com" target="_blank" rel="noopener">FMP</a>
+    </div>
+  </div>
+</footer>
 
 <!-- Scripts -->
 <script src="assets/api.js?v=20260505m"></script>
