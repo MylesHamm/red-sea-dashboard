@@ -1498,24 +1498,43 @@ def fetch_spr_data() -> List[dict]:
 _FMP_BASE = "https://financialmodelingprep.com/stable"
 
 
+_FMP_RATE_LIMIT_BACKOFF: Dict[str, float] = {}  # cache_key → unix-ts to retry-after
+
 def _fmp_get(path: str, params: dict, cache_key: str, ttl: int) -> Optional[Any]:
     """GET an FMP `stable/*` endpoint with key injected, JSON-decoded.
 
     Caches on success; on failure falls back to the existing cache (any
     age) so a transient FMP outage doesn't blank the chart. Returns None
     only if there's no fresh fetch AND no stale cache.
+
+    Negative-caches 429 rate-limit responses for 30 minutes per endpoint
+    so the frontend's 60s polling doesn't keep hammering FMP after
+    we've exceeded the daily quota — earlier the dashboard generated
+    hundreds of 429 log lines/minute under load, exhausting the quota
+    even faster (each rejected call still counts).
     """
     if not config.FMP_API_KEY:
         return None
     cached = _read_cache(cache_key, ttl)
     if cached is not None:
         return cached
+    # Negative cache on rate-limit
+    backoff_until = _FMP_RATE_LIMIT_BACKOFF.get(cache_key, 0)
+    if backoff_until and time.time() < backoff_until:
+        return _read_stale_cache(cache_key)
     qp = dict(params or {})
     qp["apikey"] = config.FMP_API_KEY
     qstr = "&".join(f"{k}={v}" for k, v in qp.items())
     url = f"{_FMP_BASE}/{path}?{qstr}"
     try:
         resp = requests.get(url, headers=_BROWSER_HEADERS, timeout=10)
+        if resp.status_code == 429:
+            # Daily-quota exceeded — back off for 30 minutes before
+            # retrying so we stop spamming the API (each rejected call
+            # still counts against the quota window).
+            _FMP_RATE_LIMIT_BACKOFF[cache_key] = time.time() + 30 * 60
+            logger.warning(f"FMP {path}: HTTP 429 (rate-limited) — backing off 30m for this endpoint")
+            return _read_stale_cache(cache_key)
         if resp.status_code != 200:
             logger.warning(f"FMP {path}: HTTP {resp.status_code} body={resp.text[:160]!r}")
             return _read_stale_cache(cache_key)
@@ -3254,17 +3273,35 @@ def fetch_iran_news() -> List[dict]:
         seen_titles = set()
         all_articles = []
 
+        # Track per-query results for diagnostic logging — when the deployed
+        # HF Spaces shared IP gets rate-limited or blocked by Google News,
+        # earlier code returned [] silently (no log line) and the dashboard
+        # showed 0 events with no clue why. Log every query's outcome so a
+        # future failure mode is visible in the deploy log.
+        per_query_stats = []
+
         def _fetch_rss(q):
             url = f"https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
             try:
-                resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=4)
-            except Exception:
+                resp = requests.get(
+                    url,
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                        "Accept": "application/rss+xml, application/xml, text/xml, */*",
+                        "Accept-Language": "en-US,en;q=0.9",
+                    },
+                    timeout=12,  # was 4s — too aggressive for HF's egress
+                )
+            except Exception as e:
+                per_query_stats.append((q, 0, f"net-err: {e!s}[:60]"))
                 return []
             if resp.status_code != 200:
+                per_query_stats.append((q, 0, f"HTTP {resp.status_code}"))
                 return []
             try:
                 root = ET.fromstring(resp.text)
-            except Exception:
+            except Exception as e:
+                per_query_stats.append((q, 0, f"xml-err: {e!s}[:40]"))
                 return []
             items = []
             for item in root.findall(".//item"):
@@ -3280,12 +3317,14 @@ def fetch_iran_news() -> List[dict]:
                     "source": source_el.text if source_el is not None else "",
                     "url": link_el.text if link_el is not None else "",
                 })
+            per_query_stats.append((q, len(items), "ok"))
             return items
 
-        # Fetch all RSS feeds in parallel — wider concurrency with the
-        # expanded query set; per-fetch timeout keeps the slowest in the
-        # tail from blocking the rest.
-        with ThreadPoolExecutor(max_workers=8) as pool:
+        # Lower concurrency from 8 → 3 — Google News' anti-burst returns 200
+        # OK with empty XML (or 429) when too many parallel hits come from
+        # one IP. 3 workers serializes enough that HF Spaces' shared IP
+        # doesn't trip the rate limit, while still finishing in <12s.
+        with ThreadPoolExecutor(max_workers=3) as pool:
             rss_results = list(pool.map(_fetch_rss, queries))
 
         for items in rss_results:
@@ -3294,6 +3333,18 @@ def fetch_iran_news() -> List[dict]:
                 if title_lower not in seen_titles:
                     seen_titles.add(title_lower)
                     all_articles.append(a)
+
+        # Diagnostic log: which queries returned what. When the dashboard
+        # shows 0 events on the deployed server, this line tells us
+        # whether the issue is upstream (Google News empty/blocked) or
+        # downstream (relevance filter dropping everything).
+        ok_q = sum(1 for _, n, _ in per_query_stats if n > 0)
+        zero_q = [q for q, n, why in per_query_stats if n == 0]
+        logger.info(
+            f"Iran news scrape: {ok_q}/{len(queries)} queries returned items "
+            f"(total raw {sum(n for _,n,_ in per_query_stats)}, "
+            f"deduped {len(all_articles)}); empty queries: {zero_q[:5]}"
+        )
 
         # Relevance filter: keep any headline that names an oil-impact
         # actor/locus AND an oil-impact event. Earlier this required
@@ -3340,6 +3391,10 @@ def fetch_iran_news() -> List[dict]:
             has_context = any(term in t for term in context_terms)
             if has_actor and has_context:
                 filtered.append(a)
+        logger.info(
+            f"Iran news filter: {len(filtered)}/{len(all_articles)} articles "
+            f"passed the actor+context filter"
+        )
 
         # Classify type based on keywords
         def classify_type(title):
@@ -3401,7 +3456,21 @@ def fetch_iran_news() -> List[dict]:
         if results:
             _write_cache("iran_news", results)
             logger.info(f"Iran news: fetched {len(results)} relevant articles from Google News")
-        return results
+            return results
+        # Empty fresh fetch — DO NOT overwrite the existing cache with [].
+        # Earlier the code wrote [] when results were empty, which then
+        # got served as a "valid" cache for the full 2h TTL — leaving the
+        # dashboard with 0 events on the deployed HF Spaces (where Google
+        # News intermittently returns empty XML). Now: keep the prior
+        # cache, return whatever's there.
+        logger.warning(
+            "Iran news fetch returned 0 articles after filter. "
+            "Preserving prior cache rather than overwriting with empty."
+        )
+        prior = _read_stale_cache("iran_news") or []
+        if prior:
+            logger.info(f"Iran news: keeping prior cache ({len(prior)} items)")
+        return prior
 
     except Exception as e:
         logger.warning(f"Iran news fetch failed: {e}")
