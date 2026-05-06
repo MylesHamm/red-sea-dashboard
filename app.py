@@ -190,13 +190,14 @@ async def get_dashboard_state():
     now_ts = _time.time()
     cutoff30 = now_ts - 30 * 86400
     cutoff60 = now_ts - 60 * 86400
-    # Per-day news cap — must match the chokepoint pool's cap in
-    # data_service._curated_events_for_chokepoint so the hero KPI and
-    # the chokepoint cards count the same kind of "event." Without this
-    # the hero counted raw news volume (one news cycle could contribute
-    # 30+ unique headlines), while the cards counted distinct events
-    # (capped) — same label, two different scopes.
-    MAX_NEWS_PER_DAY = 5
+    # Per-day news cap. Set high enough to capture multi-event days (a
+    # single day can legitimately have Iran strikes + Saudi attack + OPEC
+    # announcement → 3+ distinct events) without letting one news cycle
+    # spam (30+ outlets covering one event) dominate. 10 distinct
+    # headlines per day is a reasonable distinct-event ceiling for an
+    # active-war oil-impact stream. Must match
+    # data_service._curated_events_for_chokepoint's cap.
+    MAX_NEWS_PER_DAY = 10
     seen = set()
     news_per_day_30d: dict = {}
     news_per_day_prior: dict = {}

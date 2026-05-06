@@ -701,12 +701,13 @@ def _curated_events_for_chokepoint(chokepoint_id: str) -> List[dict]:
     #
     # PER-DAY CAP: a single news-cycle day (e.g. May 4 UAE strikes) can
     # generate 30+ unique headlines from different outlets — same event,
-    # multiple coverage. Without a cap, the chokepoint card 30D count
-    # gets dominated by media volume rather than event count, and §01's
-    # weekly bar for that week spikes 10× the surrounding weeks. Capping
-    # news contributions per day at MAX_NEWS_PER_DAY keeps the count
-    # representative of distinct events, not coverage intensity.
-    MAX_NEWS_PER_DAY = 5
+    # multiple coverage. Without a cap, the chokepoint card gets
+    # dominated by media volume. 10 distinct headlines per day is the
+    # ceiling — high enough to capture multi-event days (Iran strike +
+    # Saudi attack + OPEC announcement = 3 distinct events) without
+    # letting coverage intensity spam the count. Must match
+    # MAX_NEWS_PER_DAY in app.py's /api/dashboard-state composer.
+    MAX_NEWS_PER_DAY = 10
 
     seen_keys = set()
     # Seed per_day_count with news_auto entries already added so the cap
@@ -3220,21 +3221,51 @@ def fetch_iran_news() -> List[dict]:
     try:
         import xml.etree.ElementTree as ET
 
-        # Multiple targeted queries to capture different angles of the conflict
+        # Broad query set covering every theatre that moves oil prices, not
+        # just Iran/Hormuz. Earlier the dashboard's hero "OIL EVENTS · 30D"
+        # undercounted because the news pool was Iran-anchored — Houthi-only
+        # attacks, Saudi/UAE strikes, OPEC announcements, Russian supply
+        # disruptions, and SPR releases all silently dropped out. The
+        # standard now is "any event impacting oil prices globally."
         queries = [
+            # Iran / Hormuz theater
             "Iran+war+US+strikes",
             "Strait+of+Hormuz+oil+shipping",
             "Brent+crude+oil+Iran",
+            "IRGC+tanker+seizure",
+            # Bab el-Mandeb / Yemen theater
+            "Houthi+Red+Sea+attack",
+            "Yemen+oil+shipping+missile",
+            "Bab+el-Mandeb+tanker",
+            # Gulf states / Saudi attacks
+            "Saudi+Arabia+oil+attack",
+            "UAE+oil+facility+attack",
+            "Kuwait+oil+strike",
+            # OPEC and macro supply
+            "OPEC+production+cut",
+            "OPEC+oil+output",
+            "Russia+oil+sanctions",
+            "Strategic+Petroleum+Reserve+release",
+            # Pure oil-market signal
+            "Brent+crude+price+spike",
+            "oil+supply+disruption",
+            "tanker+attack+Gulf",
         ]
         seen_titles = set()
         all_articles = []
 
         def _fetch_rss(q):
             url = f"https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
-            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=3)
+            try:
+                resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=4)
+            except Exception:
+                return []
             if resp.status_code != 200:
                 return []
-            root = ET.fromstring(resp.text)
+            try:
+                root = ET.fromstring(resp.text)
+            except Exception:
+                return []
             items = []
             for item in root.findall(".//item"):
                 title_el = item.find("title")
@@ -3251,8 +3282,10 @@ def fetch_iran_news() -> List[dict]:
                 })
             return items
 
-        # Fetch all RSS feeds in parallel
-        with ThreadPoolExecutor(max_workers=3) as pool:
+        # Fetch all RSS feeds in parallel — wider concurrency with the
+        # expanded query set; per-fetch timeout keeps the slowest in the
+        # tail from blocking the rest.
+        with ThreadPoolExecutor(max_workers=8) as pool:
             rss_results = list(pool.map(_fetch_rss, queries))
 
         for items in rss_results:
@@ -3262,18 +3295,50 @@ def fetch_iran_news() -> List[dict]:
                     seen_titles.add(title_lower)
                     all_articles.append(a)
 
-        # Relevance filter: must mention Iran/Hormuz AND oil/military/war context
-        iran_terms = {"iran", "iranian", "tehran", "hormuz", "irgc", "persian gulf", "hezbollah", "houthi"}
-        context_terms = {"oil", "brent", "crude", "war", "strike", "military", "missile",
-                         "drone", "attack", "bomb", "navy", "sanctions", "nuclear",
-                         "ceasefire", "tanker", "shipping", "casualt", "killed", "troops"}
+        # Relevance filter: keep any headline that names an oil-impact
+        # actor/locus AND an oil-impact event. Earlier this required
+        # Iran-or-Houthi specifically — drops Saudi/UAE/OPEC events that
+        # demonstrably move Brent. Now any of the threatened-theatre or
+        # oil-supply terms qualifies; the keyword pair must intersect the
+        # actor set AND the event/context set so we don't pull pure
+        # human-interest noise.
+        actor_terms = {
+            # Iran theater
+            "iran", "iranian", "tehran", "hormuz", "irgc", "persian gulf",
+            "hezbollah", "khamenei",
+            # Yemen / Bab theater
+            "houthi", "houthis", "ansar allah", "yemen", "yemeni", "red sea",
+            "bab el-mandeb", "bab al-mandab", "salalah", "djibouti",
+            # Gulf states
+            "saudi", "saudi arabia", "uae", "abu dhabi", "kuwait", "qatar",
+            "bahrain", "ras tanura", "kharg", "fujairah", "bandar abbas",
+            # Macro supply actors
+            "opec", "opec+", "russia", "russian oil", "kremlin", "putin",
+            # US energy policy
+            "spr", "strategic petroleum",
+            # Pure oil-market actors
+            "brent", "wti", "crude", "petroleum",
+        }
+        context_terms = {
+            # Conflict / disruption
+            "war", "strike", "strikes", "struck", "military", "missile",
+            "drone", "drones", "attack", "attacks", "attacked", "bomb",
+            "bombing", "navy", "sanctions", "sanctioned", "nuclear",
+            "ceasefire", "truce", "blockade", "raid", "killed", "casualt",
+            "troops", "deploy", "deployed", "warned", "threat",
+            # Oil-market events
+            "oil", "crude", "tanker", "shipping", "vessel", "barrel",
+            "supply", "production", "output", "cut", "ramp", "embargo",
+            "pipeline", "refinery", "spike", "surge", "plunge", "rally",
+            "release", "reserve",
+        }
 
         filtered = []
         for a in all_articles:
             t = a["title"].lower()
-            has_iran = any(term in t for term in iran_terms)
+            has_actor = any(term in t for term in actor_terms)
             has_context = any(term in t for term in context_terms)
-            if has_iran and has_context:
+            if has_actor and has_context:
                 filtered.append(a)
 
         # Classify type based on keywords
@@ -3289,27 +3354,49 @@ def fetch_iran_news() -> List[dict]:
                 return "diplomatic"
             return "military"
 
-        # Parse dates and build structured output
+        # Parse dates first so we can sort/cap by ACTUAL recency. The
+        # earlier code did `filtered[:50]` BEFORE the sort, which kept
+        # the first 50 in iteration order (not necessarily most recent)
+        # AND capped the news pool too aggressively — with 17 queries
+        # × ~100 articles each, the legitimate distinct-article volume
+        # is several hundred. The hero "OIL EVENTS · 30D" was capped at
+        # an artificial ceiling because of this.
         results = []
-        for a in filtered[:50]:  # Cap at 50 most recent
+        for a in filtered:
             try:
                 pub_dt = datetime.strptime(a["pubDate"][:25], "%a, %d %b %Y %H:%M:%S")
                 date_str = pub_dt.strftime("%Y-%m-%d")
             except (ValueError, IndexError):
                 continue
-
             results.append({
                 "date": date_str,
                 "title": a["title"],
                 "type": classify_type(a["title"]),
                 "source": a["source"],
                 "url": a["url"],
-                "severity": 3,  # Default; news headlines don't have severity
-                "auto": True,   # Flag to distinguish from curated events
+                "severity": 3,
+                "auto": True,
             })
-
-        # Sort by date descending
+        # Sort newest-first, then cap PER DATE rather than total. Google
+        # News RSS skews heavily to last 3 days (May 6: 132 articles,
+        # Apr 27: 1) — a single most-recent-N cap throws away the older
+        # dates entirely, leaving the hero count blind to the prior
+        # weeks of the war. Capping per date keeps a reasonable per-day
+        # ceiling while preserving the time-series breadth.
         results.sort(key=lambda x: x["date"], reverse=True)
+        per_day = {}
+        capped = []
+        MAX_NEWS_PER_DATE = 20  # Generous — app.py + chokepoint pool
+                                # also cap at 10 each, so this is just
+                                # a defensive ceiling against a single
+                                # day spamming the cache.
+        for r in results:
+            d = r["date"]
+            if per_day.get(d, 0) >= MAX_NEWS_PER_DATE:
+                continue
+            per_day[d] = per_day.get(d, 0) + 1
+            capped.append(r)
+        results = capped
 
         if results:
             _write_cache("iran_news", results)
