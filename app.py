@@ -112,10 +112,24 @@ async def get_dashboard_state():
     import time as _time
     from datetime import datetime as _dt, timezone as _tz
 
-    # ── Source feeds (read memos / caches; never trigger a fetch) ───
+    # ── Source feeds ────────────────────────────────────────────────
+    # iran_news cache is the canonical source for the hero count; if it's
+    # empty (cache eviction, cold worker, etc.) we MUST trigger a fetch
+    # rather than return a flickering count. Earlier this read-only code
+    # path produced inconsistent results (11 vs 61 events) depending on
+    # whether the background warmer had populated the cache yet.
     master   = await _run_sync(data_service.load_master_dataset)
     iran_resp_curated = data_service.get_merged_curated_events(include_news=True) or []
     iran_news_cache = data_service._read_cache("iran_news", 7200) or []
+    if not iran_news_cache:
+        # Cold-cache fallback — trigger a fetch so the hero KPI doesn't
+        # silently drop 50+ events between cache-miss requests.
+        try:
+            iran_news_cache = await _run_sync(data_service.fetch_iran_news) or []
+            # Refresh the merged pool so news_auto entries are included.
+            iran_resp_curated = data_service.get_merged_curated_events(include_news=True) or []
+        except Exception as e:
+            print(f"dashboard-state: iran_news fetch failed: {e}")
 
     ts = (master or {}).get("timeseries") or []
     kpis_master = (master or {}).get("kpis") or {}
@@ -176,24 +190,47 @@ async def get_dashboard_state():
     now_ts = _time.time()
     cutoff30 = now_ts - 30 * 86400
     cutoff60 = now_ts - 60 * 86400
+    # Per-day news cap — must match the chokepoint pool's cap in
+    # data_service._curated_events_for_chokepoint so the hero KPI and
+    # the chokepoint cards count the same kind of "event." Without this
+    # the hero counted raw news volume (one news cycle could contribute
+    # 30+ unique headlines), while the cards counted distinct events
+    # (capped) — same label, two different scopes.
+    MAX_NEWS_PER_DAY = 5
     seen = set()
+    news_per_day_30d: dict = {}
+    news_per_day_prior: dict = {}
     inc_30d = inc_prior = 0
-    def _accept(date, title):
+    def _accept(date, title, is_news):
         nonlocal inc_30d, inc_prior
         if not date: return
-        key = f"{date[:10]}::{(title or '').strip().lower()[:50]}"
+        d = date[:10]
+        key = f"{d}::{(title or '').strip().lower()[:50]}"
         if key in seen: return
         seen.add(key)
         try:
-            t = _time.mktime(_time.strptime(date[:10], "%Y-%m-%d"))
+            t = _time.mktime(_time.strptime(d, "%Y-%m-%d"))
         except Exception:
             return
-        if t >= cutoff30:      inc_30d += 1
-        elif t >= cutoff60:    inc_prior += 1
+        if t >= cutoff30:
+            if is_news:
+                if news_per_day_30d.get(d, 0) >= MAX_NEWS_PER_DAY:
+                    return
+                news_per_day_30d[d] = news_per_day_30d.get(d, 0) + 1
+            inc_30d += 1
+        elif t >= cutoff60:
+            if is_news:
+                if news_per_day_prior.get(d, 0) >= MAX_NEWS_PER_DAY:
+                    return
+                news_per_day_prior[d] = news_per_day_prior.get(d, 0) + 1
+            inc_prior += 1
+    # Curated entries are uncapped (hand-curated, low volume by design).
+    # Only news_auto + iran_news entries hit the per-day cap.
     for c in iran_resp_curated:
-        _accept(c.get("date"), c.get("title") or c.get("label"))
+        is_news_auto = (c.get("source_type") == "news_auto")
+        _accept(c.get("date"), c.get("title") or c.get("label"), is_news_auto)
     for n in iran_news_cache:
-        _accept(n.get("date"), n.get("title") or n.get("label"))
+        _accept(n.get("date"), n.get("title") or n.get("label"), True)
 
     # ── Weekly oil-events series — for §01 "Price vs Conflict Intensity" ───
     # Sourced from the UNION of the Hormuz + Bab chokepoint pools (the

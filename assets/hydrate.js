@@ -169,15 +169,25 @@
       if (fatalEl) fatalEl.textContent = totalFatal > 0 ? totalFatal.toLocaleString() + '†' : '—';
     }
 
-    // Top-of-section banner for §02 — single-line "live data through <month>"
+    // Top-of-section banner for §02 — "X OF Y COUNTRIES" arithmetic.
+    // Earlier this added len(by_country) + len(errors) to compute Y,
+    // which double-counted any country that appears in both maps —
+    // e.g. Yemen, where the per-country fallback succeeds with stale
+    // data even when the live parser logs an error. The honest total
+    // is the SET UNION of both keysets, not the sum.
     const banner = document.querySelector('[data-live-events-banner]');
     if (banner) {
       const mon = newestMonth ? _frFmtMonth(newestMonth) : '—';
-      const ctry = Object.keys(snap.by_country || {}).length;
-      const errors = Object.keys(snap.errors || {}).length;
-      banner.textContent = errors
-        ? `LIVE ACLED · HDX MIRROR · ${ctry} OF ${ctry + errors} COUNTRIES · THROUGH ${mon}`
-        : `LIVE ACLED · HDX MIRROR · ${ctry} COUNTRIES · THROUGH ${mon}`;
+      const successKeys = new Set(Object.keys(snap.by_country || {}));
+      const errorKeys   = new Set(Object.keys(snap.errors || {}));
+      const allKeys     = new Set([...successKeys, ...errorKeys]);
+      // A country with data is "live" even if it ALSO has an error
+      // (the error means today's parse failed but stale-cache served).
+      const live = successKeys.size;
+      const total = allKeys.size;
+      banner.textContent = (total > live)
+        ? `LIVE ACLED · HDX MIRROR · ${live} OF ${total} COUNTRIES · THROUGH ${mon}`
+        : `LIVE ACLED · HDX MIRROR · ${live} COUNTRIES · THROUGH ${mon}`;
     }
 
     // Bab body sentence — replaces the previously-static "100+ vessels
@@ -200,12 +210,34 @@
   //   - incidents30d (events within 200km of centroid in last 30 days)
 
   function classifyThreat(pctDecline) {
-    // Higher decline = greater threat
+    // Higher decline = greater threat. Thresholds come from window.CONSTANTS
+    // (sourced from /api/constants → config.THREAT_TIERS) so editing
+    // config.py propagates everywhere. Earlier this function had hardcoded
+    // 60/30/10 cutoffs while config.py shipped 50/25/10 — pills mislabeled
+    // severity by one tier near the boundaries.
     if (pctDecline == null) return { threat: 'elevated', pct: 50 };
-    if (pctDecline >= 60)  return { threat: 'critical', pct: Math.min(100, 60 + pctDecline * 0.6) };
-    if (pctDecline >= 30)  return { threat: 'high',     pct: 40 + pctDecline };
-    if (pctDecline >= 10)  return { threat: 'elevated', pct: 20 + pctDecline * 1.5 };
-    return                        { threat: 'safe',     pct: Math.max(5, 10 - pctDecline) };
+    const tiers = (window.CONSTANTS && Array.isArray(window.CONSTANTS.threat_tiers))
+                  ? window.CONSTANTS.threat_tiers
+                  : [
+                      { name: 'critical', min_decline_pct: 50 },
+                      { name: 'high',     min_decline_pct: 25 },
+                      { name: 'elevated', min_decline_pct: 10 },
+                      { name: 'safe',     min_decline_pct: 0  },
+                    ];
+    // Tiers are ordered most-severe first; first match wins.
+    for (const t of tiers) {
+      if (pctDecline >= (t.min_decline_pct || 0)) {
+        // Visual fill % grows with severity. Tier-relative scaling so the
+        // bar fills more when a chokepoint is well inside its tier.
+        const next = tiers[tiers.indexOf(t) - 1];
+        const upper = next ? next.min_decline_pct : 100;
+        const span  = Math.max(1, upper - (t.min_decline_pct || 0));
+        const tierProgress = Math.min(1, (pctDecline - (t.min_decline_pct || 0)) / span);
+        const baseByName = { critical: 75, high: 50, elevated: 25, safe: 5 }[t.name] || 25;
+        return { threat: t.name, pct: Math.round(baseByName + tierProgress * 20) };
+      }
+    }
+    return { threat: 'safe', pct: 5 };
   }
 
   function haversineKm(lat1, lon1, lat2, lon2) {

@@ -381,6 +381,27 @@ document.addEventListener('DOMContentLoaded', () => {
       heroChange.classList.toggle('up',   c > 0);
       heroChange.classList.toggle('down', c < 0);
     }
+    // SINCE WAR ONSET % must use the SAME price as the hero ($108.17 from
+    // FMP, not $110.69 from EIA). hydrateHero originally computed this
+    // from the EIA daily-settle series, leaving the page showing two
+    // numbers anchored to two different prices. Server-side dashboard-
+    // state.kpis.brent.war_premium_pct is FMP-anchored when intraday is
+    // live; use it directly so the hero price and the % below it agree.
+    const heroFootEl = document.querySelector('.kpi-hero-foot');
+    if (heroFootEl && b.war_premium_pct != null) {
+      // Replace just the value inside the SINCE WAR ONSET span if present.
+      const sinceSpan = heroFootEl.querySelector('.up,.down');
+      const wp = Number(b.war_premium_pct);
+      const fmtWp = (wp >= 0 ? '+' : '') + wp.toFixed(1) + '%';
+      if (sinceSpan) {
+        sinceSpan.textContent = fmtWp;
+        sinceSpan.className = wp >= 0 ? 'up' : 'down';
+      }
+      // Threat-strip WAR PREM should also reflect FMP anchor.
+      const threatWarPremEl = document.getElementById('threatWarPrem');
+      if (threatWarPremEl) threatWarPremEl.textContent = fmtWp;
+    }
+
     // Source/freshness badge — small text under the change line
     const heroFoot = document.querySelector('.kpi-hero-foot');
     if (heroFoot && b.source) {

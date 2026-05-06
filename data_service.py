@@ -670,6 +670,7 @@ def _curated_events_for_chokepoint(chokepoint_id: str) -> List[dict]:
         type_ = (ev.get("type") or "event").lower()
         # Stable per-event id so duplicates dedupe across calls.
         eid = f"CURATED-{chokepoint_id}-{ev.get('date','')}-{title[:24].strip()}"
+        is_news_auto = (ev.get("source_type") == "news_auto")
 
         out.append({
             "event_id_cnty": eid,
@@ -683,8 +684,11 @@ def _curated_events_for_chokepoint(chokepoint_id: str) -> List[dict]:
             "latitude":      str(out_lat),
             "longitude":     str(out_lon),
             "fatalities":    int(ev.get("fatalities") or 0),
-            "source":        "news_scraper" if ev.get("source_type") == "news_auto" else "curated_war_timeline",
+            "source":        "news_scraper" if is_news_auto else "curated_war_timeline",
             "notes":         desc,
+            # Pass through so the per-day cap loop below knows whether this
+            # entry counted as news (subject to cap) or curated (uncapped).
+            "_is_news":      is_news_auto,
         })
 
     # ── Also fold in the broader iran_news pool ─────────────────────────
@@ -694,9 +698,27 @@ def _curated_events_for_chokepoint(chokepoint_id: str) -> List[dict]:
     # were excluded from chokepoint counts even though they ARE the live
     # signal. Fold them in here so a chokepoint card under an active war
     # reflects the full news flow, not just the curated subset.
+    #
+    # PER-DAY CAP: a single news-cycle day (e.g. May 4 UAE strikes) can
+    # generate 30+ unique headlines from different outlets — same event,
+    # multiple coverage. Without a cap, the chokepoint card 30D count
+    # gets dominated by media volume rather than event count, and §01's
+    # weekly bar for that week spikes 10× the surrounding weeks. Capping
+    # news contributions per day at MAX_NEWS_PER_DAY keeps the count
+    # representative of distinct events, not coverage intensity.
+    MAX_NEWS_PER_DAY = 5
+
     seen_keys = set()
+    # Seed per_day_count with news_auto entries already added so the cap
+    # applies to BOTH news_auto + raw news combined (not 5 of each — the
+    # hero KPI's cap counts them together, so the chokepoint pool must
+    # too, otherwise hero < card and the dominance test fails).
+    per_day_count: Dict[str, int] = {}
     for r in out:
-        seen_keys.add(f"{(r.get('event_date') or '')[:10]}::{(r.get('actor1') or '').strip().lower()[:50]}")
+        d = (r.get("event_date") or "")[:10]
+        seen_keys.add(f"{d}::{(r.get('actor1') or '').strip().lower()[:50]}")
+        if r.pop("_is_news", False):
+            per_day_count[d] = per_day_count.get(d, 0) + 1
     try:
         news_cache = _read_cache("iran_news", 86_400) or []
     except Exception:
@@ -712,7 +734,12 @@ def _curated_events_for_chokepoint(chokepoint_id: str) -> List[dict]:
         key = f"{date}::{title.strip().lower()[:50]}"
         if key in seen_keys:
             continue
+        # Per-day cap: skip if we've already taken MAX_NEWS_PER_DAY news
+        # entries for this date.
+        if per_day_count.get(date, 0) >= MAX_NEWS_PER_DAY:
+            continue
         seen_keys.add(key)
+        per_day_count[date] = per_day_count.get(date, 0) + 1
         type_ = (n.get("type") or "military").lower()
         eid   = f"NEWS-{chokepoint_id}-{date}-{title[:24].strip()}"
         out.append({
@@ -2648,14 +2675,23 @@ def _extend_master_timeseries_with_live(result: dict) -> None:
             row["daily_attacks"] = int(round(daily_ev))
             row["weekly_attacks"] = int(round(sum(weekly_buf)))
             row["fatalities_count"] = int(round(daily_fat or 0))
-            # We don't know the per-event tanker / chokepoint flags from
-            # HDX (only country-level counts), so leave those at 0 rather
-            # than fabricate a split.
             row["tanker_attacks"] = 0
             row["chokepoint_attacks"] = 0
         else:
-            row["weekly_attacks"]    = 0
-            row["daily_attacks"]     = 0
+            # HDX hasn't published this month yet (typically 7-14d lag at
+            # month boundaries). Carry forward the most recent non-empty
+            # value instead of zeroing — otherwise §05's live scatter
+            # pins the latest rows to x=0 implying "war calmed" when the
+            # real cause is a publication lag. Carry-forward keeps the
+            # series visually continuous; the freshness pill discloses
+            # the lag separately.
+            if weekly_buf:
+                # Keep the weekly window rolling (don't append new sample)
+                row["weekly_attacks"] = int(round(sum(weekly_buf)))
+                row["daily_attacks"]  = int(round(weekly_buf[-1])) if weekly_buf else 0
+            else:
+                row["weekly_attacks"] = 0
+                row["daily_attacks"]  = 0
             row["fatalities_count"]  = 0
             row["tanker_attacks"]    = 0
             row["chokepoint_attacks"] = 0
@@ -3809,8 +3845,37 @@ def compute_iran_impact(iran_events: list, brent_prices: list) -> dict:
             if change > max_vol_spike:
                 max_vol_spike = change
 
+    # `iran_events` here is the raw ACLED feed (12-mo embargo on free tier
+    # → ~Mar 2025 newest). Counting that as "TOTAL IRAN EVENTS" with no
+    # scope label is misleading — the rest of the dashboard counts events
+    # from the merged curated + news pool which extends through today.
+    # Use the SAME pool the hero KPI / cards use for the headline count
+    # so the Iran tab agrees with the overview tab. Keep the raw ACLED
+    # count separately as `total_events_acled` for completeness.
+    try:
+        merged_pool = get_merged_curated_events(include_news=True) or []
+        news_pool   = _read_cache("iran_news", 7200) or []
+        seen = set()
+        merged_total = 0
+        for items in (merged_pool, news_pool):
+            for it in items:
+                d = (it.get("date") or "")[:10]
+                t = (it.get("title") or it.get("label") or "").strip().lower()[:50]
+                if not d:
+                    continue
+                key = f"{d}::{t}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                merged_total += 1
+    except Exception:
+        merged_total = len(iran_events)
+
     kpis = {
-        "total_events": len(iran_events),
+        # Headline count — the deduped curated + news pool, matching the
+        # hero KPI scope so the Iran tab and overview tab agree.
+        "total_events": merged_total,
+        "total_events_acled": len(iran_events),  # raw ACLED feed (12-mo lag)
         "avg_price_move_3d": round(sum(all_changes_3d) / len(all_changes_3d), 2) if all_changes_3d else 0,
         "peak_volatility_spike": round(max_vol_spike, 2),
         # Backwards-compat key (frontend may still read it) + new fields
