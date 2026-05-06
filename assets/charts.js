@@ -924,6 +924,29 @@ function renderDxyOvx(state) {
   const ts = applyTimelineRows((state.master && state.master.timeseries) || []);
   if (!ts.length) return showChartEmpty(canvas, 'DXY/OVX unavailable');
 
+  // Surface the actual latest DXY / OVX dates so the §07 subtitle's
+  // "as of" caption matches the data on the chart. FRED publishes
+  // DTWEXBGS / OVXCLS with a 1-5 business day lag — the captions
+  // make that lag visible instead of letting the chart silently sit
+  // behind upstream.
+  const fmtDate = (iso) => {
+    if (!iso) return '—';
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+    if (!m) return iso;
+    const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    return `${parseInt(m[3], 10)} ${months[parseInt(m[2], 10) - 1]} ${m[1]}`;
+  };
+  let lastDxyDate = null, lastOvxDate = null;
+  for (let i = ts.length - 1; i >= 0 && (!lastDxyDate || !lastOvxDate); i--) {
+    const r = ts[i];
+    if (!lastDxyDate && r.dxy != null) lastDxyDate = r.date;
+    if (!lastOvxDate && r.ovx != null) lastOvxDate = r.date;
+  }
+  const dxyAsofEl = document.querySelector('[data-dxy-asof]');
+  const ovxAsofEl = document.querySelector('[data-ovx-asof]');
+  if (dxyAsofEl) dxyAsofEl.textContent = fmtDate(lastDxyDate);
+  if (ovxAsofEl) ovxAsofEl.textContent = fmtDate(lastOvxDate);
+
   const step = Math.max(1, Math.floor(ts.length / 60));
   const rows = [];
   for (let i = 0; i < ts.length; i += step) rows.push(ts[i]);

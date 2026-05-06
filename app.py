@@ -917,9 +917,14 @@ async def preload_data():
         intervals = [
             ("gdelt",       25 * 60,  data_service.fetch_gdelt_tone),
             ("iran_news",   60 * 60,  data_service.fetch_iran_news),
-            ("brent",        6 * 3600, data_service.fetch_brent_prices),
-            ("dxy",          6 * 3600, data_service.fetch_dxy),
-            ("ovx",          6 * 3600, data_service.fetch_ovx),
+            # Daily-macro feeds — refresh hourly so a new FRED settle lands
+            # on the chart within ~60 min of publication. Combined with
+            # CACHE_TTL_BRENT/CACHE_TTL_YFINANCE = 4h, a fresh fetch
+            # actually hits the wire each hour (cache evicts before each
+            # warmer cycle, not after).
+            ("brent",        60 * 60,  data_service.fetch_brent_prices),
+            ("dxy",          60 * 60,  data_service.fetch_dxy),
+            ("ovx",          60 * 60,  data_service.fetch_ovx),
             ("hdx",         12 * 3600, lambda: data_service.fetch_hdx_event_counts(force=True)),
             ("hormuz_tx",   12 * 3600, data_service.fetch_hormuz_transits),
             ("bab_tx",      12 * 3600, data_service.fetch_bab_el_mandeb_transits),

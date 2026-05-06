@@ -1617,30 +1617,42 @@ def fetch_yfinance_series(ticker: str, cache_key: str) -> List[dict]:
 
 def _fred_fallback(series_id: str, cache_key: str, label: str) -> List[dict]:
     """Shared FRED fetch used as the primary source for DXY + OVX on cloud
-    deploys where yfinance is blocked by Yahoo's bot detection. Writes to
-    the same cache key the yfinance path used, so downstream readers don't
-    care about the source change."""
+    deploys where yfinance is blocked by Yahoo's bot detection.
+
+    Retries transient FRED 500s with exponential backoff before falling
+    through to stale cache — without retry, a single transient 5xx
+    leaves the dashboard with an empty fresh fetch (and if the prior
+    stale cache was missing, no data at all). FRED's API is generally
+    reliable but occasionally serves "Internal Server Error" during
+    publication windows.
+    """
     cached = _read_cache(cache_key, config.CACHE_TTL_YFINANCE)
     if cached:
         return cached
-    try:
-        from fredapi import Fred
-        fred = Fred(api_key=config.FRED_API_KEY)
-        series = fred.get_series(series_id, observation_start="2023-10-01")
-        records = [
-            {"date": idx.strftime("%Y-%m-%d"), "value": round(float(val), 4)}
-            for idx, val in series.items() if pd.notna(val)
-        ]
-        if records:
-            _write_cache(cache_key, records)
-            logger.info(f"FRED {series_id} ({label}): fetched {len(records)} data points")
-            return records
-        logger.warning(f"FRED {series_id} ({label}) returned 0 rows")
-    except Exception as e:
-        logger.warning(f"FRED {series_id} ({label}) failed: {e}")
+    from fredapi import Fred
+    fred = Fred(api_key=config.FRED_API_KEY)
+    last_err = None
+    for attempt in range(1, 4):
+        try:
+            series = fred.get_series(series_id, observation_start="2023-10-01")
+            records = [
+                {"date": idx.strftime("%Y-%m-%d"), "value": round(float(val), 4)}
+                for idx, val in series.items() if pd.notna(val)
+            ]
+            if records:
+                _write_cache(cache_key, records)
+                logger.info(f"FRED {series_id} ({label}): fetched {len(records)} data points")
+                return records
+            logger.warning(f"FRED {series_id} ({label}) returned 0 rows on attempt {attempt}/3")
+            break
+        except Exception as e:
+            last_err = e
+            logger.warning(f"FRED {series_id} ({label}) attempt {attempt}/3 failed: {e}")
+            if attempt < 3:
+                time.sleep([2, 6][attempt - 1])  # 2s, then 6s
     stale = _read_stale_cache(cache_key)
     if stale:
-        logger.info(f"FRED {series_id} ({label}): serving stale cache ({len(stale)} rows)")
+        logger.info(f"FRED {series_id} ({label}): serving stale cache ({len(stale)} rows) after {last_err!r}")
         return stale
     return []
 

@@ -2426,3 +2426,18 @@ button { font-family: inherit; cursor: pointer; }
   .tf-grid { grid-template-columns: 1fr; gap: 24px; }
   .tf-banner { font-size: 10px; }
 }
+
+/* §07 (and similar charts) — small "as of" caption appended to the
+   subtitle so the committee can see the exact latest date for each
+   series at a glance. Accommodates FRED's 1-5 day publication lag
+   honestly instead of hiding it. */
+.nb-asof {
+  display: inline-block;
+  margin-left: 4px;
+  font-family: var(--mono, 'JetBrains Mono', monospace);
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  color: var(--text-mute, #8794a7);
+  opacity: 0.85;
+}
+.nb-asof b { color: var(--gold, #ffaa00); font-weight: 600; }

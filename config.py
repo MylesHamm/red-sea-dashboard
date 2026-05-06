@@ -45,10 +45,20 @@ ACLED_DATA_URL = "https://acleddata.com/api/acled/read"
 EIA_BASE_URL = "https://api.eia.gov/v2"
 
 # --- Cache TTL (seconds) ---
+# Daily macro feeds (Brent/DXY/OVX) used to use 24h TTL, which meant a row
+# fetched at noon UTC stayed cached until noon next day even though FRED
+# publishes the next day's settle around midnight UTC. The DXY/OVX chart
+# silently sat 12-24h behind upstream.
+#
+# TTL must be ≤ the warmer interval — otherwise the warmer's call hits the
+# still-fresh cache and never reaches the wire. With TTL=1h matching the
+# warmer's 60-min interval, every warmer cycle = cache miss = fresh FRED
+# fetch, so a new daily settle lands on the dashboard within ~1h of
+# upstream publication.
 CACHE_TTL_ACLED = 86400       # 24 hours
-CACHE_TTL_BRENT = 86400       # 24 hours (daily data)
-CACHE_TTL_YFINANCE = 86400    # 24 hours (daily data)
-CACHE_TTL_FRED = 86400 * 7    # 7 days (monthly data)
+CACHE_TTL_BRENT = 3600        # 1 hour (matches warmer interval)
+CACHE_TTL_YFINANCE = 3600     # 1 hour (DXY / OVX)
+CACHE_TTL_FRED = 86400 * 7    # 7 days (monthly data — China PMI, etc.)
 
 # --- Server Settings ---
 HOST = "0.0.0.0"
