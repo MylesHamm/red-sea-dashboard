@@ -1001,7 +1001,11 @@
         xfBanner = `FILTER: ${xf.toUpperCase()} · NO MATCH`;
       }
     }
-    const items = filtered.slice(0, 10);
+    // Show a full day's worth of headlines. The news scraper caps at 20
+    // articles/date, so 20 is the natural ceiling — the previous 10 cap
+    // meant only half of today's coverage rendered, leaving older entries
+    // crowding into a list that's supposed to be "today's intel."
+    const items = filtered.slice(0, 20);
 
     // Floating filter pill above the feed
     const wrap = feed.parentElement;
@@ -1120,8 +1124,11 @@
     // Headline filter: lower-case keyword match on a small whitelist of
     // war-relevant verbs ("strike", "attack", "missile", "tanker",
     // "ceasefire", etc.) to avoid every politics article ending up on
-    // the chart. Cap to 30 newest so we don't crater the chart's
-    // legibility with dot soup.
+    // the chart. Cap to 200 newest — at the news scraper's per-day cap of
+    // 20 articles/day, 200 covers ~10 days of post-curated coverage. The
+    // earlier 30-cap meant the visible markers all clustered into ~1.5
+    // days at the right edge, which made the chart look like it stopped
+    // updating every time a fresh day's batch arrived.
     const LIVE_KEYWORDS = [
       'strike', 'strikes', 'struck', 'attack', 'attacks', 'attacked',
       'missile', 'missiles', 'drone', 'drones', 'shot down', 'shoots down',
@@ -1161,7 +1168,7 @@
         url:    n.url || null,
       }))
       .sort((a, b) => b.date.localeCompare(a.date))   // newest first
-      .slice(0, 30);                                   // cap to 30 markers
+      .slice(0, 200);                                  // cap to 200 markers (~10 days)
 
     window.IRAN_EVENTS = [...curatedEvents, ...liveEvents]
       .sort((a, b) => a.date.localeCompare(b.date));

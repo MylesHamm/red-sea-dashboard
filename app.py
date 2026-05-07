@@ -42,9 +42,20 @@ app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=5)
 # Serve static files (HTML, CSS, JS) with no-cache headers
 
 class NoCacheStaticMiddleware(BaseHTTPMiddleware):
+    """Force no-cache on assets, the HTML shell, AND all /api/* responses.
+
+    Without no-cache on /api/*, the browser's HTTP heuristic cache can serve
+    yesterday's API JSON to a tab that was opened the day before — even with
+    the in-page 5-minute auto-refresh firing — because the auto-refresh's
+    fetch() reuses any HTTP-cacheable response. That made the dashboard look
+    stuck on the prior day's events to anyone who left the tab open overnight.
+    The client-side cache in api.js (a path→data Map gated by ttlMs) is
+    unaffected; this only stops the browser from outliving the tab.
+    """
     async def dispatch(self, request, call_next):
         response = await call_next(request)
-        if request.url.path.startswith("/assets") or request.url.path == "/":
+        path = request.url.path
+        if path.startswith("/assets") or path.startswith("/api") or path == "/":
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
             response.headers["Pragma"] = "no-cache"
             response.headers["Expires"] = "0"
