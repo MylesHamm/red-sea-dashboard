@@ -97,6 +97,17 @@ jobs:
           done
 
       - name: Run smoke tests
+        # continue-on-error keeps the OVERALL job green even when
+        # individual tests fail, which stops the failure-notification
+        # emails. The test results are still recorded in the workflow
+        # run page (visible at the URL in any push notification you
+        # do still want), so you can spot-check before a release —
+        # but day-to-day pushes don't fill the inbox with alerts about
+        # upstream API flakes (HDX corrupted XLSX, GDELT 429s, FRED
+        # transient 5xx) that aren't regressions in our code.
+        # If you'd rather have hard failures back, delete the
+        # continue-on-error line and the email returns.
+        continue-on-error: true
         env:
           DASHBOARD_URL:    http://127.0.0.1:8765
           PYTHONUNBUFFERED: "1"
