@@ -111,7 +111,26 @@ def page():
         # Wait for the hero Brent KPI to populate — that signals the master
         # endpoint resolved and the page is functionally usable.
         _wait_for_kpi(page, "#heroPrice")
-        # Give the chart hydrators a moment after Brent lands.
+        # Wait for the slow-cold-start KPIs to land too. /api/macro-context
+        # (FRED-driven) and the Iran-tab KPIs both queue behind the iran_news
+        # warmer threads on a fresh container — by the time #heroPrice
+        # populates they may still be 15-25s away. Without these waits,
+        # individual tests with their own 15s timeouts fail intermittently
+        # on CI cold-start runs even though our code is correct.
+        # Best-effort waits: ignore failures so tests can still report
+        # specific KPI failures rather than the fixture going red.
+        for selector in (
+            '[data-kpi="hyYield"]',
+            '[data-kpi="wtiBrent"]',
+            '[data-kpi="vix"]',
+            '[data-kpi="crudeStocks"]',
+            '[data-iran-kpi="total"]',
+        ):
+            try:
+                _wait_for_kpi(page, selector, timeout=45_000)
+            except Exception:
+                pass  # Let the dedicated test report the actual failure
+        # Give the chart hydrators a moment after the last KPI lands.
         page.wait_for_timeout(2500)
 
         yield page
