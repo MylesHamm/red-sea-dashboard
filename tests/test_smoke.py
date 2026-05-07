@@ -166,8 +166,19 @@ def test_no_api_5xx(page: Page):
     ('#threatWarPrem',                  "Threat strip WAR PREM"),
 ])
 def test_kpi_populated(page: Page, kpi_selector: str, kpi_name: str):
-    """Every advertised KPI should contain a real value, not '—'."""
-    val = _wait_for_kpi(page, kpi_selector, timeout=15_000)
+    """Every advertised KPI should contain a real value, not '—'.
+
+    On CI cold-start, /api/macro-context can take 20-30s to land —
+    its FRED fetches queue behind the iran_news + chokepoint warmer
+    threads that all spin up at once. The 15s default timeout was
+    enough on a warm cache but not on a fresh boot, so the four
+    macro-context-fed KPIs (wtiBrent / vix / hyYield / crudeStocks)
+    flake intermittently. A 30s budget for those is plenty without
+    making the suite slow when the data IS already there.
+    """
+    macro_kpis = ('wtiBrent', 'vix', 'hyYield', 'crudeStocks')
+    timeout = 30_000 if any(k in kpi_selector for k in macro_kpis) else 15_000
+    val = _wait_for_kpi(page, kpi_selector, timeout=timeout)
     assert val and val != "—", f"{kpi_name} ({kpi_selector}) is empty: {val!r}"
 
 

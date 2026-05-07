@@ -89,10 +89,17 @@ jobs:
           PYTHONUNBUFFERED: "1"
         # --tb=long + -v dumps the full traceback for any failing test
         # into the step's stdout, so the GitHub Actions UI shows the
-        # actual assertion that broke instead of a one-line "exit 1".
-        # --maxfail=10 stops after 10 failures so a cascading regression
-        # doesn't time out the whole job.
-        run: pytest tests/test_smoke.py -v --tb=long --maxfail=10
+        # actual assertion that broke. -rA shows the short summary for
+        # all outcomes (passed/failed/skipped/xfail) so the email's
+        # foldable "Run smoke tests" log section ends with a complete
+        # list rather than just the first failure. Output is also tee'd
+        # to a file so it gets uploaded as an artifact alongside the
+        # dashboard log — public-API artifact downloads remain auth-
+        # gated, but the file is at least retrievable from the run page.
+        run: |
+          set -o pipefail
+          pytest tests/test_smoke.py -v --tb=long -rA --maxfail=15 \
+              2>&1 | tee /tmp/pytest.log
 
       - name: Dump dashboard log on failure
         if: failure()
@@ -100,10 +107,15 @@ jobs:
           echo "::group::dashboard.log (last 300 lines)"
           tail -300 /tmp/dashboard.log || echo "(no log)"
           echo "::endgroup::"
+          echo "::group::pytest.log (last 200 lines)"
+          tail -200 /tmp/pytest.log || echo "(no log)"
+          echo "::endgroup::"
 
-      - name: Upload dashboard log on failure
+      - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: dashboard-log
-          path: /tmp/dashboard.log
+          name: smoke-logs
+          path: |
+            /tmp/dashboard.log
+            /tmp/pytest.log
