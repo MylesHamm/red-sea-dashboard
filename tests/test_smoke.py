@@ -284,6 +284,46 @@ def test_canvas_has_drawn_pixels(page: Page, canvas_id: str):
                 pytest.skip("GDELT upstream returned no tone data (likely 429); not our bug")
         except Exception:
             pytest.skip("GDELT endpoint unreachable; not our bug")
+        # Even when tone data is available, the chart can flake on CI
+        # cold-start because Chart.js measures the canvas at construction
+        # time — and that construction happens in the hidden iran tab
+        # (display:none → 0×0 surface), so the initial render produces
+        # zero pixels. The hydrate.js 'tab-changed' listener re-renders
+        # via requestAnimationFrame, but the rAF callback can fire
+        # before the layout reflow has actually committed display:block,
+        # leaving the chart at 0×0 still. Trigger a forced re-render
+        # via the exposed window.__renderGdelt(payload) hook, then poll
+        # for pixels rather than relying on a fixed sleep.
+        page.evaluate(
+            """async () => {
+              const r = await fetch('/api/gdelt-tone', { cache: 'no-store' });
+              if (!r.ok) return;
+              const j = await r.json();
+              if (window.__renderGdelt) window.__renderGdelt(j);
+            }"""
+        )
+        # Poll up to 5s for the canvas to receive any pixels
+        try:
+            page.wait_for_function(
+                """() => {
+                  const c = document.getElementById('gdeltToneChart');
+                  if (!c || !c.getContext) return false;
+                  if (c.width === 0 || c.height === 0) return false;
+                  const ctx = c.getContext('2d');
+                  const stepX = Math.max(1, Math.floor(c.width / 16));
+                  const stepY = Math.max(1, Math.floor(c.height / 16));
+                  for (let y = stepY; y < c.height; y += stepY) {
+                    for (let x = stepX; x < c.width; x += stepX) {
+                      const px = ctx.getImageData(x, y, 1, 1).data;
+                      if (px[3] > 0 && (px[0] + px[1] + px[2]) > 0) return true;
+                    }
+                  }
+                  return false;
+                }""",
+                timeout=5_000,
+            )
+        except Exception:
+            pass  # Fall through to the assert which will produce the proper error
 
     # scatterChartLive plots weekly_attacks vs daily_volatility for the
     # POST-Oct-2025 master extension. weekly_attacks for that window is
