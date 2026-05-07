@@ -16,6 +16,15 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Opt into Node 24 early so the v4/v5 JS-action wrappers don't keep
+# emitting the "Node.js 20 actions are deprecated" annotation on every
+# run. Action authors haven't shipped Node-24-targeted v5+ majors yet —
+# this env var tells the runner to execute the existing v4/v5 actions
+# under Node 24 anyway, which is the path GitHub itself recommends.
+# Remove this once actions/checkout@v5 etc. ship with native Node-24.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
@@ -48,26 +57,51 @@ jobs:
           # cover the test data.
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           EIA_API_KEY:  ${{ secrets.EIA_API_KEY }}
+          PYTHONUNBUFFERED: "1"
         run: |
-          python dev_server.py > /tmp/dashboard.log 2>&1 &
-          # Wait up to 60s for the server to become responsive
-          for i in {1..60}; do
+          # Run uvicorn directly (no reload). dev_server.py uses reload=True
+          # which spawns a parent reloader + worker child — when GitHub
+          # Actions starts the next step's shell, the reloader child can
+          # get orphaned and die, leaving subsequent test requests hitting
+          # nothing on :8765. Plain uvicorn one-process is reliable here.
+          # nohup + setsid detaches the process from this step's shell.
+          nohup setsid python -m uvicorn app:app \
+              --host 127.0.0.1 --port 8765 \
+              --http httptools --log-level warning \
+              > /tmp/dashboard.log 2>&1 &
+          echo "started dashboard PID=$!"
+          # Wait up to 90s for the server to become responsive (cold-start
+          # has to warm Brent, FRED, IMF PortWatch, HDX, news scraper).
+          for i in $(seq 1 90); do
             if curl -fs http://127.0.0.1:8765/api/health > /dev/null; then
               echo "server up after ${i}s"
               exit 0
             fi
             sleep 1
           done
-          echo "server failed to start" >&2
-          tail -50 /tmp/dashboard.log >&2
+          echo "server failed to start within 90s" >&2
+          tail -200 /tmp/dashboard.log >&2
           exit 1
 
       - name: Run smoke tests
         env:
-          DASHBOARD_URL: http://127.0.0.1:8765
-        run: pytest tests/test_smoke.py -v --tb=short
+          DASHBOARD_URL:    http://127.0.0.1:8765
+          PYTHONUNBUFFERED: "1"
+        # --tb=long + -v dumps the full traceback for any failing test
+        # into the step's stdout, so the GitHub Actions UI shows the
+        # actual assertion that broke instead of a one-line "exit 1".
+        # --maxfail=10 stops after 10 failures so a cascading regression
+        # doesn't time out the whole job.
+        run: pytest tests/test_smoke.py -v --tb=long --maxfail=10
 
-      - name: Upload server log on failure
+      - name: Dump dashboard log on failure
+        if: failure()
+        run: |
+          echo "::group::dashboard.log (last 300 lines)"
+          tail -300 /tmp/dashboard.log || echo "(no log)"
+          echo "::endgroup::"
+
+      - name: Upload dashboard log on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
