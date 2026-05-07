@@ -598,68 +598,72 @@ function renderEventTypesChart(state) {
   applyFilterVisual(window.CP.filters.eventType || null);
 }
 
-// ── Cross-filter / timeline consumer: update the incidents-30d KPI to show
-// the count of events in the 30-day window ending at the scrubbed date,
-// optionally narrowed to the cross-filter event type. Falls back to the
-// chokepoint-aggregated count maintained by hydrate.js when no filters
-// are active and the scrubber sits at "now".
+// ── Cross-filter / timeline consumer: update the incidents-30d KPI.
+//
+// The hero "OIL EVENTS · 30D" count represents oil-impacting events in
+// the merged curated-war-timeline + iran-news pool — it is THE global
+// indicator on the page. The §03 donut's cross-filter, in contrast,
+// narrows by ACLED row-level event_type ("Battles", "Protests", etc.)
+// from a dataset that's frozen ~12 months behind under the free-tier
+// embargo. Those two pools don't overlap on a 30-day window today —
+// every ACLED event is older than 30 days from now — so applying the
+// donut's filter to the hero count zeroed it out, and clearing the
+// filter relied on a refresh hand-off that the user reports doesn't
+// restore. Both the zero AND the failure-to-restore are symptoms of
+// trying to filter the hero KPI with categories from a pool it doesn't
+// share.
+//
+// Fix: the hero KPI is global — the donut's cross-filter does NOT
+// affect it. Cross-filter still narrows §01 bars and dims non-matching
+// donut wedges; that's where it semantically belongs. Hero count
+// always reflects the canonical curated+news 30-day union.
+//
+// Timeline scrubber is preserved because that DOES affect the global
+// count (it's a temporal slice, not a categorical one).
 function updateIncidentsKpi() {
   const incidentEl = document.querySelector('[data-kpi="incidents30"]');
   if (!incidentEl) return;
-  const deltaEl = document.querySelector('[data-kpi="incidents30Delta"]');
-  const sel = window.CP && window.CP.filters && window.CP.filters.eventType;
   const tlTs = tlCutoffTs();
-  // Hero "INCIDENTS · 30D" counts oil-impacting events only — strip
-  // protests/riots from the dataset before counting. This matches the
-  // server-side chokepoint_incidents filter and the chokepoint card
-  // sub-label "(THESIS WINDOW · excl. protests)".
-  const events = oilRelevant(
-    (window.CP && window.CP.state && window.CP.state.events) || window.THESIS_EVENTS || []
-  );
 
-  // Anchor the 30-day window to wall-clock now (or the scrubber's cutoff
-  // when one is set). Earlier versions anchored to dataset-newest via
-  // __dataNowTs to "avoid showing 0 under a stale ACLED frame", but that
-  // was masking the real problem — and produced misleading "delta vs
-  // prior 30D" against a window that ended a year ago. The merged-pool
-  // chokepoint sums (which we promote up to window.CHOKEPOINTS in
-  // refreshSidebarIncidents + the /api/events callback) are the
-  // authoritative recent-count under the embargo; we use them whenever
-  // there is no cross-filter and no scrubber cut. The local recompute
-  // is only needed when a filter narrows the count by event type.
-  const endTs = tlTs || Date.now();
-  const startTs = endTs - 30 * 24 * 3600 * 1000;
-  const priorEnd = startTs;
-  const priorStart = priorEnd - 30 * 24 * 3600 * 1000;
-  let n = 0, prior = 0;
-  for (const ev of events) {
-    if (sel) {
-      const t = (ev.event_type || ev.sub_event_type || 'Other').toString();
-      if (t !== sel) continue;
-    }
-    const dt = ev.event_date ? Date.parse(ev.event_date) : NaN;
-    if (isNaN(dt)) continue;
-    if (dt >= startTs && dt <= endTs)        n++;
-    else if (dt >= priorStart && dt < priorEnd) prior++;
-  }
-
-  // Default case (no filter, scrubber at "now"): hand off to the canonical
-  // hero-KPI setter in app.js, which sources from the deduped curated +
-  // iran-news union. Earlier this overwrote the KPI with a Hormuz+Bab sum
-  // (~32, double-counting Iran-war news that matched both keyword sets) —
-  // user reported the count flashing 59 → 0/32 because three different code
-  // paths were racing to write it. Now there's exactly one writer for the
-  // unfiltered case; this function only writes when a filter narrows the
-  // set or the scrubber is off "now".
-  if (!sel && !tlTs) {
+  // Default path: scrubber at "now" → hand off to the canonical hero-
+  // KPI setter (sources from curated + iran-news union via dashboard-
+  // state). This now also handles the previously-broken cross-filter
+  // case: the donut filter no longer touches this KPI.
+  if (!tlTs) {
     if (typeof window.__refreshHeroIncidentsKpi === 'function') {
       try { window.__refreshHeroIncidentsKpi(); } catch (_) {}
     }
     return;
   }
+
+  // Scrubber active → count events in the 30-day window ending at the
+  // scrubbed date. Sourced from the same curated + iran-news union the
+  // hero refresh uses, so categories are consistent across paths.
+  const iran = (window.CP && window.CP.state && window.CP.state.iran) || {};
+  const curated = Array.isArray(iran.curated) ? iran.curated : [];
+  const news    = Array.isArray(iran.news)    ? iran.news    : [];
+  const endTs    = tlTs;
+  const startTs  = endTs - 30 * 86400000;
+  const priorEnd = startTs;
+  const priorStart = priorEnd - 30 * 86400000;
+  const seen = new Set();
+  let n = 0, prior = 0;
+  const accept = (date, title) => {
+    if (!date) return;
+    const key = `${date}::${(title || '').slice(0, 50).toLowerCase().trim()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const t = Date.parse(date);
+    if (!isFinite(t)) return;
+    if (t >= startTs && t <= endTs)               n++;
+    else if (t >= priorStart && t < priorEnd)     prior++;
+  };
+  for (const c of curated) accept(c.date, c.title || c.label);
+  for (const ev of news)   accept(ev.date, ev.title || ev.label);
+
   incidentEl.textContent = String(n);
 
-  // Delta: signed change vs prior 30D (only relevant when filtered).
+  const deltaEl = document.querySelector('[data-kpi="incidents30Delta"]');
   if (deltaEl) {
     const d = n - prior;
     const sign = d > 0 ? '+' : d < 0 ? '−' : '±';
@@ -668,16 +672,13 @@ function updateIncidentsKpi() {
     deltaEl.classList.toggle('down', d < 0);
   }
 
-  // Foot: make the anchor date explicit so a frozen fallback dataset doesn't
-  // look like a live feed gone silent. Only overwrite once we actually have
-  // events and we're anchored to the dataset (not a live real-time window).
   const footEl = document.querySelector('[data-kpi-foot="incidents30"]');
-  if (footEl && events.length) {
+  if (footEl) {
     const anchorDate = new Date(endTs);
     const y = anchorDate.getUTCFullYear();
     const m = String(anchorDate.getUTCMonth() + 1).padStart(2, '0');
     const d = String(anchorDate.getUTCDate()).padStart(2, '0');
-    footEl.textContent = `ACLED · 30D ending ${y}-${m}-${d}`;
+    footEl.textContent = `30D ending ${y}-${m}-${d} (scrubbed)`;
   }
 }
 
