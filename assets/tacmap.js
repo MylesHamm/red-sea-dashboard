@@ -145,6 +145,73 @@
     const color = t => t === 'tanker' ? '#ff3d5e' : t === 'missile' ? '#ff8c42' : '#ffab00';
     const rSize = i => i === 'high' ? 4 : i === 'med' ? 3 : 2.2;
 
+    // ── Maritime/oil-impact filter ──────────────────────────────────────
+    // §02.1 is the "Red Sea Maritime Kill Zone" view — its stated purpose
+    // is to surface events that impact shipping / oil flow. The raw
+    // Houthi-attributed ACLED stream is dominated by inland Yemeni
+    // civil-war activity (Houthi vs. government forces, internal
+    // battles, urban unrest) that has no maritime relevance.
+    //
+    // An event qualifies as maritime-impactful if it mentions:
+    //   (a) a maritime target/asset (tanker, vessel, ship, freighter,
+    //       cargo, frigate, destroyer, dhow, MV/USS named vessels),
+    //   (b) a maritime context (sea, naval, port, harbor, anchored,
+    //       shipping, transit, strait, anti-ship), OR
+    //   (c) a Houthi maritime-port location (Hodeidah, Mokha, Ras
+    //       Issa, Salif — the staging ports for their maritime ops).
+    //
+    // sub_event_type "Air/drone strike" with a maritime target counts;
+    // a generic Houthi-vs-government infantry battle in inland Yemen
+    // does not.
+    const MARITIME_TARGETS = [
+      'tanker', 'tankers', 'vessel', 'vessels', 'ship', 'ships', 'shipping',
+      'freighter', 'cargo', 'container', 'merchant ship', 'merchant vessel',
+      'dhow', 'frigate', 'destroyer', 'carrier', 'warship', 'fleet',
+      ' mv ', ' uss ', 'galaxy leader', 'true confidence',
+    ];
+    const MARITIME_CONTEXT = [
+      'naval', 'navy', 'maritime', 'port', 'harbor', 'harbour', 'anchored',
+      'anchorage', 'transit', 'sea lane', 'sea-lane', 'shipping lane',
+      'strait', 'red sea', 'gulf of aden', 'bab al-mandab', 'bab el-mandeb',
+      'bab al-mandeb', 'anti-ship', 'anti ship', 'sea-launched',
+      'usv', 'sea drone', 'torpedo', 'mine',
+    ];
+    const MARITIME_PORTS = [
+      'hodeidah', 'hudaydah', 'hodeida', 'mokha', 'ras issa', 'salif',
+      'aden', 'al hudaydah',
+    ];
+
+    // Maritime classification is done SERVER-SIDE in app.py's
+    // /api/events handler (so the lite payload — which strips `notes`
+    // — still carries the flags). The functions below just read the
+    // pre-computed boolean fields.
+    function isMaritimeRelevant(e) {
+      // Trust the server-side flag if present
+      if (typeof e.maritime === 'boolean') return e.maritime;
+      // Fallback for older payloads that lack the flag — keyword match
+      // on whatever fields ARE present (sub_event_type + location).
+      const hay = (
+        (e.sub_event_type || '') + ' ' +
+        (e.location || '') + ' ' +
+        (e.notes || '')
+      ).toLowerCase();
+      const padded = ' ' + hay + ' ';
+      for (const k of MARITIME_TARGETS)  if (padded.includes(k)) return true;
+      for (const k of MARITIME_CONTEXT)  if (padded.includes(k)) return true;
+      for (const k of MARITIME_PORTS)    if (padded.includes(k)) return true;
+      return false;
+    }
+    // Expose for hydrate.js so the side-panel stats apply the same rule.
+    window.__isMaritimeRelevant = isMaritimeRelevant;
+
+    function isTankerSpecific(e) {
+      if (typeof e.tanker_target === 'boolean') return e.tanker_target;
+      // No fallback path — without notes (lite payload) we can't infer
+      // tanker-targeting client-side. The server-side flag is required.
+      return false;
+    }
+    window.__isTankerSpecific = isTankerSpecific;
+
     function classifyEvent(e) {
       const hay = (
         (e.sub_event_type || '') + ' ' +
@@ -155,8 +222,6 @@
       if (hay.includes('naval') || hay.includes('tanker') || hay.includes('vessel') || hay.includes('ship') || hay.includes('boarding') || hay.includes('hijack')) return 'tanker';
       if (hay.includes('drone') || hay.includes('uav') || hay.includes('usv') || hay.includes('unmanned')) return 'drone';
       if (hay.includes('missile') || hay.includes('shelling') || hay.includes('artillery') || hay.includes('rocket')) return 'missile';
-      // Fall back on event_type — Explosions/Remote → missile, everything
-      // else → drone (the weakest inference but still real data).
       if ((e.event_type || '').toLowerCase().includes('explosion')) return 'missile';
       return 'drone';
     }
@@ -178,14 +243,32 @@
       return lon >= 32 && lon <= 56 && lat >= 5 && lat <= 30;
     }
 
+    // Filter mode state (persisted via UI toggles below).
+    //   'tanker' (default)    — vessel-targeting events ONLY (Houthi
+    //                            attacks on ships, hijackings, named-
+    //                            vessel incidents, anti-ship infrastructure
+    //                            strikes). The tightest oil-impact subset.
+    //   'maritime'            — broader: also includes US/UK counter-Houthi
+    //                            strikes mentioning anti-ship context.
+    //   'all'                 — every Houthi-attributed event in the
+    //                            viewport (incl. inland civil-war).
+    window.__tacFilterMode = window.__tacFilterMode || 'tanker';
+
     function eventsToAttacks(events) {
       if (!Array.isArray(events)) return [];
+      const mode = window.__tacFilterMode || 'maritime';
       const out = [];
       for (const e of events) {
         if (!isHouthi(e)) continue;
         const lat = +e.latitude, lon = +e.longitude;
         if (!lat || !lon) continue;
         if (!inViewport(lat, lon)) continue;
+        // Maritime-impact filter — see isMaritimeRelevant() above for
+        // the keyword set. The §02.1 panel's purpose is the maritime
+        // kill zone, so the default mode excludes the inland-Yemen
+        // civil-war noise that dominates the raw Houthi stream.
+        if (mode === 'maritime' && !isMaritimeRelevant(e)) continue;
+        if (mode === 'tanker'   && !isTankerSpecific(e))  continue;
         out.push({
           lat, lon,
           type: classifyEvent(e),
@@ -197,6 +280,7 @@
       }
       return out;
     }
+    window.__tacEventsToAttacks = eventsToAttacks;
 
     function renderAttacks(attacks) {
       window.TAC_ATTACKS = attacks;
@@ -234,6 +318,58 @@
     window.addEventListener('events-ready', (ev) => {
       const events = (ev && ev.detail && ev.detail.events) || [];
       renderAttacks(eventsToAttacks(events));
+    });
+
+    // ── Filter-mode chips (Maritime / Tanker only / All Houthi) ────────
+    // Wires the data-tac-mode-chips buttons to the global filter state
+    // and re-renders both the markers AND the side-panel stats.
+    function applyTacMode(mode) {
+      window.__tacFilterMode = mode;
+      // Update chip active styling
+      document.querySelectorAll('[data-tac-mode]').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-tac-mode') === mode);
+      });
+      // Update header badge
+      const badge = document.querySelector('[data-tac-mode-badge]');
+      if (badge) {
+        const labels = { tanker:   'ACLED · MARITIME ATTACKS',
+                         maritime: 'ACLED · + COUNTER-STRIKES',
+                         all:      'ACLED · HOUTHI · ALL' };
+        badge.textContent = labels[mode] || labels.tanker;
+      }
+      // Re-render markers from the cached event list
+      const events = (window.CP && window.CP.state && window.CP.state.events) || [];
+      if (events.length && typeof window.__tacRenderAttacks === 'function') {
+        window.__tacRenderAttacks(eventsToAttacks(events));
+      }
+      // Recompute side-panel stats with the new filter
+      if (typeof window.__hydrateTacStats === 'function') {
+        window.__hydrateTacStats(events);
+      }
+    }
+    window.__tacApplyMode = applyTacMode;
+
+    // Click handlers
+    document.querySelectorAll('[data-tac-mode]').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        applyTacMode(btn.getAttribute('data-tac-mode'));
+      });
+    });
+
+    // ── Layer toggles (Heatmap / Strike markers / Chokepoint zone) ─────
+    function applyLayerVisibility(layer, on) {
+      const map = {
+        heat:    () => heatLayer.style('display', on ? null : 'none'),
+        markers: () => markerLayer.style('display', on ? null : 'none'),
+        zone:    () => chokeLayer.style('display', on ? null : 'none'),
+      };
+      if (map[layer]) map[layer]();
+    }
+    document.querySelectorAll('[data-tac-layer]').forEach(input => {
+      input.addEventListener('change', () => {
+        applyLayerVisibility(input.getAttribute('data-tac-layer'), input.checked);
+      });
     });
 
     // ── Cross-filter: dim non-matching attack markers when a doughnut filter

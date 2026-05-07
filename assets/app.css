@@ -2441,3 +2441,43 @@ button { font-family: inherit; cursor: pointer; }
   opacity: 0.85;
 }
 .nb-asof b { color: var(--gold, #ffaa00); font-weight: 600; }
+
+/* §02.1 tactical map — mode chips + label */
+.tac-divider-lbl {
+  font-family: var(--mono, 'JetBrains Mono', monospace);
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--text-mute, #8794a7);
+  margin: 14px 0 6px;
+}
+.tac-modechips {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.tac-modechip {
+  flex: 1 1 auto;
+  padding: 5px 8px;
+  font-family: var(--mono, monospace);
+  font-size: 9.5px;
+  letter-spacing: 1.2px;
+  background: rgba(0,212,255,0.04);
+  border: 1px solid rgba(0,212,255,0.18);
+  color: var(--text-dim, #c8d0dc);
+  border-radius: 2px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.tac-modechip:hover {
+  border-color: rgba(0,212,255,0.50);
+  color: var(--text, #dfe7f0);
+}
+.tac-modechip.active {
+  background: rgba(255,170,0,0.12);
+  border-color: var(--gold, #ffaa00);
+  color: var(--gold, #ffaa00);
+  font-weight: 700;
+}

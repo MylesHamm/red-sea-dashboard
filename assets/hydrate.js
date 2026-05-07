@@ -1185,13 +1185,21 @@
   }
   function hydrateTacStats(events) {
     if (!Array.isArray(events)) return;
+    // Side-panel counts share the same filter as the marker layer so the
+    // panel doesn't lie. Filter mode is set by the user via the chips
+    // (Maritime / Tanker only / All Houthi) — the map's classifier
+    // exposes the predicate functions on window.
+    const mode    = window.__tacFilterMode || 'maritime';
+    const isMar   = window.__isMaritimeRelevant || (() => true);
+    const isTank  = window.__isTankerSpecific   || (() => true);
     let total = 0, sRedSea = 0, gulfAden = 0, choke = 0;
     for (const e of events) {
       if (!isHouthiAttributed(e)) continue;
       const lat = +e.latitude, lon = +e.longitude;
       if (!lat || !lon) continue;
-      // Red Sea + Gulf of Aden viewport
       if (!inBox(lat, lon, 5, 30, 32, 56)) continue;
+      if (mode === 'maritime' && !isMar(e)) continue;
+      if (mode === 'tanker'   && !isTank(e)) continue;
       total++;
       if (inBox(lat, lon, 12, 18, 38, 44))   sRedSea++;
       if (inBox(lat, lon, 10.5, 14.5, 44, 52)) gulfAden++;
@@ -1201,12 +1209,11 @@
     setText('tacSouthRS', sRedSea);
     setText('tacGoA',     gulfAden);
     setText('tacChoke',   choke);
-    // Also patch the badge near the section header so "N=726" stops lying
-    const badge = document.querySelector('.narrative-block .badge.badge-gold');
-    if (badge && /ACLED · N=/.test(badge.textContent)) {
-      badge.textContent = `ACLED · N=${total}`;
-    }
   }
+  // Exposed so tacmap.js's mode-chip click handler can re-trigger stat
+  // recomputation when the filter mode changes (without waiting for the
+  // next /api/events refresh).
+  window.__hydrateTacStats = hydrateTacStats;
 
   // ── Chokepoint cards (overview tab) — hydrate every stat from REAL data
   // Each value is sourced from a backend computation, not a UI scaling

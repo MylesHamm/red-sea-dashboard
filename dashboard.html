@@ -366,9 +366,9 @@
         <div class="nb-index">§ 02.1</div>
         <div>
           <h2 class="nb-title">Red Sea Tactical View</h2>
-          <p class="nb-subtitle">ACLED events attributed to Houthi / Ansar Allah forces · Red Sea + Gulf of Aden viewport · actor1/actor2 match on "Houthi" or "Ansar Allah". Markers are geocoded directly from the ACLED feed below.</p>
+          <p class="nb-subtitle">Houthi / Ansar Allah events that <b>directly target shipping</b> in the Red Sea + Gulf of Aden — anti-ship missile / drone attacks on vessels, port strikes, hijackings, and named-vessel incidents (Galaxy Leader, MV/USS …). Toggle "+ Counter-Houthi strikes" to add the US/UK strikes on Houthi anti-ship infrastructure; "All Houthi events" shows the full Houthi stream including inland Yemen civil-war activity.</p>
         </div>
-        <div class="nb-badges"><span class="badge badge-gold">ACLED · HOUTHI-ONLY</span></div>
+        <div class="nb-badges"><span class="badge badge-gold" data-tac-mode-badge>ACLED · MARITIME ATTACKS</span></div>
       </div>
       <div class="tactical-map-shell">
         <div class="tac-map" id="tacMap">
@@ -392,11 +392,16 @@
             <div class="tac-stat-lbl">BAB EL-MANDEB</div>
           </div>
           <div class="tac-divider"></div>
+          <div class="tac-divider-lbl">EVENT SCOPE</div>
+          <div class="tac-modechips" data-tac-mode-chips>
+            <button class="tac-modechip active" data-tac-mode="tanker">Maritime attacks</button>
+            <button class="tac-modechip" data-tac-mode="maritime">+ Counter-Houthi strikes</button>
+            <button class="tac-modechip" data-tac-mode="all">All Houthi events</button>
+          </div>
           <div class="tac-toggles">
-            <label class="tac-toggle"><input type="checkbox" checked><span>Heatmap</span></label>
-            <label class="tac-toggle"><input type="checkbox" checked><span>Strike markers</span></label>
-            <label class="tac-toggle"><input type="checkbox" checked><span>Chokepoint zone</span></label>
-            <label class="tac-toggle"><input type="checkbox"><span>Tanker-only</span></label>
+            <label class="tac-toggle"><input type="checkbox" data-tac-layer="heat" checked><span>Heatmap</span></label>
+            <label class="tac-toggle"><input type="checkbox" data-tac-layer="markers" checked><span>Strike markers</span></label>
+            <label class="tac-toggle"><input type="checkbox" data-tac-layer="zone" checked><span>Chokepoint zone</span></label>
           </div>
         </aside>
       </div>

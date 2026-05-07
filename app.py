@@ -409,11 +409,77 @@ async def get_master_data():
 # typing a search query.
 _EVENT_LITE_DROP = ("notes", "source", "source_scale", "tags")
 
+# Maritime / tanker-target classifiers — applied server-side so the LITE
+# /api/events payload (which drops the prose `notes` field) still carries
+# the booleans the §02.1 tac-map filter needs. Without this the front-end
+# could only classify events from the full 450KB payload, which slows the
+# Incidents tab on first load. Now: front-end reads `e.maritime` and
+# `e.tanker_target` flags directly.
+_MARITIME_KEYWORDS = (
+    "tanker", "vessel", "ship ", " ships", "shipping", "freighter", "cargo",
+    "container", "merchant ship", "merchant vessel", "dhow", "frigate",
+    "destroyer", "carrier", "warship", "fleet", "galaxy leader",
+    "true confidence", " mv ", " uss ",
+    "naval", "navy", "maritime", "port", "harbor", "harbour",
+    "anchored", "anchorage", "transit", "sea lane", "sea-lane",
+    "shipping lane", "strait", "red sea", "gulf of aden",
+    "bab al-mandab", "bab el-mandeb", "bab al-mandeb", "anti-ship",
+    "anti ship", "sea-launched", "usv", "sea drone", "torpedo",
+    "hodeidah", "hudaydah", "hodeida", "mokha", "ras issa", "salif",
+)
+_TANKER_VESSEL = ("tanker", "vessel", "ship ", " ships ", "dhow", "cargo",
+                  "container", "freighter", "merchant", "warship",
+                  "frigate", "destroyer", "carrier")
+_TANKER_ATTACK = ("hit the", "struck the", "targeting the", "attacked the",
+                  "attack on", "damaged the", "fired at", "launched at",
+                  "aimed at", "targeting a", "directed at")
+
+
+def _classify_maritime(e: dict) -> tuple:
+    """Return (maritime: bool, tanker_target: bool) for an ACLED event.
+
+    `maritime` — any keyword from the broader maritime-context set.
+    `tanker_target` — strict subset: vessel target with attack verb,
+                      hijack/board/seize, named-vessel pattern, or
+                      anti-ship infrastructure attack.
+    """
+    haystack = (
+        (e.get("notes") or "") + " " +
+        (e.get("sub_event_type") or "") + " " +
+        (e.get("location") or "") + " " +
+        (e.get("admin1") or "")
+    ).lower()
+    padded = " " + haystack + " "
+    maritime = any(k in padded for k in _MARITIME_KEYWORDS)
+
+    notes_l = (e.get("notes") or "").lower()
+    tanker_target = False
+    if maritime:
+        if "anti-ship" in notes_l or "anti ship" in notes_l:
+            tanker_target = True
+        elif (any(v in notes_l for v in _TANKER_VESSEL)
+              and any(a in notes_l for a in _TANKER_ATTACK)):
+            tanker_target = True
+        elif ("hijack" in notes_l or "boarded" in notes_l
+              or "seized" in notes_l or "boarding" in notes_l
+              or "seizure of" in notes_l):
+            tanker_target = True
+        elif ("galaxy leader" in notes_l or "true confidence" in notes_l
+              or " mv " in notes_l or " uss " in notes_l):
+            tanker_target = True
+    return maritime, tanker_target
+
 
 def _lite_event(e: dict) -> dict:
     # New dict (don't mutate the cached one — the full version is shared by
-    # both the diag endpoint and the in-process memo).
-    return {k: v for k, v in e.items() if k not in _EVENT_LITE_DROP}
+    # both the diag endpoint and the in-process memo). Adds maritime/tanker
+    # classification flags computed from the prose notes BEFORE we drop them
+    # so the front-end has the signal in the lite payload.
+    out = {k: v for k, v in e.items() if k not in _EVENT_LITE_DROP}
+    mar, tnk = _classify_maritime(e)
+    out["maritime"] = mar
+    out["tanker_target"] = tnk
+    return out
 
 
 @app.get("/api/events")
@@ -424,10 +490,21 @@ async def get_events(lite: int = 1):
     to keep the Incidents tab responsive on slow networks. Pass `?lite=0` to
     get the full payload with prose `notes` — used by the Data Explorer's
     search box on focus.
+
+    Both lite and full payloads carry `maritime` + `tanker_target` boolean
+    flags pre-computed from notes, so the §02.1 tac-map's filter chips work
+    on the lite payload (where notes have been stripped).
     """
     events = await _run_sync(data_service.fetch_acled_events)
     if lite:
         events = [_lite_event(e) for e in events]
+    else:
+        # Full payload also gets the classification flags for consistency.
+        out = []
+        for e in events:
+            mar, tnk = _classify_maritime(e)
+            out.append({**e, "maritime": mar, "tanker_target": tnk})
+        events = out
     return {"count": len(events), "data": events, "lite": bool(lite)}
 
 
