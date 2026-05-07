@@ -1305,18 +1305,27 @@ button { font-family: inherit; cursor: pointer; }
 .tac-side {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 7px;
+  /* Safety net: if a future addition pushes the rail past the 440px shell,
+     scroll inside the panel rather than overflowing the frame. min-height:0
+     is required so the flex child can actually shrink to its container. */
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
 }
+.tac-side::-webkit-scrollbar { width: 4px; }
+.tac-side::-webkit-scrollbar-thumb { background: var(--line); border-radius: 2px; }
 .tac-stat {
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-left: 2px solid var(--cyan);
   border-radius: var(--radius);
-  padding: 10px 14px;
+  padding: 7px 12px;
 }
 .tac-stat-val {
   font-family: var(--mono);
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--cyan);
   line-height: 1;
@@ -1324,27 +1333,27 @@ button { font-family: inherit; cursor: pointer; }
 .tac-stat-val.tac-red { color: var(--red); }
 .tac-stat-lbl {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 8.5px;
   color: var(--text-mute);
-  letter-spacing: 1.5px;
-  margin-top: 4px;
+  letter-spacing: 1.4px;
+  margin-top: 3px;
 }
-.tac-divider { height: 1px; background: var(--line); margin: 4px 0; }
-.tac-toggles { display: flex; flex-direction: column; gap: 8px; }
+.tac-divider { height: 1px; background: var(--line); margin: 2px 0; }
+.tac-toggles { display: flex; flex-direction: column; gap: 4px; }
 .tac-toggle {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--text-dim);
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
   cursor: pointer;
-  padding: 4px 0;
+  padding: 2px 0;
 }
 .tac-toggle input {
   accent-color: var(--cyan);
-  width: 14px; height: 14px;
+  width: 13px; height: 13px;
 }
 
 /* ═══ CHOKEPOINT CARDS ═══ */
@@ -2445,23 +2454,23 @@ button { font-family: inherit; cursor: pointer; }
 /* §02.1 tactical map — mode chips + label */
 .tac-divider-lbl {
   font-family: var(--mono, 'JetBrains Mono', monospace);
-  font-size: 9px;
-  letter-spacing: 2px;
+  font-size: 8.5px;
+  letter-spacing: 1.8px;
   color: var(--text-mute, #8794a7);
-  margin: 14px 0 6px;
+  margin: 8px 0 4px;
 }
 .tac-modechips {
   display: flex;
-  gap: 4px;
-  margin-bottom: 12px;
+  gap: 3px;
+  margin-bottom: 6px;
   flex-wrap: wrap;
 }
 .tac-modechip {
   flex: 1 1 auto;
-  padding: 5px 8px;
+  padding: 4px 7px;
   font-family: var(--mono, monospace);
-  font-size: 9.5px;
-  letter-spacing: 1.2px;
+  font-size: 9px;
+  letter-spacing: 1.1px;
   background: rgba(0,212,255,0.04);
   border: 1px solid rgba(0,212,255,0.18);
   color: var(--text-dim, #c8d0dc);

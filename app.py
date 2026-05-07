@@ -247,7 +247,14 @@ async def get_dashboard_state():
     from datetime import timedelta as _td
     weekly_buckets: _dd = _dd(int)
     seen_w = set()
-    def _bucket_event(date, key_id):
+    # oil_events_pool emits the raw (date, event_type, sub_event_type) tuples
+    # for the same merged Hormuz+Bab pool that drives weekly_oil_events. The
+    # frontend needs these so §03 (Event Type Mix) can cross-filter the
+    # post-Oct 2025 band of §01 — without raw types, the bars can only be
+    # dropped wholesale, not narrowed to the selected wedge.
+    oil_events_pool: list = []
+    def _bucket_event(ev, key_id):
+        date = ev.get("date")
         if not date: return
         if key_id in seen_w: return
         seen_w.add(key_id)
@@ -257,6 +264,11 @@ async def get_dashboard_state():
             weekly_buckets[monday.date().isoformat()] += 1
         except Exception:
             return
+        oil_events_pool.append({
+            "date": date[:10],
+            "event_type":     (ev.get("event_type") or "").strip(),
+            "sub_event_type": (ev.get("sub_event_type") or "").strip(),
+        })
     for cp_id in ("hormuz", "bab"):
         try:
             cp_pool = data_service.get_chokepoint_incidents(cp_id, 540, 5000)
@@ -266,7 +278,7 @@ async def get_dashboard_state():
             # Stable dedup key — prefer event_id (curated/news entries carry
             # one); fall back to date+title-prefix.
             eid = ev.get("event_id") or f"{ev.get('date','')[:10]}::{(ev.get('actor1') or '').strip().lower()[:50]}"
-            _bucket_event(ev.get("date"), eid)
+            _bucket_event(ev, eid)
     weekly_oil_events = [{"week_start": k, "count": v} for k, v in sorted(weekly_buckets.items())]
 
     # ── OIL FLOW AT RISK — Hormuz + Bab structural (mbd) ────────────
@@ -322,6 +334,7 @@ async def get_dashboard_state():
         "chokepoints": chokepoints,
         "energy_equities": energy_equities,
         "weekly_oil_events": weekly_oil_events,
+        "oil_events_pool":  oil_events_pool,
         "anchors": {
             "war_onset":    config.WAR_ONSET_DATE,
             "hamas_attack": config.HAMAS_ATTACK_DATE,

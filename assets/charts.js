@@ -201,36 +201,61 @@ function renderPriceVsAttacks(state) {
   // (Monday-anchored ISO week), filtered to only the selected event_type.
   // This lets the red bars actually SHRINK to the filtered subset instead of
   // just showing a "FILTER: X" banner over the full-dataset bars.
+  //
+  // Two-band cross-filter: pre-Oct 2025 = ACLED row-level events (state.events),
+  // post-Oct 2025 = backend-emitted oil_events_pool (raw type+date for the
+  // same merged Hormuz+Bab pool that drives the cards/hero KPI). Earlier the
+  // post-Oct band was dropped entirely when a wedge was selected — bars just
+  // disappeared. Now it's filtered the same way, so a wedge click NARROWS
+  // both bands to that event type instead of erasing the live half.
+  const THESIS_END_XF = '2025-10-01';
   let attacks;
-  if (xfType && Array.isArray(state.events) && state.events.length) {
-    // §01 is "Price vs. Conflict Intensity" — oil-relevance filter the
-    // cross-filtered count too. Without this, selecting "Protests" in
-    // §03 (which after the filter has nothing to select anyway) would
-    // count irrelevant events as bars on §01.
-    const xfEvents = oilRelevant(state.events);
-    const counts = new Map();
-    for (const e of xfEvents) {
-      const t = (e.event_type || e.sub_event_type || 'Other').toString();
-      if (t !== xfType) continue;
-      const d = e.event_date;
-      if (!d) continue;
-      // Snap to ISO week-start (Monday)
+  if (xfType) {
+    const xfWeeklyCounts = new Map();
+
+    // Helper: snap any ISO date string to the Monday-anchored week-start key.
+    const _wkOf = (d) => {
+      if (!d) return null;
       const dt = new Date(d);
-      if (isNaN(dt)) continue;
-      const day = dt.getUTCDay() || 7;      // Sun=0 → 7
-      const monday = new Date(dt); monday.setUTCDate(dt.getUTCDate() - (day - 1));
-      const key = monday.toISOString().slice(0, 10);
-      counts.set(key, (counts.get(key) || 0) + 1);
+      if (isNaN(dt)) return null;
+      const day = dt.getUTCDay() || 7;       // Sun=0 → 7
+      const monday = new Date(dt);
+      monday.setUTCDate(dt.getUTCDate() - (day - 1));
+      return monday.toISOString().slice(0, 10);
+    };
+    const _matches = (e) => {
+      const t  = (e.event_type     || '').toString();
+      const st = (e.sub_event_type || '').toString();
+      return t === xfType || st === xfType;
+    };
+
+    // Pre-Oct band: ACLED row-level events (state.events), oil-relevance filtered.
+    if (Array.isArray(state.events) && state.events.length) {
+      const xfEvents = oilRelevant(state.events);
+      for (const e of xfEvents) {
+        if (!_matches(e)) continue;
+        const wk = _wkOf(e.event_date);
+        if (!wk) continue;
+        if (wk > THESIS_END_XF) continue;    // post-Oct slice handled below
+        xfWeeklyCounts.set(wk, (xfWeeklyCounts.get(wk) || 0) + 1);
+      }
     }
-    // For each sampled row, take the count of events in the week ending on/before its date
+
+    // Post-Oct band: raw oil_events_pool from /api/dashboard-state. Same source
+    // as the pre-aggregated weekly_oil_events, but typed so we can filter.
+    const pool = (window.__dashState && Array.isArray(window.__dashState.oil_events_pool))
+                 ? window.__dashState.oil_events_pool : [];
+    for (const e of pool) {
+      if (!_matches(e)) continue;
+      const wk = _wkOf(e.date);
+      if (!wk) continue;
+      if (wk <= THESIS_END_XF) continue;     // pre-Oct slice handled above
+      xfWeeklyCounts.set(wk, (xfWeeklyCounts.get(wk) || 0) + 1);
+    }
+
     attacks = rows.map(r => {
-      if (!r.date) return 0;
-      const dt = new Date(r.date);
-      if (isNaN(dt)) return 0;
-      const day = dt.getUTCDay() || 7;
-      const monday = new Date(dt); monday.setUTCDate(dt.getUTCDate() - (day - 1));
-      const key = monday.toISOString().slice(0, 10);
-      return counts.get(key) || 0;
+      const wk = _wkOf(r.date);
+      return wk ? (xfWeeklyCounts.get(wk) || 0) : 0;
     });
   } else {
     // Pre-Oct 2025: thesis ACLED Houthi-maritime weekly counts (from CSV).
