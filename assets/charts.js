@@ -326,8 +326,29 @@ function renderPriceVsAttacks(state) {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
+      // Tooltip needs index+!intersect because the Brent line uses
+      // pointRadius:0 (invisible points) — with the default
+      // intersect:true, hovering the line never triggers a tooltip
+      // because there's nothing to intersect. 'index' mode shows
+      // entries for every dataset at the cursor's x-position, so
+      // hovering ANYWHERE in the chart area pulls up the Brent price
+      // alongside the weekly-events bar value for that week.
+      interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { labels: { color: '#dfe7f0', boxWidth: 14, font: { size: 11 } } },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          callbacks: {
+            label: (ctx) => {
+              const v = ctx.parsed && ctx.parsed.y;
+              if (v == null || isNaN(v)) return null;
+              const lbl = ctx.dataset.label || '';
+              if (lbl.startsWith('Brent')) return `Brent: $${(+v).toFixed(2)}`;
+              return `${lbl}: ${(+v).toFixed(0)}`;
+            },
+          },
+        },
         // Vertical separator at the thesis/live data boundary. Drawn as a
         // tiny inline plugin since we don't want to pull in chartjs-annotation.
         beforeDraw: undefined,
