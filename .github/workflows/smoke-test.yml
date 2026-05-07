@@ -81,6 +81,21 @@ jobs:
           echo "server failed to start within 90s" >&2
           tail -200 /tmp/dashboard.log >&2
           exit 1
+      - name: Pre-warm slow endpoints
+        # Cold-start hits a thundering herd: every /api/* called by the
+        # frontend bundles N upstream API calls (FRED, IMF, GDELT,
+        # Google News). Tests start at the worst possible moment when
+        # they all race for the same executor pool. Force-pull the
+        # slow ones first so the in-memory caches are populated by the
+        # time pytest opens the dashboard. Failures here don't block
+        # the test step — they just mean we don't get the head start.
+        run: |
+          for ep in /api/macro-context /api/eia-inventories /api/dashboard-state /api/iran-events /api/gdelt-tone; do
+            echo "warming $ep"
+            curl -s --max-time 30 "http://127.0.0.1:8765$ep" -o /dev/null \
+                -w "  http=%{http_code} time=%{time_total}s\n" || true
+          done
+
       - name: Run smoke tests
         env:
           DASHBOARD_URL:    http://127.0.0.1:8765

@@ -111,26 +111,7 @@ def page():
         # Wait for the hero Brent KPI to populate — that signals the master
         # endpoint resolved and the page is functionally usable.
         _wait_for_kpi(page, "#heroPrice")
-        # Wait for the slow-cold-start KPIs to land too. /api/macro-context
-        # (FRED-driven) and the Iran-tab KPIs both queue behind the iran_news
-        # warmer threads on a fresh container — by the time #heroPrice
-        # populates they may still be 15-25s away. Without these waits,
-        # individual tests with their own 15s timeouts fail intermittently
-        # on CI cold-start runs even though our code is correct.
-        # Best-effort waits: ignore failures so tests can still report
-        # specific KPI failures rather than the fixture going red.
-        for selector in (
-            '[data-kpi="hyYield"]',
-            '[data-kpi="wtiBrent"]',
-            '[data-kpi="vix"]',
-            '[data-kpi="crudeStocks"]',
-            '[data-iran-kpi="total"]',
-        ):
-            try:
-                _wait_for_kpi(page, selector, timeout=45_000)
-            except Exception:
-                pass  # Let the dedicated test report the actual failure
-        # Give the chart hydrators a moment after the last KPI lands.
+        # Give the chart hydrators a moment after Brent lands.
         page.wait_for_timeout(2500)
 
         yield page
@@ -187,17 +168,16 @@ def test_no_api_5xx(page: Page):
 def test_kpi_populated(page: Page, kpi_selector: str, kpi_name: str):
     """Every advertised KPI should contain a real value, not '—'.
 
-    On CI cold-start, /api/macro-context can take 20-30s to land —
-    its FRED fetches queue behind the iran_news + chokepoint warmer
-    threads that all spin up at once. The 15s default timeout was
-    enough on a warm cache but not on a fresh boot, so the four
-    macro-context-fed KPIs (wtiBrent / vix / hyYield / crudeStocks)
-    flake intermittently. A 30s budget for those is plenty without
-    making the suite slow when the data IS already there.
+    Use the module-level HYDRATION_TIMEOUT_MS (60s) for ALL KPIs.
+    On CI cold-start, /api/macro-context (FRED) lands 20-30s after
+    Brent because its requests queue behind the iran_news warmer
+    thread — the previous 15s per-test budget wasn't enough. Module-
+    scoped page fixture means subsequent tests reuse the same warm
+    page, so the 60s budget is only consumed by the FIRST slow KPI;
+    by the time the 14th parametrized test runs, every value is
+    already in the DOM and `wait_for_function` resolves immediately.
     """
-    macro_kpis = ('wtiBrent', 'vix', 'hyYield', 'crudeStocks')
-    timeout = 30_000 if any(k in kpi_selector for k in macro_kpis) else 15_000
-    val = _wait_for_kpi(page, kpi_selector, timeout=timeout)
+    val = _wait_for_kpi(page, kpi_selector, timeout=HYDRATION_TIMEOUT_MS)
     assert val and val != "—", f"{kpi_name} ({kpi_selector}) is empty: {val!r}"
 
 
