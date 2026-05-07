@@ -243,15 +243,14 @@
       return lon >= 32 && lon <= 56 && lat >= 5 && lat <= 30;
     }
 
-    // Filter mode state (persisted via UI toggles below).
-    //   'tanker' (default)    — vessel-targeting events ONLY (Houthi
-    //                            attacks on ships, hijackings, named-
-    //                            vessel incidents, anti-ship infrastructure
-    //                            strikes). The tightest oil-impact subset.
-    //   'maritime'            — broader: also includes US/UK counter-Houthi
-    //                            strikes mentioning anti-ship context.
-    //   'all'                 — every Houthi-attributed event in the
-    //                            viewport (incl. inland civil-war).
+    // Filter mode state. The dataset itself is now pre-filtered to
+    // maritime-relevant events at the fetcher level (data_service.
+    // _is_maritime_relevant) — inland Yemen civil-war events never
+    // reach this code path. Frontend modes only narrow further:
+    //   'tanker' (default) — vessel-targeting subset (anti-ship attacks,
+    //                         hijackings, named-vessel incidents).
+    //   'maritime'         — the full pre-filtered dataset (broadest
+    //                         option since "all Houthi" was dropped).
     window.__tacFilterMode = window.__tacFilterMode || 'tanker';
 
     function eventsToAttacks(events) {
@@ -332,9 +331,8 @@
       // Update header badge
       const badge = document.querySelector('[data-tac-mode-badge]');
       if (badge) {
-        const labels = { tanker:   'ACLED · MARITIME ATTACKS',
-                         maritime: 'ACLED · + COUNTER-STRIKES',
-                         all:      'ACLED · HOUTHI · ALL' };
+        const labels = { tanker:   'ACLED · VESSEL ATTACKS',
+                         maritime: 'ACLED · ALL MARITIME' };
         badge.textContent = labels[mode] || labels.tanker;
       }
       // Re-render markers from the cached event list

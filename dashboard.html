@@ -366,9 +366,9 @@
         <div class="nb-index">§ 02.1</div>
         <div>
           <h2 class="nb-title">Red Sea Tactical View</h2>
-          <p class="nb-subtitle">Houthi / Ansar Allah events that <b>directly target shipping</b> in the Red Sea + Gulf of Aden — anti-ship missile / drone attacks on vessels, port strikes, hijackings, and named-vessel incidents (Galaxy Leader, MV/USS …). Toggle "+ Counter-Houthi strikes" to add the US/UK strikes on Houthi anti-ship infrastructure; "All Houthi events" shows the full Houthi stream including inland Yemen civil-war activity.</p>
+          <p class="nb-subtitle">ACLED Houthi / Ansar Allah events <b>filtered at the dataset level</b> to maritime-relevant only — events whose notes / sub_event_type / location / admin1 reference a vessel, naval/maritime context, or a Houthi maritime port (Hodeidah, Mokha, Salif). Inland Yemen civil-war activity is dropped from the cache before it reaches any panel on this dashboard. Default chip narrows further to <b>direct vessel attacks</b>; toggle "All maritime" for the full filtered dataset.</p>
         </div>
-        <div class="nb-badges"><span class="badge badge-gold" data-tac-mode-badge>ACLED · MARITIME ATTACKS</span></div>
+        <div class="nb-badges"><span class="badge badge-gold" data-tac-mode-badge>ACLED · VESSEL ATTACKS</span></div>
       </div>
       <div class="tactical-map-shell">
         <div class="tac-map" id="tacMap">
@@ -394,9 +394,8 @@
           <div class="tac-divider"></div>
           <div class="tac-divider-lbl">EVENT SCOPE</div>
           <div class="tac-modechips" data-tac-mode-chips>
-            <button class="tac-modechip active" data-tac-mode="tanker">Maritime attacks</button>
-            <button class="tac-modechip" data-tac-mode="maritime">+ Counter-Houthi strikes</button>
-            <button class="tac-modechip" data-tac-mode="all">All Houthi events</button>
+            <button class="tac-modechip active" data-tac-mode="tanker">Vessel attacks only</button>
+            <button class="tac-modechip" data-tac-mode="maritime">All maritime events</button>
           </div>
           <div class="tac-toggles">
             <label class="tac-toggle"><input type="checkbox" data-tac-layer="heat" checked><span>Heatmap</span></label>

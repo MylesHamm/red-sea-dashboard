@@ -313,16 +313,31 @@ def _df_to_event_records(df: pd.DataFrame) -> List[dict]:
             r["longitude"] = None
     return records
 
-# Red Sea maritime keywords for filtering regional events.
-# Only very specific terms — avoids false matches from generic conflict words.
-_MARITIME_KEYWORDS = [
-    "houthi", "ansar allah", "red sea", "bab el-mandeb", "bab al-mandab",
-    "gulf of aden", "maritime", "shipping", "vessel", "tanker", "cargo ship",
-    "oil tanker", "commercial ship", "merchant vessel", "container ship",
-    "suez canal", "usns", "uss ",
-    "piracy", "hijack", "sea route", "waterway", "blockade",
-    "coast guard", "naval blockade", "naval operation",
-]
+# Maritime-content keywords used to filter the ACLED dataset itself.
+# These match against the event's `notes` (prose narrative), `sub_event_type`,
+# `location`, and `admin1` fields — NOT against actor names. Matching on
+# "houthi" / "ansar allah" would let every Houthi-actor event through
+# regardless of whether it's actually maritime; that defeats the purpose
+# of dataset-level filtering, which is to drop inland Yemeni civil-war
+# events from the cache before they ever reach the frontend.
+_MARITIME_TARGETS = (
+    "tanker", "tankers", "vessel", "vessels", "ship ", " ships", "shipping",
+    "freighter", "cargo", "container", "merchant ship", "merchant vessel",
+    "dhow", "frigate", "destroyer", "carrier", "warship", "fleet",
+    " mv ", " uss ", "galaxy leader", "true confidence",
+)
+_MARITIME_CONTEXT = (
+    "naval", "navy", "maritime", "port", "harbor", "harbour",
+    "anchored", "anchorage", "transit", "sea lane", "sea-lane",
+    "shipping lane", "strait", "red sea", "gulf of aden",
+    "bab al-mandab", "bab el-mandeb", "anti-ship", "anti ship",
+    "sea-launched", "usv", "sea drone", "torpedo",
+)
+_MARITIME_PORTS = (
+    "hodeidah", "hudaydah", "hodeida", "mokha", "ras issa", "salif",
+    "al hudaydah",
+)
+_MARITIME_KEYWORDS = _MARITIME_TARGETS + _MARITIME_CONTEXT + _MARITIME_PORTS
 
 
 def _paginated_acled_fetch(token: str, params: dict, label: str, max_pages: int = 10) -> List[dict]:
@@ -372,9 +387,29 @@ def _paginated_acled_fetch(token: str, params: dict, label: str, max_pages: int 
 
 
 def _is_maritime_relevant(event: dict) -> bool:
-    """Check if an event is relevant to Red Sea / maritime operations."""
-    text = f"{event.get('notes', '')} {event.get('actor1', '')} {event.get('actor2', '')}".lower()
-    return any(kw in text for kw in _MARITIME_KEYWORDS)
+    """Strict maritime-content filter applied to the ACLED dataset itself.
+
+    Returns True iff the event's prose `notes` (or sub_event_type / location /
+    admin1) contains at least one keyword from the maritime keyword set.
+    Does NOT match on actor1/actor2 — actor-attribution alone (e.g. an
+    inland Houthi vs. Yemeni-government infantry battle) is not enough to
+    qualify as maritime; the event must reference a vessel, naval/maritime
+    context, or a Houthi maritime port (Hodeidah, Mokha, Salif).
+
+    This filter is applied at the FETCHER level so the on-disk cache and
+    the in-process memo only contain maritime-relevant events. Every
+    consumer (`/api/events`, the §02.1 tac map, §03 event-type doughnut,
+    chokepoint-incidents, Data Explorer) sees the pre-filtered subset —
+    no need for redundant client-side filtering.
+    """
+    text = (
+        (event.get("notes") or "") + " " +
+        (event.get("sub_event_type") or "") + " " +
+        (event.get("location") or "") + " " +
+        (event.get("admin1") or "")
+    ).lower()
+    padded = " " + text + " "
+    return any(kw in padded for kw in _MARITIME_KEYWORDS)
 
 
 _acled_events_memo: Optional[List[dict]] = None
@@ -491,6 +526,19 @@ def _do_fetch_acled_events() -> List[dict]:
                     logger.info(f"ACLED {label}: {n} unique events")
 
         if all_events:
+            # Dataset-level maritime filter — drop inland Yemen civil-war
+            # events, internal Houthi-vs-government clashes, and other
+            # non-maritime activity BEFORE caching. The cache, the on-disk
+            # JSON, and every consumer downstream see only maritime-
+            # relevant events. Per-event maritime/tanker classification
+            # in app.py becomes a property of the trimmed dataset.
+            pre_filter = len(all_events)
+            all_events = [e for e in all_events if _is_maritime_relevant(e)]
+            logger.info(
+                f"ACLED dataset-level filter: kept {len(all_events)}/{pre_filter} "
+                f"maritime-relevant events (dropped {pre_filter - len(all_events)} "
+                f"inland/non-maritime)"
+            )
             _write_cache("acled_events", all_events)
             with _acled_events_memo_lock:
                 _acled_events_memo = all_events
@@ -1168,13 +1216,26 @@ def get_freshness_snapshot() -> dict:
 
 
 def _load_acled_fallback() -> List[dict]:
-    """Load ACLED data from JSON fallback, then CSV files."""
+    """Load ACLED data from JSON fallback, then CSV files.
+
+    Applies the dataset-level maritime filter (`_is_maritime_relevant`)
+    after load, so the bundled JSON file (which may be 13MB of mixed
+    Yemen civil-war + maritime events from a prior un-filtered fetch)
+    is trimmed to maritime-only at runtime. After the next live ACLED
+    fetch lands, the JSON itself can be regenerated as the filtered
+    subset and this defensive filter becomes a no-op.
+    """
     # Try JSON fallback first (pre-fetched comprehensive dataset)
     json_path = config.DATA_DIR / "acled_events.json"
     if json_path.exists():
         try:
             events = json.loads(json_path.read_text())
-            logger.info(f"ACLED fallback: loaded {len(events)} events from acled_events.json")
+            pre = len(events)
+            events = [e for e in events if _is_maritime_relevant(e)]
+            logger.info(
+                f"ACLED fallback: loaded {pre} events from acled_events.json, "
+                f"kept {len(events)} maritime-relevant"
+            )
             return events
         except Exception as e:
             logger.warning(f"ACLED JSON fallback failed: {e}")
