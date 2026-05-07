@@ -199,11 +199,25 @@ def _read_cache(key: str, ttl: int) -> Optional[dict]:
 def _write_cache(key: str, payload):
     path = _cache_path(key)
     data = json.dumps({"_ts": time.time(), "payload": payload}, default=str)
-    # Atomic write: write to temp file then rename to avoid corruption on crash
-    tmp = str(path) + ".tmp"
+    # Atomic write: write to a UNIQUE temp file then rename to avoid corruption.
+    # Earlier this used a fixed `{key}.json.tmp` filename, which broke on HF
+    # Spaces where multiple workers / warmer threads call fetch_iran_news
+    # concurrently during cold-start: writer A writes the .tmp and renames it,
+    # writer B's rename then fails with ENOENT and the in-memory fresh result
+    # never reaches disk. The dashboard would silently serve yesterday's
+    # cache on every container restart. Per-call PID+counter suffix ensures
+    # each writer owns its own .tmp.
+    tmp = "{}.{}.{}.tmp".format(str(path), os.getpid(), threading.get_ident())
     try:
         Path(tmp).write_text(data, encoding="utf-8")
         os.replace(tmp, str(path))
+    except FileNotFoundError:
+        # Race: another writer renamed our .tmp first. The destination file
+        # exists with valid (concurrent) content, so the cache is fine —
+        # this isn't an error, just a redundant write. Swallow it instead of
+        # bubbling up to the caller (which would log "fetch failed" and fall
+        # back to the on-disk cache, losing today's in-memory fresh result).
+        return
     except Exception:
         try:
             os.unlink(tmp)
