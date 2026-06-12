@@ -37,7 +37,19 @@ app = FastAPI(title="Middle East Energy Security Dashboard")
 # of 17k ACLED events) compressing to ~2MB over the wire — the single largest
 # factor in Geospatial/Incidents tab load time. Gzip is ~negligible CPU at
 # compresslevel=5 even for large responses.
-app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=5)
+#
+# /api/stream is exempt: GZipMiddleware buffers streamed chunks inside its
+# zlib compressor, which delays Server-Sent Events indefinitely (the browser
+# never sees an event until the buffer flushes). SSE must go out raw.
+
+class SelectiveGZipMiddleware(GZipMiddleware):
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http" and scope.get("path", "").startswith("/api/stream"):
+            await self.app(scope, receive, send)
+            return
+        await super().__call__(scope, receive, send)
+
+app.add_middleware(SelectiveGZipMiddleware, minimum_size=500, compresslevel=5)
 
 # Serve static files (HTML, CSS, JS) with no-cache headers
 
@@ -107,6 +119,7 @@ async def get_constants():
         "incident_actor_hints": {k: list(v) for k, v in config.INCIDENT_ACTOR_HINTS.items()},
         "incident_keywords":    {k: list(v) for k, v in config.INCIDENT_KEYWORDS.items()},
         "threat_tiers":         [{"name": n, "min_decline_pct": p} for n, p in config.THREAT_TIERS],
+        "brent_alert_threshold_pct": config.BRENT_ALERT_THRESHOLD_PCT,
     }
 
 
@@ -156,14 +169,17 @@ async def get_dashboard_state():
         if cur is None or base in (None, 0): return None
         return round((cur - base) / base * 100, 2)
 
-    # Prefer FMP intraday for the live price; fall back to EIA daily settle.
-    # FMP gives minute-fresh BZUSD vs EIA's once-a-day prior-session close —
-    # closes the "no intraday data" gap that limited client-grade use.
-    fmp_q = data_service.fetch_fmp_brent_quote() if config.FMP_API_KEY else {}
+    # Prefer live intraday for the price; fall back to EIA daily settle.
+    # fetch_live_brent_quote tries FMP real-time (BZUSD) first, then
+    # yfinance BZ=F (~15-min delayed) when FMP's free tier is in a 429
+    # backoff window — so the hero never regresses to yesterday's settle
+    # just because one provider is rate-limited.
+    fmp_q = data_service.fetch_live_brent_quote()
     fmp_price       = fmp_q.get("price")
     fmp_change      = fmp_q.get("change")
     fmp_change_pct  = fmp_q.get("change_pct")
     has_intraday    = fmp_price is not None
+    intraday_src    = fmp_q.get("source")  # 'fmp' | 'yfinance' | None
     eia_price       = (latest or {}).get("brent_price")
     eia_prior       = (prior  or {}).get("brent_price")
 
@@ -182,7 +198,9 @@ async def get_dashboard_state():
         ],
         "war_premium_pct": _pct(fmp_price if has_intraday else eia_price, (war_anchor or {}).get("brent_price")) if war_anchor else None,
         "as_of":          fmp_q.get("timestamp") if has_intraday else (latest or {}).get("date"),
-        "source":         "FMP intraday (BZUSD)" if has_intraday else "EIA daily settle",
+        "source":         ("FMP intraday (BZUSD)" if intraday_src == "fmp"
+                           else "yfinance BZ=F (~15min delayed)" if intraday_src == "yfinance"
+                           else "EIA daily settle"),
         "is_intraday":    has_intraday,
     }
 
@@ -351,6 +369,69 @@ async def get_dashboard_state():
             "hamas_attack": config.HAMAS_ATTACK_DATE,
         },
     }
+
+
+# ─── Server-Sent Events live stream ──────────────────────────────────────────
+#
+# Pushes the composed dashboard-state to connected clients the moment the
+# background warmer lands fresh data, instead of making every client poll
+# /api/dashboard-state on a 60s timer. The warmer bumps `_state_version`
+# after each cycle in which at least one fetcher ran; each connected SSE
+# generator notices the bump within its 5s check loop and re-composes.
+#
+# Free-tier friendly: one long-lived HTTP response per client (HF Spaces'
+# proxy supports streaming — it's how Gradio's queue works), heartbeat
+# comments every 25s keep intermediaries from reaping the connection, and
+# state is only re-composed when the version actually changes.
+#
+# The frontend keeps its poller as a watchdog fallback — see app.js. If SSE
+# dies (proxy hiccup, browser sleep), EventSource auto-reconnects; if it
+# can't, the poller notices the silence and resumes.
+
+_state_version = 1          # bumped by the warmer; 1 so first compose fires
+_STREAM_HEARTBEAT_S = 25    # comment cadence to keep proxies happy
+_STREAM_CHECK_S = 5         # version poll cadence inside the generator
+
+
+def _bump_state_version():
+    global _state_version
+    _state_version += 1
+
+
+@app.get("/api/stream")
+async def stream_dashboard_state():
+    from fastapi.responses import StreamingResponse
+
+    async def gen():
+        last_sent = -1
+        last_beat = time.time()
+        while True:
+            cur = _state_version
+            if cur != last_sent:
+                try:
+                    state = await get_dashboard_state()
+                    payload = json.dumps(state, default=str)
+                    yield f"event: state\ndata: {payload}\n\n"
+                    last_sent = cur
+                    last_beat = time.time()
+                except Exception as e:
+                    # Never kill the stream on a compose failure — the next
+                    # version bump retries. Comment lines are ignored by
+                    # EventSource but visible in curl for debugging.
+                    yield f": compose-error {type(e).__name__}\n\n"
+            elif time.time() - last_beat >= _STREAM_HEARTBEAT_S:
+                # Named event (not an SSE comment): EventSource swallows
+                # comments silently, but the frontend watchdog needs to SEE
+                # the heartbeat to distinguish "stream alive, no new data"
+                # from "stream dead → resume polling".
+                yield "event: ping\ndata: {}\n\n"
+                last_beat = time.time()
+            await asyncio.sleep(_STREAM_CHECK_S)
+
+    return StreamingResponse(gen(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "X-Accel-Buffering": "no",
+    })
 
 
 @app.get("/api/diag")
@@ -991,6 +1072,9 @@ async def preload_data():
             print(f"  [preload] ACLED: FAILED ({e}) — will lazy-load on first request")
         gc.collect()
         print(f"  [preload] Cache warming complete (mem={_mem_mb()}MB)")
+        # Clients that connected during cold-start saw a partial compose —
+        # push them the fully-warmed state now.
+        _bump_state_version()
 
     # Fire-and-forget in a daemon thread — server starts immediately
     t = threading.Thread(target=_preload, daemon=True)
@@ -1034,7 +1118,10 @@ async def preload_data():
             # FMP intraday — keep the hero KPI minute-fresh during market
             # hours. Quote refreshes match the FMP cache TTL (10 min);
             # hourly bars + equity quotes refresh every hour.
-            ("fmp_brent",       10 * 60, data_service.fetch_fmp_brent_quote),
+            # Live Brent quote — FMP first, yfinance BZ=F fallback. Using
+            # the unified fetcher here means the fallback path is also
+            # kept warm during an FMP backoff window.
+            ("live_brent",      10 * 60, data_service.fetch_live_brent_quote),
             ("fmp_brent_1h",    60 * 60, data_service.fetch_fmp_brent_intraday),
             ("fmp_xom",         60 * 60, lambda: data_service.fetch_fmp_equity_quote("XOM")),
             ("fmp_cvx",         60 * 60, lambda: data_service.fetch_fmp_equity_quote("CVX")),
@@ -1044,15 +1131,21 @@ async def preload_data():
         while True:
             try:
                 now = time.time()
+                ran_any = False
                 for name, every, fn in intervals:
                     if now - last[name] >= every:
                         try:
                             fn()
                             last[name] = now
+                            ran_any = True
                         except Exception as e:
                             # Don't crash the warmer on a single fetcher's
                             # exception — log and try again next cycle.
                             print(f"  [warmer] {name}: FAILED ({e})")
+                # Tell connected SSE clients fresh data landed — they
+                # re-compose dashboard-state and push within ~5s.
+                if ran_any:
+                    _bump_state_version()
                 # Sleep 60s between cycles. Each iteration only wakes the
                 # fetchers whose interval has elapsed, so the loop is cheap.
                 time.sleep(60)

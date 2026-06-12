@@ -2490,3 +2490,75 @@ button { font-family: inherit; cursor: pointer; }
   color: var(--gold, #ffaa00);
   font-weight: 700;
 }
+
+/* ═══ LIVE TICK FLASH ═══
+   Pulse a price element green/red when a live update changes its value.
+   Applied by _tickFlash() in app.js (single-writer: only the canonical
+   hero-Brent setter triggers it). Color decays back over 1.2s so rapid
+   consecutive ticks read as a flicker of activity, not a stuck color. */
+@keyframes tickUp {
+  0%   { color: #3dd49b; text-shadow: 0 0 12px rgba(61,212,155,0.55); }
+  100% { color: inherit; text-shadow: none; }
+}
+@keyframes tickDown {
+  0%   { color: #ff3d5e; text-shadow: 0 0 12px rgba(255,61,94,0.55); }
+  100% { color: inherit; text-shadow: none; }
+}
+.tick-up   { animation: tickUp   1.2s ease-out 1; }
+.tick-down { animation: tickDown 1.2s ease-out 1; }
+
+/* ═══ MARKET ALERT STRIP ═══
+   Shown above the KPI deck when |24h Brent change| >= the configured
+   threshold (BRENT_ALERT_THRESHOLD_PCT via /api/constants). Written by
+   _updateMarketAlert() in app.js on every dashboard-state apply. */
+.market-alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 9px 16px;
+  border-radius: var(--radius, 4px);
+  font-family: var(--mono, 'JetBrains Mono', monospace);
+  font-size: 11px;
+  letter-spacing: 1.6px;
+  font-weight: 700;
+  border: 1px solid;
+  animation: maSlideIn 0.35s ease-out;
+}
+@keyframes maSlideIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.market-alert.alert-up {
+  background: rgba(255,61,94,0.10);
+  border-color: rgba(255,61,94,0.45);
+  color: #ff8095;
+}
+.market-alert.alert-down {
+  background: rgba(61,212,155,0.08);
+  border-color: rgba(61,212,155,0.40);
+  color: #5fd9ae;
+}
+.ma-pulse {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+  animation: maPulse 1.6s ease-in-out infinite;
+}
+@keyframes maPulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 currentColor; }
+  50%      { opacity: 0.45; box-shadow: 0 0 0 5px rgba(255,255,255,0); }
+}
+.ma-text { flex: 1 1 auto; }
+.ma-dismiss {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0.6;
+  padding: 0 2px;
+  line-height: 1;
+}
+.ma-dismiss:hover { opacity: 1; }

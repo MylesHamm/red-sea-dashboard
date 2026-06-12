@@ -1,6 +1,6 @@
 # Chokepoint Intel Dashboard — Session Brain
 
-**Last consolidated:** 2026-05-07
+**Last consolidated:** 2026-06-12
 **Owner:** Myles Hamm (mhamm@mercyhurst.edu) — Mercyhurst MS Applied Intelligence thesis
 **Deployed:** Hugging Face Spaces — `mhamm18/red-sea-dashboard`
 **Repo root:** `/Users/myleshamm/Desktop/Intel/Thesis/Dashboard/`
@@ -102,16 +102,25 @@ Live FastAPI + Chart.js single-page dashboard tracking the **US-Iran war scenari
 
 ---
 
-## 9. Outstanding loose ends
+## 9. Live-update architecture (added 2026-06-12)
 
-- **Verify on deployed.** Confirm HF Spaces logs show the `ACLED dataset-level filter: kept N/M maritime-relevant events` line on first fetch after the latest deploy.
+- **SSE push**: `/api/stream` (app.py) pushes the full composed dashboard-state whenever the warmer's `_bump_state_version()` fires (any fetcher ran), plus `ping` heartbeats every 25s. `SelectiveGZipMiddleware` exempts the stream from gzip (gzip buffering kills SSE). Frontend `EventSource` in app.js consumes it; the 60s poller is now a **watchdog** that only fires when the stream has been silent >90s.
+- **Visibility-aware**: watchdog skips when `document.hidden`; `visibilitychange` → instant invalidate+refresh on return.
+- **Tick flash**: `_tickFlash()` in app.js — hero Brent + threat-strip flash green/red (`tickUp`/`tickDown` CSS) when price changes between applies. Single-writer preserved (only `_applyHeroBrentFromState` triggers).
+- **Brent quote chain**: `fetch_live_brent_quote()` (data_service) = FMP real-time → yfinance `BZ=F` (~15-min delayed, no key/quota) → EIA daily settle. `source` field flows to the hero badge: `INTRADAY · FMP` / `INTRADAY · YF · ~15MIN DELAY` / `EIA DAILY`. Never label delayed as real-time.
+- **Market alert strip**: `_updateMarketAlert()` (app.js) renders above `.kpi-deck` when |24h Brent %| ≥ `config.BRENT_ALERT_THRESHOLD_PCT` (2.0, exposed via /api/constants). Dismissal is per-signature (`direction:int-band`) in sessionStorage.
+
+## 10. Outstanding loose ends
+
+- (none currently — HDX recovered upstream 2026-06; corrupt weekly publish was replaced. CI green with upstream-aware skips.)
 
 **Resolved:**
 - FMP_API_KEY is set as an HF Space secret named `FMP_API_KEY` (confirmed 2026-05-07). Intraday Brent (`BZUSD`) and energy equity quotes are live on the deployed dashboard.
+- HDX yemen "Bad magic number" (May 2026) was a genuinely corrupt upstream weekly file; HDX replaced it. Retry + stale-fallback in `_do_fetch_hdx_event_counts` covered the gap.
 
 ---
 
-## 10. Sandbox / dev environment quirks
+## 11. Sandbox / dev environment quirks
 
 - `h11` is sandbox-blocked → uvicorn must run with `httptools` backend.
 - Dev server: `dev_server.py`.
@@ -121,7 +130,7 @@ Live FastAPI + Chart.js single-page dashboard tracking the **US-Iran war scenari
 
 ---
 
-## 11. How to pick up next session
+## 12. How to pick up next session
 
 1. Read this file.
 2. `git log --oneline -10` to see what landed since this brain was last consolidated.

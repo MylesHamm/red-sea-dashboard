@@ -170,3 +170,9 @@ THREAT_TIERS = [
     ("elevated", 10.0),   # ≥10%
     ("safe",     0.0),    # everything else
 ]
+
+# Market alert: show a banner above the hero when |24h Brent change| meets
+# this threshold (percent). 2% is roughly a 2-sigma daily move for Brent
+# in calm regimes — big enough to be news, small enough to actually fire
+# during an active war scenario.
+BRENT_ALERT_THRESHOLD_PCT = 2.0

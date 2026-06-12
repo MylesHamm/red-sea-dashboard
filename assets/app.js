@@ -357,18 +357,40 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) { /* non-fatal */ }
   }
 
+  // Tick flash: when a live update changes a price, pulse the element
+  // green (up) or red (down) so the update is visible instead of silent.
+  // Re-adding the class mid-animation requires a reflow nudge — removing
+  // the class alone doesn't restart a running CSS animation.
+  function _tickFlash(el, dir) {
+    if (!el || !dir) return;
+    el.classList.remove('tick-up', 'tick-down');
+    void el.offsetWidth;  // force reflow so the animation restarts
+    el.classList.add(dir > 0 ? 'tick-up' : 'tick-down');
+  }
+
   // Apply the FMP intraday Brent quote to the hero KPI when dashboard-state
   // reports it. Falls back silently to whatever hydrate.js wrote (EIA daily
   // settle) if FMP is unavailable. Adds an "INTRADAY · FMP" badge so users
   // know the price is minute-fresh, not yesterday's settle.
+  let _lastAppliedBrent = null;
   function _applyHeroBrentFromState(ds) {
     const b = ds && ds.kpis && ds.kpis.brent;
     if (!b || b.price == null) return;
+    const newPrice = Number(b.price);
+    const tickDir = (_lastAppliedBrent != null && newPrice !== _lastAppliedBrent)
+      ? (newPrice > _lastAppliedBrent ? 1 : -1) : 0;
+    _lastAppliedBrent = newPrice;
     const heroPriceEl = document.getElementById('heroPrice');
-    if (heroPriceEl) heroPriceEl.textContent = Number(b.price).toFixed(2);
+    if (heroPriceEl) {
+      heroPriceEl.textContent = newPrice.toFixed(2);
+      _tickFlash(heroPriceEl, tickDir);
+    }
     // Threat-strip Brent
     const threatBrent = document.getElementById('threatBrent');
-    if (threatBrent) threatBrent.textContent = '$' + Number(b.price).toFixed(2);
+    if (threatBrent) {
+      threatBrent.textContent = '$' + newPrice.toFixed(2);
+      _tickFlash(threatBrent, tickDir);
+    }
     // Hero change line
     const heroChange = document.getElementById('heroChange');
     if (heroChange && b.change_24h != null) {
@@ -437,33 +459,127 @@ document.addEventListener('DOMContentLoaded', () => {
         badge.style.cssText = 'opacity:0.55;font-size:9px;letter-spacing:1.5px;display:inline-block;margin-left:8px;color:' + (b.is_intraday ? '#3dd49b' : '#7e8699');
         heroFoot.appendChild(badge);
       }
-      badge.textContent = b.is_intraday ? 'INTRADAY · FMP' : 'EIA DAILY';
+      // Honest source labeling: FMP = real-time, yfinance = ~15-min
+      // delayed futures quote (used when FMP is rate-limited), EIA =
+      // previous daily settle. Never label delayed data as real-time.
+      const src = String(b.source || '').toLowerCase();
+      badge.textContent = !b.is_intraday ? 'EIA DAILY'
+        : src.includes('yfinance')       ? 'INTRADAY · YF · ~15MIN DELAY'
+        :                                  'INTRADAY · FMP';
       badge.style.color = b.is_intraday ? '#3dd49b' : '#7e8699';
     }
   }
 
-  // Poll /api/dashboard-state and stash on window.__dashState. The poller
-  // populates the hero KPI deck the moment the server responds, which is
-  // typically faster than the master + iran-events round-trip the client
-  // was waiting on previously.
+  // Market alert strip: appears above the KPI deck when the 24h Brent
+  // move exceeds the configured threshold (config.BRENT_ALERT_THRESHOLD_PCT
+  // via /api/constants). Dismissal is per-alert-signature in
+  // sessionStorage — dismissing a +2.3% alert won't suppress a later
+  // −4% alert, but the same alert won't nag on every state push.
+  function _updateMarketAlert(ds) {
+    const b = ds && ds.kpis && ds.kpis.brent;
+    const deck = document.querySelector('.kpi-deck');
+    if (!deck) return;
+    let strip = document.getElementById('marketAlertStrip');
+    const thresh = (window.CONSTANTS && window.CONSTANTS.brent_alert_threshold_pct != null)
+      ? +window.CONSTANTS.brent_alert_threshold_pct : 2.0;
+    const pct = b && b.change_24h_pct != null ? +b.change_24h_pct : null;
+    const active = pct != null && Math.abs(pct) >= thresh;
+    // Signature: direction + integer band, so ±0.1% drift doesn't retrigger
+    const sig = active ? `${pct > 0 ? 'up' : 'down'}:${Math.floor(Math.abs(pct))}` : '';
+    let dismissed = '';
+    try { dismissed = sessionStorage.getItem('brentAlertDismissed') || ''; } catch (_) {}
+    if (!active || sig === dismissed) {
+      if (strip) strip.remove();
+      return;
+    }
+    if (!strip) {
+      strip = document.createElement('div');
+      strip.id = 'marketAlertStrip';
+      strip.className = 'market-alert';
+      deck.parentElement.insertBefore(strip, deck);
+    }
+    const up = pct > 0;
+    strip.classList.toggle('alert-up', up);
+    strip.classList.toggle('alert-down', !up);
+    const arrow = up ? '▲' : '▼';
+    const fmtPct = (up ? '+' : '−') + Math.abs(pct).toFixed(2) + '%';
+    strip.innerHTML =
+      `<span class="ma-pulse"></span>` +
+      `<span class="ma-text">MARKET ALERT · BRENT ${arrow} ${fmtPct} IN 24H` +
+      `${b.price != null ? ` · $${Number(b.price).toFixed(2)}` : ''}` +
+      ` · ${up ? 'RISK PREMIUM BUILDING' : 'RISK PREMIUM UNWINDING'}</span>` +
+      `<button class="ma-dismiss" title="Dismiss this alert">×</button>`;
+    strip.querySelector('.ma-dismiss').addEventListener('click', () => {
+      try { sessionStorage.setItem('brentAlertDismissed', sig); } catch (_) {}
+      strip.remove();
+    });
+  }
+
+  // Apply a composed dashboard-state payload to the page. Single entry
+  // point shared by the SSE stream (push) and the watchdog poller (pull)
+  // so both paths produce identical UI updates.
+  function applyDashboardState(ds) {
+    if (!ds || !ds.kpis) return;
+    window.__dashState = ds;
+    refreshHeroIncidentsKpi();
+    _applyHeroBrentFromState(ds);
+    _updateMarketAlert(ds);
+    // Notify chart renderers that depend on dashboard-state. §01
+    // reads weekly_oil_events from here; without a re-render, the
+    // chart paints once with an empty oilByWeek map and the
+    // post-Oct bars stay at 0 even after the state lands.
+    window.dispatchEvent(new CustomEvent('dashboard-state-ready', { detail: ds }));
+  }
+
   async function refreshDashboardState() {
     if (!window.API || !window.API.dashboardState) return;
     try {
       const ds = await window.API.dashboardState();
-      if (ds && ds.kpis) {
-        window.__dashState = ds;
-        refreshHeroIncidentsKpi();
-        _applyHeroBrentFromState(ds);
-        // Notify chart renderers that depend on dashboard-state. §01
-        // reads weekly_oil_events from here; without a re-render, the
-        // chart paints once with an empty oilByWeek map and the
-        // post-Oct bars stay at 0 even after the state lands.
-        window.dispatchEvent(new CustomEvent('dashboard-state-ready', { detail: ds }));
-      }
+      applyDashboardState(ds);
     } catch (e) { /* non-fatal — fallback path will run */ }
   }
-  refreshDashboardState();
-  setInterval(refreshDashboardState, 60_000);
+
+  // ── Live push via Server-Sent Events ────────────────────────────────
+  // /api/stream sends the full dashboard-state whenever the backend
+  // warmer lands fresh data (plus a 'ping' heartbeat every ~25s).
+  // EventSource auto-reconnects on transient drops; the 60s poller
+  // below acts as a watchdog and only fires when the stream has been
+  // silent for >90s (i.e. genuinely dead, not merely idle — pings
+  // count as life).
+  let __sseLastSeen = 0;
+  (function startStateStream() {
+    if (!window.EventSource) return;
+    let es;
+    try { es = new EventSource((window.__API_BASE || '') + '/api/stream'); } catch (_) { return; }
+    es.onopen = () => { __sseLastSeen = Date.now(); };
+    es.addEventListener('ping', () => { __sseLastSeen = Date.now(); });
+    es.addEventListener('state', (ev) => {
+      __sseLastSeen = Date.now();
+      try { applyDashboardState(JSON.parse(ev.data)); } catch (_) {}
+    });
+    // No onerror handler needed: EventSource retries automatically, and
+    // while it's down __sseLastSeen ages out and the poller takes over.
+  })();
+
+  refreshDashboardState();  // immediate first paint — don't wait for SSE
+  setInterval(() => {
+    if (Date.now() - __sseLastSeen < 90_000) return;  // SSE is alive
+    if (document.hidden) return;                       // tab not visible
+    refreshDashboardState();
+  }, 60_000);
+
+  // Instant catch-up when the user returns to the tab. Browsers throttle
+  // hidden-tab timers (and may have dropped the SSE connection during a
+  // laptop sleep), so the state can be minutes stale at the moment of
+  // return — refresh immediately rather than waiting for the next tick.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    if (window.API && window.API.invalidate) {
+      window.API.invalidate('/api/dashboard-state');
+      window.API.invalidate('/api/freshness');
+    }
+    refreshDashboardState();
+  });
   // Recompute when iran data finishes loading (it lands later than the
   // initial chokepoint-incidents fetch on cold start). Also expose on
   // window so hydrate.js's /api/events callback can delegate here instead

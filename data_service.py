@@ -1661,6 +1661,72 @@ def fetch_fmp_brent_intraday(interval: str = "1hour") -> List[dict]:
     return out
 
 
+def fetch_yf_brent_quote() -> dict:
+    """Delayed (~15 min) Brent futures (BZ=F) quote via yfinance.
+
+    No API key, no hard quota — the intraday fallback for when FMP's free
+    tier is rate-limited (429 → 30-min negative cache) or unconfigured.
+    Without this, an FMP backoff window meant the hero price silently
+    regressed to EIA's prior-session daily settle for half an hour.
+    Cache TTL 10 min to match the FMP cadence. Returns {} on failure.
+    """
+    cached = _read_cache("yf_brent_quote", 600)
+    if cached:
+        return cached
+    try:
+        import yfinance as yf
+        fi = yf.Ticker("BZ=F").fast_info
+
+        def _fi(key):
+            try:
+                v = fi[key]
+                return float(v) if v is not None else None
+            except Exception:
+                return None
+
+        price = _fi("last_price")
+        prev  = _fi("previous_close")
+        if price is None:
+            return {}
+        out = {
+            "symbol":     "BZ=F",
+            "name":       "Brent Crude Oil (futures, delayed)",
+            "price":      round(price, 2),
+            "change":     round(price - prev, 2) if prev else None,
+            "change_pct": round((price - prev) / prev * 100, 2) if prev else None,
+            "day_low":    _fi("day_low"),
+            "day_high":   _fi("day_high"),
+            "volume":     None,
+            "timestamp":  int(time.time()),
+        }
+        _write_cache("yf_brent_quote", out)
+        logger.info(f"yfinance BZ=F quote: ${out['price']} ({out['change_pct']}%)")
+        return out
+    except Exception as e:
+        logger.warning(f"yfinance BZ=F quote failed: {e}")
+        return {}
+
+
+def fetch_live_brent_quote() -> dict:
+    """Best-available intraday Brent quote with honest source labeling.
+
+    FMP real-time (BZUSD) first; yfinance BZ=F (~15-min delayed) when FMP
+    is rate-limited or unconfigured. The `source` field tells the consumer
+    what it's actually getting — the UI badge must never label delayed
+    data as real-time.
+    """
+    if config.FMP_API_KEY:
+        q = fetch_fmp_brent_quote()
+        if q.get("price") is not None:
+            q["source"] = "fmp"
+            return q
+    q = fetch_yf_brent_quote()
+    if q.get("price") is not None:
+        q["source"] = "yfinance"
+        return q
+    return {}
+
+
 def fetch_fmp_equity_quote(symbol: str) -> dict:
     """Generic real-time equity quote (XOM, CVX, OXY, etc.) for the
     energy-majors context strip. Cache TTL 10 min per symbol."""
