@@ -102,6 +102,16 @@ Live FastAPI + Chart.js single-page dashboard tracking the **US-Iran war scenari
 
 ---
 
+## 8b. Intelligence-product features (added 2026-06-12, commit 5452121)
+
+- **§00 Daily SITREP** (`#sitrepCard`, `_updateSitrep` in app.js): server composes `sitrep` in dashboard-state — top 3 developments scored by `_score_news_headline` (same scorer as §09 promotion), price action, event delta, vol regime.
+- **LIVE VOL REGIME** (`data-kpi="volRegime"`): server computes rolling 5d/21d realized vol from Brent log returns; 21d ranked as percentile vs thesis-window rolling-21d distribution; tiers in `config.VOL_REGIME_TIERS` (CALM <p50, ELEVATED ≥p50, EXTREME ≥p85). The thesis↔live bridge.
+- **TANKERS vs MAJORS** (`data-kpi="freightSpread"`): `fetch_energy_equity_tape()` — FMP for XOM/CVX (free tier 402s on OXY/FRO/STNG/TNK + on batch queries!), `_yahoo_quote_direct()` v8-chart fill for the rest. Spread = tanker basket %chg − majors basket %chg = freight/chokepoint-risk proxy.
+- **Alert journal**: dashboard-state composer appends fired alerts (day+direction+band dedup) to `alert_log` cache; `/api/alert-log`; count/last in SITREP foot. Resets on Space rebuild (ephemeral FS) — UI says "since <log start>".
+- **System-health grid** (`#systemHealthGrid`, `renderSystemHealth` in hydrate.js): generic render of every /api/freshness source — date, origin badge, age-colored dot (monthly feeds get 45d green window).
+- **Keep-alive**: `.github/workflows/keep-alive.yml` pings the Space every 30 min from GitHub Actions cron — prevents HF free-tier 48h sleep, keeps warmer running 24/7, doubles as outage alarm.
+- **FMP free-tier gotchas (learned the hard way)**: batch quotes are premium (402); symbol universe excludes OXY/FRO/STNG/TNK (402 "not available under your current subscription"); `_fmp_get` now negative-caches 402s for 24h. The yfinance LIBRARY breaks intermittently (Yahoo blocks its session bootstrap) — direct `query1.finance.yahoo.com/v8/finance/chart/<sym>` requests with plain Mozilla UA keep working; `_yahoo_quote_direct()` is the reusable helper.
+
 ## 9. Live-update architecture (added 2026-06-12)
 
 - **SSE push**: `/api/stream` (app.py) pushes the full composed dashboard-state whenever the warmer's `_bump_state_version()` fires (any fetcher ran), plus `ping` heartbeats every 25s. `SelectiveGZipMiddleware` exempts the stream from gzip (gzip buffering kills SSE). Frontend `EventSource` in app.js consumes it; the 60s poller is now a **watchdog** that only fires when the stream has been silent >90s.
