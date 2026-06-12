@@ -1127,6 +1127,13 @@ async def preload_data():
                 except Exception as e:
                     print(f"  [preload] {name}: FAILED ({e})")
         gc.collect()
+        # Push connected SSE clients a re-compose now that Brent/DXY/OVX
+        # caches exist. Without this intermediate bump, a client that
+        # connected during cold-start kept its incomplete first state
+        # (no live Brent rows → no war-premium, empty 30D range) until
+        # the FULL preload finished — 2-4 minutes on slow networks. The
+        # smoke suite caught this as threatWarPrem timing out on CI.
+        _bump_state_version()
 
         # Phase 1.5: HDX live ACLED mirror — moved here so the master
         # timeseries extender (Phase 2) sees populated HDX data and can
@@ -1162,6 +1169,10 @@ async def preload_data():
                 except Exception as e:
                     print(f"  [preload] {name}: FAILED ({e})")
         gc.collect()
+        # Second intermediate push: master is now extended with live rows
+        # and HDX/news caches are warm — the composed state is materially
+        # better than what Phase-1 clients received.
+        _bump_state_version()
 
         # Phase 3: ACLED. Deliberately runs AFTER phases 1+2 have returned
         # so their intermediate DataFrames have been released (gc.collect

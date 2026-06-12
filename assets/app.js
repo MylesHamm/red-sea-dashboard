@@ -627,6 +627,21 @@ document.addEventListener('DOMContentLoaded', () => {
     try { _updateSitrep(ds); }       catch (e) { console.warn('sitrep render failed', e); }
     try { _updateVolRegime(ds); }    catch (e) { console.warn('vol regime render failed', e); }
     try { _updateFreightProxy(ds); } catch (e) { console.warn('freight proxy render failed', e); }
+    // Cold-start self-heal: a state composed during server boot can be
+    // structurally incomplete (no war premium / empty weekly series)
+    // because the master extender hadn't seen the Brent cache yet. The
+    // SSE pings would otherwise keep the watchdog poller asleep while
+    // we sit on the incomplete snapshot — so when we detect one, force
+    // a single re-poll shortly, bypassing the SSE-alive check.
+    const incomplete = (ds.kpis.brent && ds.kpis.brent.war_premium_pct == null)
+                    || !(Array.isArray(ds.weekly_oil_events) && ds.weekly_oil_events.length);
+    if (incomplete && !window.__dsRetryTimer) {
+      window.__dsRetryTimer = setTimeout(() => {
+        window.__dsRetryTimer = null;
+        if (window.API && window.API.invalidate) window.API.invalidate('/api/dashboard-state');
+        refreshDashboardState();
+      }, 10_000);
+    }
     // Notify chart renderers that depend on dashboard-state. §01
     // reads weekly_oil_events from here; without a re-render, the
     // chart paints once with an empty oilByWeek map and the
