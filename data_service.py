@@ -1610,6 +1610,15 @@ def _fmp_get(path: str, params: dict, cache_key: str, ttl: int) -> Optional[Any]
             _FMP_RATE_LIMIT_BACKOFF[cache_key] = time.time() + 30 * 60
             logger.warning(f"FMP {path}: HTTP 429 (rate-limited) — backing off 30m for this endpoint")
             return _read_stale_cache(cache_key)
+        if resp.status_code == 402:
+            # Plan limitation, not transient: the symbol/endpoint isn't in
+            # the free tier's universe (e.g. batch queries, OXY/FRO/STNG/
+            # TNK quotes). Retrying won't change the answer until the plan
+            # does — back off 24h so we stop burning quota on known-dead
+            # calls. Callers fall through to yfinance where applicable.
+            _FMP_RATE_LIMIT_BACKOFF[cache_key] = time.time() + 24 * 3600
+            logger.warning(f"FMP {path}: HTTP 402 (not in plan) — backing off 24h for {cache_key}")
+            return _read_stale_cache(cache_key)
         if resp.status_code != 200:
             logger.warning(f"FMP {path}: HTTP {resp.status_code} body={resp.text[:160]!r}")
             return _read_stale_cache(cache_key)
@@ -1661,50 +1670,93 @@ def fetch_fmp_brent_intraday(interval: str = "1hour") -> List[dict]:
     return out
 
 
-def fetch_yf_brent_quote() -> dict:
-    """Delayed (~15 min) Brent futures (BZ=F) quote via yfinance.
+def _yahoo_quote_direct(symbol: str) -> dict:
+    """Delayed (~15 min) quote via Yahoo's v8 chart API, no library.
 
-    No API key, no hard quota — the intraday fallback for when FMP's free
-    tier is rate-limited (429 → 30-min negative cache) or unconfigured.
-    Without this, an FMP backoff window meant the hero price silently
+    The yfinance package intermittently breaks (Yahoo serves its session
+    bootstrap a block page → "Expecting value: line 1 column 1"), but a
+    plain requests.get against query1's chart endpoint with a browser UA
+    keeps working — same pattern as the Brent price waterfall's
+    _try_yahoo_direct layer. The chart meta block carries everything a
+    quote needs. Returns {} on failure.
+    """
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=2d&interval=1d"
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
+        resp.raise_for_status()
+        result = (resp.json().get("chart", {}) or {}).get("result") or []
+        meta = (result[0] or {}).get("meta") or {} if result else {}
+        price = meta.get("regularMarketPrice")
+        prev  = meta.get("chartPreviousClose") or meta.get("previousClose")
+        if price is None:
+            return {}
+        price = float(price)
+        prev = float(prev) if prev else None
+        return {
+            "symbol":     symbol,
+            "name":       meta.get("shortName") or symbol,
+            "price":      round(price, 2),
+            "change":     round(price - prev, 2) if prev else None,
+            "change_pct": round((price - prev) / prev * 100, 2) if prev else None,
+            "day_low":    meta.get("regularMarketDayLow"),
+            "day_high":   meta.get("regularMarketDayHigh"),
+            "timestamp":  meta.get("regularMarketTime") or int(time.time()),
+            "src":        "yahoo",
+        }
+    except Exception as e:
+        logger.warning(f"Yahoo direct quote {symbol} failed: {e}")
+        return {}
+
+
+def fetch_yf_brent_quote() -> dict:
+    """Delayed (~15 min) Brent futures (BZ=F) quote — keyless fallback.
+
+    Layer 1: direct Yahoo v8 chart API (plain requests — survives the
+    yfinance session breakage). Layer 2: yfinance fast_info. Without
+    this fallback, an FMP backoff window meant the hero price silently
     regressed to EIA's prior-session daily settle for half an hour.
     Cache TTL 10 min to match the FMP cadence. Returns {} on failure.
     """
     cached = _read_cache("yf_brent_quote", 600)
     if cached:
         return cached
-    try:
-        import yfinance as yf
-        fi = yf.Ticker("BZ=F").fast_info
 
-        def _fi(key):
-            try:
-                v = fi[key]
-                return float(v) if v is not None else None
-            except Exception:
-                return None
+    out = _yahoo_quote_direct("BZ=F")
+    if not out.get("price"):
+        try:
+            import yfinance as yf
+            fi = yf.Ticker("BZ=F").fast_info
 
-        price = _fi("last_price")
-        prev  = _fi("previous_close")
-        if price is None:
-            return {}
-        out = {
-            "symbol":     "BZ=F",
-            "name":       "Brent Crude Oil (futures, delayed)",
-            "price":      round(price, 2),
-            "change":     round(price - prev, 2) if prev else None,
-            "change_pct": round((price - prev) / prev * 100, 2) if prev else None,
-            "day_low":    _fi("day_low"),
-            "day_high":   _fi("day_high"),
-            "volume":     None,
-            "timestamp":  int(time.time()),
-        }
+            def _fi(key):
+                try:
+                    v = fi[key]
+                    return float(v) if v is not None else None
+                except Exception:
+                    return None
+
+            price = _fi("last_price")
+            prev  = _fi("previous_close")
+            if price is not None:
+                out = {
+                    "symbol":     "BZ=F",
+                    "name":       "Brent Crude Oil (futures, delayed)",
+                    "price":      round(price, 2),
+                    "change":     round(price - prev, 2) if prev else None,
+                    "change_pct": round((price - prev) / prev * 100, 2) if prev else None,
+                    "day_low":    _fi("day_low"),
+                    "day_high":   _fi("day_high"),
+                    "timestamp":  int(time.time()),
+                }
+        except Exception as e:
+            logger.warning(f"yfinance BZ=F quote failed: {e}")
+
+    if out.get("price") is not None:
+        out.setdefault("volume", None)
+        out["name"] = "Brent Crude Oil (futures, delayed)"
         _write_cache("yf_brent_quote", out)
-        logger.info(f"yfinance BZ=F quote: ${out['price']} ({out['change_pct']}%)")
+        logger.info(f"Delayed BZ=F quote: ${out['price']} ({out.get('change_pct')}%)")
         return out
-    except Exception as e:
-        logger.warning(f"yfinance BZ=F quote failed: {e}")
-        return {}
+    return {}
 
 
 def fetch_live_brent_quote() -> dict:
@@ -1741,6 +1793,102 @@ def fetch_fmp_equity_quote(symbol: str) -> dict:
             "change_pct": q.get("changePercentage"),
         }
     return {}
+
+
+def fetch_energy_equity_tape() -> dict:
+    """Six-symbol energy tape: oil majors + tanker owners, with the
+    tanker-vs-majors spread as a freight-rate proxy.
+
+    When tanker equities (FRO/STNG/TNK — spot-rate-leveraged owners)
+    outperform the majors basket, the market is pricing chokepoint/route
+    risk specifically (war-risk premiums, longer reroutes), not just
+    crude beta. That spread is a signal dimension the dashboard
+    otherwise lacks — Baltic Exchange freight data is paywalled.
+
+    FMP quota math (free tier 250 req/day): tries ONE batched quote call
+    per hour (comma-joined symbols, 24/day). If the tier rejects batch
+    (single-symbol response), falls back to 6 individual calls but
+    caches the tape for 2h instead of 1h (72/day) so the daily budget
+    stays under the cap alongside the 10-min Brent quote (144/day).
+    """
+    cache_key = "energy_tape"
+    cached = _read_cache(cache_key, 3600)
+    if cached:
+        return cached
+    # Fallback-path entries are valid for 2h (see quota math above).
+    stale = _read_cache(cache_key, 7200)
+    if stale and not stale.get("batch_ok"):
+        return stale
+
+    majors_syms  = list(config.ENERGY_EQUITY_MAJORS)
+    tankers_syms = list(config.ENERGY_EQUITY_TANKERS)
+    symbols = majors_syms + tankers_syms
+
+    def _shape(q):
+        return {
+            "symbol":     q.get("symbol"),
+            "name":       q.get("name"),
+            "price":      q.get("price"),
+            "change":     q.get("change"),
+            "change_pct": q.get("changePercentage", q.get("change_pct")),
+        }
+
+    by_sym: dict = {}
+    arr = _fmp_get("quote", {"symbol": ",".join(symbols)}, "fmp_batch_quote", 3600) or []
+    if isinstance(arr, list):
+        for q in arr:
+            s = (q or {}).get("symbol")
+            if s and q.get("price") is not None:
+                by_sym[s] = _shape(q)
+    batch_ok = len(by_sym) >= 2
+
+    if not batch_ok:
+        # Tier rejected the batch — individual calls (each has its own
+        # cache + 429/402 backoff inside _fmp_get).
+        for s in symbols:
+            q = fetch_fmp_equity_quote(s)
+            if q.get("price") is not None:
+                by_sym[s] = q
+
+    # Yahoo fill for symbols outside FMP's free-tier universe.
+    # Empirically the free plan 402s on OXY and all three tanker tickers
+    # ("not available under your current subscription") — without this
+    # fill the freight proxy would never compute. Direct v8 chart API
+    # (not the yfinance lib, which intermittently breaks); ~15-min
+    # delayed, fine for a daily-%-change basket spread.
+    missing = [s for s in symbols if s not in by_sym]
+    filled = []
+    for s in missing:
+        q = _yahoo_quote_direct(s)
+        if q.get("price") is not None and q.get("change_pct") is not None:
+            by_sym[s] = q
+            filled.append(s)
+    if filled:
+        logger.info(f"energy tape: Yahoo direct filled {filled}")
+    elif missing:
+        logger.warning(f"energy tape: could not fill {missing} from any source")
+
+    def _basket(syms):
+        rows = [by_sym[s] for s in syms if s in by_sym]
+        pcts = [float(r["change_pct"]) for r in rows if r.get("change_pct") is not None]
+        avg = round(sum(pcts) / len(pcts), 2) if pcts else None
+        return rows, avg
+
+    majors,  majors_avg  = _basket(majors_syms)
+    tankers, tankers_avg = _basket(tankers_syms)
+    out = {
+        "majors":  majors,
+        "tankers": tankers,
+        "majors_avg_pct":  majors_avg,
+        "tankers_avg_pct": tankers_avg,
+        # Positive spread = tankers outperforming = chokepoint risk bid
+        "spread_pct": round(tankers_avg - majors_avg, 2)
+                      if majors_avg is not None and tankers_avg is not None else None,
+        "batch_ok": batch_ok,
+    }
+    if by_sym:
+        _write_cache(cache_key, out)
+    return out
 
 
 # ─── yfinance (DXY, OVX) ────────────────────────────────────────────────────

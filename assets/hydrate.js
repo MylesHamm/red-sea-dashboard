@@ -121,6 +121,47 @@
     document.querySelectorAll('[data-vt-asof]').forEach(el => {
       el.textContent = 'live AIS · all classes (free MT embed)';
     });
+
+    // System-health grid (footer) — renders every source present in the
+    // snapshot generically, so new backend feeds appear here without a
+    // frontend change. Age coloring: green ≤3d, amber ≤14d, red beyond
+    // (monthly feeds like PortWatch/HDX get a 45d green window since
+    // they publish monthly aggregates).
+    try { renderSystemHealth(snap); } catch (e) { console.warn('health grid render failed', e); }
+  }
+
+  const _HEALTH_MONTHLY = new Set(['hormuz_transits', 'bab_transits', 'suez_transits', 'hdx_acled']);
+  function renderSystemHealth(snap) {
+    const grid = document.getElementById('systemHealthGrid');
+    if (!grid) return;
+    const rows = [];
+    const nowMs = Date.now();
+    for (const [key, v] of Object.entries(snap)) {
+      if (key === 'server_ts' || key === 'status' || !v || typeof v !== 'object') continue;
+      const date = (v.newest_date || v.newest_month || v.effective_date || '').slice(0, 10) || null;
+      const origin = (v.origin || v.source || v.effective_source || '').toString();
+      if (!date && !origin) continue;
+      let ageDays = null;
+      if (date) {
+        const t = Date.parse(date.length === 7 ? date + '-28' : date);  // YYYY-MM → end of month-ish
+        if (isFinite(t)) ageDays = Math.max(0, Math.floor((nowMs - t) / 86400000));
+      }
+      const greenWindow = _HEALTH_MONTHLY.has(key) ? 45 : 3;
+      const cls = ageDays == null ? 'hs-unknown'
+        : ageDays <= greenWindow ? 'hs-fresh'
+        : ageDays <= greenWindow + 11 ? 'hs-stale'
+        : 'hs-old';
+      const name = key.replace(/_/g, ' ').toUpperCase();
+      rows.push(
+        `<div class="hs-row ${cls}">` +
+        `<span class="hs-dot"></span>` +
+        `<span class="hs-name">${name}</span>` +
+        `<span class="hs-date">${date || '—'}</span>` +
+        `<span class="hs-origin">${(origin || '?').toUpperCase()}</span>` +
+        `</div>`
+      );
+    }
+    grid.innerHTML = rows.length ? rows.join('') : '<span class="tf-health-empty">no feed data</span>';
   }
 
   // ── Live monthly event counts (HDX ACLED mirror) ──────────────────────────

@@ -329,19 +329,130 @@ async def get_dashboard_state():
             "wall_clock_cutoff": cp_data.get("wall_clock_cutoff"),
         }
 
-    # ── Energy equity tape (XOM / CVX / OXY) — oil-impact context ───
-    # Major-integrated oil stocks move with crude price expectations and
-    # add a market-pricing signal alongside the futures tape. Free-tier
-    # FMP handles three quotes per refresh well within the daily budget.
-    energy_equities = []
-    if config.FMP_API_KEY:
-        for sym in ("XOM", "CVX", "OXY"):
-            q = data_service.fetch_fmp_equity_quote(sym)
-            if q.get("price") is not None:
-                energy_equities.append(q)
+    # ── Energy equity tape — majors + tankers (freight proxy) ───────
+    # Majors (XOM/CVX/OXY) carry crude beta; tanker owners (FRO/STNG/TNK)
+    # carry freight rates. The tanker-minus-majors spread is the market's
+    # price on chokepoint/route risk specifically. One batched FMP call
+    # per hour; see fetch_energy_equity_tape for the quota math.
+    tape = data_service.fetch_energy_equity_tape() if config.FMP_API_KEY else {}
+    energy_equities = tape.get("majors") or []
+    freight_proxy = {
+        "tankers":         tape.get("tankers") or [],
+        "majors_avg_pct":  tape.get("majors_avg_pct"),
+        "tankers_avg_pct": tape.get("tankers_avg_pct"),
+        "spread_pct":      tape.get("spread_pct"),
+    }
+
+    # ── Live volatility regime — ties the live window to the thesis ─
+    # Rolling realized vol from daily Brent log returns (annualized %).
+    # The current 21d RV is ranked as a percentile against the
+    # distribution of rolling 21d RVs across the thesis window, then
+    # labeled via config.VOL_REGIME_TIERS. This answers "how does
+    # today's volatility compare to the regime my GARCH was fit on?"
+    vol_regime = {"rv5": None, "rv21": None, "pctile_vs_thesis": None, "regime": None}
+    try:
+        import math as _math
+        closes = [(r["date"], float(r["brent_price"])) for r in brent_rows]
+        rets = []  # (date, log return) — date is the LATER day of the pair
+        for i in range(1, len(closes)):
+            p0, p1 = closes[i - 1][1], closes[i][1]
+            if p0 > 0 and p1 > 0:
+                rets.append((closes[i][0], _math.log(p1 / p0)))
+
+        def _rv(window_rets):
+            n = len(window_rets)
+            if n < 2:
+                return None
+            mu = sum(window_rets) / n
+            var = sum((x - mu) ** 2 for x in window_rets) / (n - 1)
+            return _math.sqrt(var) * _math.sqrt(252) * 100  # annualized %
+
+        vals = [x for _, x in rets]
+        rv5  = _rv(vals[-5:])  if len(vals) >= 5  else None
+        rv21 = _rv(vals[-21:]) if len(vals) >= 21 else None
+
+        # Thesis-window distribution of rolling 21d RVs
+        thesis_end = config.THESIS_WINDOW_END
+        thesis_vals = [x for d, x in rets if d <= thesis_end]
+        dist = []
+        for i in range(21, len(thesis_vals) + 1):
+            v = _rv(thesis_vals[i - 21:i])
+            if v is not None:
+                dist.append(v)
+        pctile = None
+        if rv21 is not None and dist:
+            below = sum(1 for v in dist if v < rv21)
+            pctile = round(below / len(dist) * 100, 1)
+        regime = None
+        if pctile is not None:
+            for label, min_p in config.VOL_REGIME_TIERS:
+                if pctile >= min_p:
+                    regime = label
+                    break
+        vol_regime = {
+            "rv5":  round(rv5, 1)  if rv5  is not None else None,
+            "rv21": round(rv21, 1) if rv21 is not None else None,
+            "pctile_vs_thesis": pctile,
+            "regime": regime,
+            "thesis_n": len(dist),
+        }
+    except Exception as e:
+        print(f"dashboard-state: vol regime computation failed: {e}")
 
     # ── Wall-clock date string for UI captions ──────────────────────
     today_iso = _dt.now(_tz.utc).date().isoformat()
+
+    # ── Daily SITREP — top developments by headline score ───────────
+    # Takes the newest news date present in the cache (usually today)
+    # and surfaces its highest-scoring headlines. Reuses the exact
+    # scorer that decides timeline promotion, so "top development"
+    # here and the §09 markers agree on what matters.
+    sitrep = {"date": today_iso, "newest_news_date": None, "top_developments": []}
+    try:
+        newest_news = max((n.get("date", "")[:10] for n in iran_news_cache), default="")
+        if newest_news:
+            todays = [n for n in iran_news_cache if (n.get("date", "")[:10]) == newest_news]
+            scored = sorted(todays, key=data_service._score_news_headline, reverse=True)
+            sitrep["newest_news_date"] = newest_news
+            sitrep["top_developments"] = [
+                {
+                    "title":  n.get("title"),
+                    "source": n.get("source"),
+                    "type":   n.get("type"),
+                    "url":    n.get("url"),
+                }
+                for n in scored[:3]
+            ]
+    except Exception as e:
+        print(f"dashboard-state: sitrep composition failed: {e}")
+
+    # ── Alert journal — persist fired market alerts ──────────────────
+    # One entry per (day, direction, integer band). NOTE: HF Spaces has
+    # an ephemeral filesystem, so the journal resets on rebuild — the
+    # UI shows the log's own start date rather than implying war-onset
+    # coverage. Dedup makes the read-modify-write cheap and idempotent.
+    alert_summary = {"count": 0, "since": None, "last": None}
+    try:
+        pct = brent_kpi.get("change_24h_pct")
+        log = data_service._read_stale_cache("alert_log") or []
+        if pct is not None and abs(pct) >= config.BRENT_ALERT_THRESHOLD_PCT:
+            sig = f"{today_iso}:{'up' if pct > 0 else 'down'}:{int(abs(pct))}"
+            if not any(e.get("sig") == sig for e in log):
+                log.append({
+                    "sig":   sig,
+                    "ts":    _dt.now(_tz.utc).isoformat(timespec="seconds"),
+                    "date":  today_iso,
+                    "pct":   pct,
+                    "price": brent_kpi.get("price"),
+                    "headline": (sitrep["top_developments"][0]["title"]
+                                 if sitrep["top_developments"] else None),
+                })
+                log = log[-200:]
+                data_service._write_cache("alert_log", log)
+        if log:
+            alert_summary = {"count": len(log), "since": log[0].get("date"), "last": log[-1]}
+    except Exception as e:
+        print(f"dashboard-state: alert journal failed: {e}")
 
     return {
         "as_of":  today_iso,
@@ -359,15 +470,36 @@ async def get_dashboard_state():
                 "mbd":        round(flow_total, 1),
                 "pct_global": round(flow_total / config.GLOBAL_LIQUIDS_MBD * 100, 1),
             },
+            "vol_regime": vol_regime,
         },
         "chokepoints": chokepoints,
         "energy_equities": energy_equities,
+        "freight_proxy": freight_proxy,
         "weekly_oil_events": weekly_oil_events,
         "oil_events_pool":  oil_events_pool,
+        "sitrep": sitrep,
+        "alert_log": alert_summary,
         "anchors": {
             "war_onset":    config.WAR_ONSET_DATE,
             "hamas_attack": config.HAMAS_ATTACK_DATE,
         },
+    }
+
+
+@app.get("/api/alert-log")
+async def get_alert_log():
+    """Journal of fired market alerts (>threshold 24h Brent moves).
+
+    Persists across warmer cycles but resets on Space rebuild (ephemeral
+    filesystem) — the `since` field is the log's own start date, and the
+    UI labels it accordingly rather than implying war-onset coverage.
+    """
+    log = data_service._read_stale_cache("alert_log") or []
+    return {
+        "count":  len(log),
+        "since":  log[0].get("date") if log else None,
+        "alerts": log[-50:],
+        "threshold_pct": config.BRENT_ALERT_THRESHOLD_PCT,
     }
 
 
@@ -1123,9 +1255,9 @@ async def preload_data():
             # kept warm during an FMP backoff window.
             ("live_brent",      10 * 60, data_service.fetch_live_brent_quote),
             ("fmp_brent_1h",    60 * 60, data_service.fetch_fmp_brent_intraday),
-            ("fmp_xom",         60 * 60, lambda: data_service.fetch_fmp_equity_quote("XOM")),
-            ("fmp_cvx",         60 * 60, lambda: data_service.fetch_fmp_equity_quote("CVX")),
-            ("fmp_oxy",         60 * 60, lambda: data_service.fetch_fmp_equity_quote("OXY")),
+            # Six-symbol energy tape (majors + tankers) — one batched FMP
+            # call per hour; replaces the three individual equity fetches.
+            ("energy_tape",     60 * 60, data_service.fetch_energy_equity_tape),
         ]
         last = {name: time.time() for name, _, _ in intervals}
         while True:

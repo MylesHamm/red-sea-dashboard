@@ -515,6 +515,106 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // §00 Daily SITREP — auto-brief composed from dashboard-state. The
+  // server sends structured data (top developments by headline score);
+  // presentation is assembled here.
+  function _updateSitrep(ds) {
+    const card = document.getElementById('sitrepCard');
+    if (!card) return;
+    const sr = ds.sitrep || {};
+    const b  = ds.kpis.brent || {};
+    const inc = ds.kpis.incidents_30d || {};
+    const devs = Array.isArray(sr.top_developments) ? sr.top_developments : [];
+    if (b.price == null && !devs.length) { card.hidden = true; return; }
+    card.hidden = false;
+
+    const dateEl = card.querySelector('[data-sitrep-date]');
+    if (dateEl) {
+      const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+      const d = new Date((sr.date || ds.as_of) + 'T00:00:00Z');
+      dateEl.textContent = isNaN(d) ? (sr.date || '—')
+        : `${String(d.getUTCDate()).padStart(2,'0')} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+    }
+
+    const mktEl = card.querySelector('[data-sitrep-market]');
+    if (mktEl) {
+      const pct = b.change_24h_pct;
+      const arrow = pct > 0 ? '▲' : pct < 0 ? '▼' : '•';
+      const cls   = pct > 0 ? 'up-alert' : pct < 0 ? 'down' : '';
+      const pctTxt = pct != null
+        ? `<span class="${cls}">${arrow} ${(pct > 0 ? '+' : '−')}${Math.abs(pct).toFixed(2)}% 24H</span>` : '';
+      const deltaTxt = inc.delta != null
+        ? `${inc.count} oil events · 30D (${inc.delta >= 0 ? '+' : '−'}${Math.abs(inc.delta)} vs prior)`
+        : (inc.count != null ? `${inc.count} oil events · 30D` : '');
+      const vol = ds.kpis.vol_regime || {};
+      const volTxt = vol.regime ? `VOL ${vol.regime} (p${vol.pctile_vs_thesis})` : '';
+      mktEl.innerHTML = [
+        b.price != null ? `BRENT $${Number(b.price).toFixed(2)}` : '',
+        pctTxt, deltaTxt, volTxt,
+      ].filter(Boolean).join(' · ');
+    }
+
+    const devsEl = card.querySelector('[data-sitrep-devs]');
+    if (devsEl) {
+      devsEl.innerHTML = devs.map(d => {
+        const type = String(d.type || 'military').toLowerCase();
+        const title = String(d.title || '').replace(/</g, '&lt;');
+        const src   = String(d.source || '').replace(/</g, '&lt;');
+        return `<li><span class="feed-type ft-${type}">${type.toUpperCase()}</span>` +
+               `<span class="sitrep-dev-title">${title}</span>` +
+               `<span class="sitrep-dev-src">${src}</span></li>`;
+      }).join('');
+    }
+
+    const alertsEl = card.querySelector('[data-sitrep-alerts]');
+    if (alertsEl) {
+      const al = ds.alert_log || {};
+      if (al.count > 0 && al.last) {
+        const lp = al.last.pct;
+        alertsEl.textContent =
+          `${al.count} market alert${al.count === 1 ? '' : 's'} logged since ${al.since}` +
+          ` · last: ${lp > 0 ? '▲ +' : '▼ −'}${Math.abs(lp).toFixed(2)}% on ${al.last.date}`;
+      } else {
+        alertsEl.textContent = '';
+      }
+    }
+  }
+
+  // LIVE VOL REGIME card — rolling 21d realized vol + percentile vs the
+  // thesis-window distribution (computed server-side in dashboard-state).
+  function _updateVolRegime(ds) {
+    const el = document.querySelector('[data-kpi="volRegime"]');
+    if (!el) return;
+    const v = ds.kpis.vol_regime || {};
+    if (v.rv21 == null) return;  // leave placeholder until data exists
+    const color = v.regime === 'EXTREME' ? '#ff3d5e'
+                : v.regime === 'ELEVATED' ? '#ffaa00' : '#3dd49b';
+    el.innerHTML = `<span style="color:${color}">${v.regime || '—'}</span> ${v.rv21.toFixed(0)}%`;
+    const foot = document.querySelector('[data-kpi-foot="volRegime"]');
+    if (foot && v.pctile_vs_thesis != null) {
+      foot.textContent = `21d RV · p${v.pctile_vs_thesis} of thesis window` +
+        (v.rv5 != null ? ` · 5d ${v.rv5.toFixed(0)}%` : '');
+    }
+  }
+
+  // TANKERS vs MAJORS card — freight-rate proxy from the equity tape.
+  function _updateFreightProxy(ds) {
+    const el = document.querySelector('[data-kpi="freightSpread"]');
+    if (!el) return;
+    const fp = ds.freight_proxy || {};
+    if (fp.spread_pct == null) return;
+    const s = +fp.spread_pct;
+    const up = s > 0;  // tankers outperforming = chokepoint risk bid
+    el.innerHTML = `${up ? '+' : s < 0 ? '−' : ''}${Math.abs(s).toFixed(2)}pp ` +
+      `<span class="${up ? 'up-alert' : 'down'}">${up ? '▲ RISK BID' : '▼ RISK FADE'}</span>`;
+    const foot = document.querySelector('[data-kpi-foot="freightSpread"]');
+    if (foot) {
+      foot.textContent =
+        `tankers ${fp.tankers_avg_pct != null ? (fp.tankers_avg_pct >= 0 ? '+' : '') + fp.tankers_avg_pct.toFixed(2) + '%' : '—'}` +
+        ` vs majors ${fp.majors_avg_pct != null ? (fp.majors_avg_pct >= 0 ? '+' : '') + fp.majors_avg_pct.toFixed(2) + '%' : '—'}`;
+    }
+  }
+
   // Apply a composed dashboard-state payload to the page. Single entry
   // point shared by the SSE stream (push) and the watchdog poller (pull)
   // so both paths produce identical UI updates.
@@ -524,6 +624,9 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshHeroIncidentsKpi();
     _applyHeroBrentFromState(ds);
     _updateMarketAlert(ds);
+    try { _updateSitrep(ds); }       catch (e) { console.warn('sitrep render failed', e); }
+    try { _updateVolRegime(ds); }    catch (e) { console.warn('vol regime render failed', e); }
+    try { _updateFreightProxy(ds); } catch (e) { console.warn('freight proxy render failed', e); }
     // Notify chart renderers that depend on dashboard-state. §01
     // reads weekly_oil_events from here; without a re-render, the
     // chart paints once with an empty oilByWeek map and the

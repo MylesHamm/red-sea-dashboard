@@ -102,6 +102,21 @@
       </p>
     </section>
 
+    <!-- § 00 — Daily SITREP. Auto-composed server-side from the same
+         dashboard-state that feeds every KPI: price action, event delta,
+         and the day's top developments by headline score (the SAME scorer
+         that promotes events to the §09 timeline — one definition of
+         "what matters"). Hidden until first hydration. -->
+    <section class="sitrep" id="sitrepCard" hidden>
+      <div class="sitrep-head">
+        <span class="sitrep-tag">§ 00 · DAILY SITREP</span>
+        <span class="sitrep-date" data-sitrep-date>—</span>
+      </div>
+      <div class="sitrep-market" data-sitrep-market>—</div>
+      <ul class="sitrep-devs" data-sitrep-devs></ul>
+      <div class="sitrep-foot" data-sitrep-alerts></div>
+    </section>
+
     <!-- KPI Deck: 1 hero + 2 primary + 4 secondary -->
     <section class="kpi-deck">
       <!-- Hero KPI -->
@@ -182,6 +197,18 @@
       <div class="kpi-sec" title="US commercial crude inventories (weekly, EIA). Draws = physical tightness.">
         <div class="kpi-sec-label">US CRUDE STOCKS</div>
         <div class="kpi-sec-value" data-kpi="crudeStocks">—</div>
+      </div>
+
+      <!-- Live-regime row -->
+      <div class="kpi-sec" title="Rolling 21-day realized volatility of Brent log returns (annualized), ranked as a percentile against the distribution of rolling 21d RVs across the thesis window (Oct 2023 – Sep 2025). Connects the live war regime to the regression sample: EXTREME = above the 85th percentile of the pre-war distribution.">
+        <div class="kpi-sec-label">LIVE VOL REGIME</div>
+        <div class="kpi-sec-value" data-kpi="volRegime">—</div>
+        <div class="kpi-sec-foot" data-kpi-foot="volRegime"></div>
+      </div>
+      <div class="kpi-sec" title="Tanker-owner equities (FRO, STNG, TNK — spot-rate leveraged) daily % change minus oil majors (XOM, CVX, OXY). Positive = tankers outperforming = the market is pricing chokepoint/route risk (war premiums, reroutes) specifically, not just crude beta. Free proxy for paywalled Baltic Exchange freight rates.">
+        <div class="kpi-sec-label">TANKERS vs MAJORS</div>
+        <div class="kpi-sec-value" data-kpi="freightSpread">—</div>
+        <div class="kpi-sec-foot" data-kpi-foot="freightSpread"></div>
       </div>
     </section>
 
@@ -913,6 +940,18 @@
         </ul>
       </section>
     </div>
+
+    <!-- System health: per-source freshness grid, rendered dynamically
+         by hydrateFreshness() from the same /api/freshness snapshot that
+         drives the status pill (60s poll). Answers "how do I know this
+         is current?" visually — source, newest data date, origin
+         (API / CACHE / FALLBACK), age-colored. -->
+    <section class="tf-health">
+      <h3 class="tf-h">System Health · Feed Freshness</h3>
+      <div class="tf-health-grid" id="systemHealthGrid">
+        <span class="tf-health-empty">loading feed status…</span>
+      </div>
+    </section>
 
     <div class="tf-foot">
       <span>Build <span data-build-id></span></span>

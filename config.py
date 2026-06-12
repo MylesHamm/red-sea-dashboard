@@ -176,3 +176,22 @@ THREAT_TIERS = [
 # in calm regimes — big enough to be news, small enough to actually fire
 # during an active war scenario.
 BRENT_ALERT_THRESHOLD_PCT = 2.0
+
+# Live volatility regime: the current 21-day realized vol is ranked as a
+# percentile against the distribution of rolling 21-day RVs across the
+# thesis window (Oct 2023 – Sep 2025). Tiers are (label, min_percentile),
+# most-severe first; first match wins. This ties the live war window back
+# to the thesis regression's volatility regime.
+VOL_REGIME_TIERS = [
+    ("EXTREME",  85.0),   # ≥ p85 of the thesis-window distribution
+    ("ELEVATED", 50.0),   # ≥ p50
+    ("CALM",      0.0),   # below median
+]
+
+# Energy equity tape. Majors move with crude beta; tanker owners move with
+# freight rates — when tankers OUTPERFORM majors, the market is pricing
+# chokepoint/route risk specifically (longer voyages, war-risk premiums),
+# not just oil price. The spread between the two baskets is the freight
+# proxy shown on the KPI deck.
+ENERGY_EQUITY_MAJORS  = ("XOM", "CVX", "OXY")
+ENERGY_EQUITY_TANKERS = ("FRO", "STNG", "TNK")

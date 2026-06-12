@@ -1,0 +1,34 @@
+name: keep-alive
+
+# HF Spaces free tier puts a Space to sleep after ~48h without external
+# HTTP traffic. A sleeping Space cold-starts (60-90s of blank dashboard)
+# for the next visitor — unacceptable if that visitor is the thesis
+# committee. This pinger keeps the Space permanently warm, which also
+# means the in-process cache warmer never stops running, so every data
+# feed stays fresh around the clock.
+#
+# Every 30 min is far more than the 48h threshold requires; the margin
+# costs nothing (GitHub Actions is free for public repos) and doubles as
+# a liveness check — if the Space is down, this workflow fails and
+# GitHub emails a real outage signal.
+#
+# NOTE: GitHub auto-disables scheduled workflows after 60 days without
+# repo activity. This repo gets regular pushes; if it ever goes dormant,
+# re-enable from the Actions tab.
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping HF Space
+        run: |
+          code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 60 \
+                 https://mhamm18-red-sea-dashboard.hf.space/api/health)
+          echo "health -> HTTP $code"
+          test "$code" = "200"
